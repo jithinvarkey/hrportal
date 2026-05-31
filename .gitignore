@@ -1,0 +1,6 @@
+backend/.env
+backend/.env.example
+/backend/storage
+/backend/tests
+/backend/vendor
+/frontend/.angular/cache
