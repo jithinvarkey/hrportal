@@ -4,3 +4,5 @@ backend/.env.example
 /backend/tests
 /backend/vendor
 /frontend/.angular/cache
+/backend/nbproject/private/
+/backend/nbproject
