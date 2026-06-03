@@ -1,6 +1,9 @@
-import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, 
+  OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
+import { Subject, interval } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 
 @Component({
   standalone: false,
@@ -9,7 +12,7 @@ import { AuthService } from '../../../core/services/auth.service';
   styleUrls: ['./request-list.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class RequestListComponent implements OnInit {
+export class RequestListComponent implements OnInit, OnDestroy {
 
   // ── Tabs ────────────────────────────────────────────────────────────────
   activeTab    = 'mine';
@@ -71,7 +74,7 @@ export class RequestListComponent implements OnInit {
   typeForm: any = {
     name: '', code: '', category: 'documents', description: '', instructions: '',
     sla_days: 3, requires_attachment: false, requires_manager_approval: false,
-    is_active: true, sort_order: 0, icon: 'description', color: '#6366f1',
+    is_active: true, sort_order: 0, icon: 'description', color: '#6366f1',handling_department_id:''
   };
   typeEditId:   number | null = null;
   typeSaving    = false;
@@ -116,6 +119,9 @@ export class RequestListComponent implements OnInit {
     'health_and_safety','business_center','swap_horiz','help_outline',
   ];
 
+  departments: any[] = [];
+   private readonly destroy$ = new Subject<void>();
+
   /** Category → department keyword mapping for smart assignment */
   private categoryDeptMap: Record<string, string> = {
     it:        'IT',
@@ -141,7 +147,7 @@ export class RequestListComponent implements OnInit {
     this.loadStats();
     this.loadRequestTypes();
     this.load();
-    if (this.isHR || this.isMgr) this.loadAssignableUsers();
+    if (this.isHR || this.isMgr) {this.loadDepartments();this.loadAssignableUsers();} 
   }
 
   // ── Data loaders ────────────────────────────────────────────────────────
@@ -169,6 +175,12 @@ export class RequestListComponent implements OnInit {
       next: r => { this.allRequestTypes = r?.types || []; this.cdr.markForCheck(); },
     });
   }
+   loadDepartments(): void {
+      this.http.get<any>('/api/v1/departments').pipe(takeUntil(this.destroy$)).subscribe({
+        next: (r) => { this.departments = r?.data ?? r ?? []; this.cdr.markForCheck(); },
+        error: () => {},
+      });
+    }
 
   load(page = 1): void {
     this.loading = true;
@@ -441,7 +453,7 @@ export class RequestListComponent implements OnInit {
       this.typeForm   = {
         name: '', code: '', category: 'documents', description: '', instructions: '',
         sla_days: 3, requires_attachment: false, requires_manager_approval: false,
-        is_active: true, sort_order: 0, icon: 'description', color: '#6366f1',
+        is_active: true, sort_order: 0, icon: 'description', color: '#6366f1',handling_department_id:''
       };
     }
     this.showTypeForm = true;
@@ -583,4 +595,5 @@ export class RequestListComponent implements OnInit {
   canCancel(req: any): boolean {
     return ['pending', 'pending_manager'].includes(req.status);
   }
+  ngOnDestroy(): void { this.destroy$.next(); this.destroy$.complete(); }
 }

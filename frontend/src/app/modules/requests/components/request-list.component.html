@@ -766,7 +766,7 @@
     <div class="field-group">
       <label class="field-label">Handling Department</label>
       <select class="field-select-full" [(ngModel)]="typeForm.handling_department_id">
-        <option value="">— HR handles (default) —</option>
+        
         <option *ngFor="let d of departments" [value]="d.id">{{ d.name }}</option>
       </select>
       <div class="field-hint">The department responsible for processing this request type</div>

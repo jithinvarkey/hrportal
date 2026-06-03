@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
 class EmployeeController extends Controller
 {
@@ -57,7 +58,11 @@ class EmployeeController extends Controller
                     ->orWhere('employee_code', 'like', "%{$request->search}%");
             }))
             ->orderBy($request->sort_by ?? 'created_at', $request->sort_dir ?? 'desc');
-
+Log::info('EmployeeSQL', [
+            'sql' => $query->toSql(),
+            'bindings' => $query->getBindings(),
+            
+        ]);
         $paginator = $query->paginate((int) ($request->per_page ?? 15));
 
         return response()->json([

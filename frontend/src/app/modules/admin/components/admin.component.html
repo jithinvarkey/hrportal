@@ -274,6 +274,116 @@
     </div>
   </ng-container>
 
+  <!-- ── Departments ──────────────────────────────────────────────────────── -->
+  <ng-container *ngIf="activeTab==='departments'">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Departments</h2>
+        <p class="section-sub">Organizational units. Manage hierarchy, managers, and headcount budgets.</p>
+      </div>
+      <button class="btn-primary" (click)="openDeptForm()"><mat-icon>add</mat-icon> Add Department</button>
+    </div>
+
+    <div class="data-card">
+      <table mat-table [dataSource]="departments">
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>Department</th>
+          <td mat-cell *matCellDef="let d"><strong>{{ d.name }}</strong></td>
+        </ng-container>
+        <ng-container matColumnDef="code">
+          <th mat-header-cell *matHeaderCellDef>Code</th>
+          <td mat-cell *matCellDef="let d"><span class="code-chip">{{ d.code }}</span></td>
+        </ng-container>
+        <ng-container matColumnDef="manager">
+          <th mat-header-cell *matHeaderCellDef>Manager</th>
+          <td mat-cell *matCellDef="let d">{{ d.manager ? (d.manager.first_name + ' ' + d.manager.last_name) : '—' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="parent">
+          <th mat-header-cell *matHeaderCellDef>Parent</th>
+          <td mat-cell *matCellDef="let d">{{ d.parent?.name || '—' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="headcount">
+          <th mat-header-cell *matHeaderCellDef>Budget</th>
+          <td mat-cell *matCellDef="let d">{{ d.headcount_budget ?? '—' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let d">
+            <span class="status-pill" [class.on]="d.is_active" [class.off]="!d.is_active">
+              {{ d.is_active ? 'Active' : 'Inactive' }}
+            </span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef style="text-align:right">Actions</th>
+          <td mat-cell *matCellDef="let d" style="text-align:right">
+            <button class="row-btn" matTooltip="Edit" (click)="openDeptForm(d)"><mat-icon>edit</mat-icon></button>
+            <button class="row-btn danger" matTooltip="Delete" (click)="deleteDept(d)"><mat-icon>delete_outline</mat-icon></button>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="deptColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: deptColumns;"></tr>
+      </table>
+      <div class="empty-state" *ngIf="!loading && !departments.length">
+        <mat-icon>corporate_fare</mat-icon><span>No departments yet</span>
+      </div>
+      <div class="empty-state" *ngIf="loading"><mat-spinner diameter="28"></mat-spinner></div>
+    </div>
+  </ng-container>
+
+  <!-- ── Designations ─────────────────────────────────────────────────────── -->
+  <ng-container *ngIf="activeTab==='designations'">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Designations</h2>
+        <p class="section-sub">Job titles and seniority levels, optionally scoped to a department with salary bands.</p>
+      </div>
+      <button class="btn-primary" (click)="openDesigForm()"><mat-icon>add</mat-icon> Add Designation</button>
+    </div>
+
+    <div class="data-card">
+      <table mat-table [dataSource]="designations">
+        <ng-container matColumnDef="title">
+          <th mat-header-cell *matHeaderCellDef>Title</th>
+          <td mat-cell *matCellDef="let d"><strong>{{ d.title }}</strong></td>
+        </ng-container>
+        <ng-container matColumnDef="level">
+          <th mat-header-cell *matHeaderCellDef>Level</th>
+          <td mat-cell *matCellDef="let d"><span class="code-chip" *ngIf="d.level">{{ d.level }}</span><span *ngIf="!d.level">—</span></td>
+        </ng-container>
+        <ng-container matColumnDef="department">
+          <th mat-header-cell *matHeaderCellDef>Department</th>
+          <td mat-cell *matCellDef="let d">{{ d.department?.name || '—' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="salary">
+          <th mat-header-cell *matHeaderCellDef>Salary Range</th>
+          <td mat-cell *matCellDef="let d">{{ salaryRange(d) }}</td>
+        </ng-container>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let d">
+            <span class="status-pill" [class.on]="d.is_active" [class.off]="!d.is_active">
+              {{ d.is_active ? 'Active' : 'Inactive' }}
+            </span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef style="text-align:right">Actions</th>
+          <td mat-cell *matCellDef="let d" style="text-align:right">
+            <button class="row-btn" matTooltip="Edit" (click)="openDesigForm(d)"><mat-icon>edit</mat-icon></button>
+            <button class="row-btn danger" matTooltip="Delete" (click)="deleteDesig(d)"><mat-icon>delete_outline</mat-icon></button>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="desigColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: desigColumns;"></tr>
+      </table>
+      <div class="empty-state" *ngIf="!loading && !designations.length">
+        <mat-icon>badge</mat-icon><span>No designations yet</span>
+      </div>
+      <div class="empty-state" *ngIf="loading"><mat-spinner diameter="28"></mat-spinner></div>
+    </div>
+  </ng-container>
+
 </div>
 
 <!-- ── User Detail Drawer ────────────────────────────────────────────────── -->
@@ -428,5 +538,123 @@
   <div class="modal-footer">
     <button class="btn-outline" (click)="showRoleEditor=false">Cancel</button>
     <button class="btn-primary" (click)="saveRolePermissions()"><mat-icon>save</mat-icon> Save Permissions</button>
+  </div>
+</div>
+
+<!-- ── Department Form Modal ──────────────────────────────────────────────── -->
+<div class="modal-backdrop" *ngIf="showDeptForm" (click)="showDeptForm=false"></div>
+<div class="modal-panel" *ngIf="showDeptForm">
+  <div class="modal-hdr">
+    <h3><mat-icon>{{ deptEditId ? 'edit' : 'corporate_fare' }}</mat-icon> {{ deptEditId ? 'Edit Department' : 'Add Department' }}</h3>
+    <button class="row-btn" (click)="showDeptForm=false"><mat-icon>close</mat-icon></button>
+  </div>
+  <div class="modal-body">
+    <div class="two-col">
+      <div class="field-group">
+        <label class="field-label">Name <span class="req">*</span></label>
+        <input class="field-input" [(ngModel)]="deptForm.name" placeholder="e.g. Human Resources">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Code <span class="req">*</span></label>
+        <input class="field-input" [(ngModel)]="deptForm.code" placeholder="e.g. HR">
+      </div>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Description</label>
+      <input class="field-input" [(ngModel)]="deptForm.description" placeholder="Short description (optional)">
+    </div>
+    <div class="two-col">
+      <div class="field-group">
+        <label class="field-label">Parent Department</label>
+        <select class="field-select-full" [(ngModel)]="deptForm.parent_id">
+          <option value="">— None —</option>
+          <option *ngFor="let d of departments" [value]="d.id" [disabled]="d.id===deptEditId">{{ d.name }}</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Manager</label>
+        <select class="field-select-full" [(ngModel)]="deptForm.manager_id">
+          <option value="">— None —</option>
+          <option *ngFor="let e of employees" [value]="e.id">{{ e.first_name }} {{ e.last_name }} ({{ e.employee_code }})</option>
+        </select>
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="field-group">
+        <label class="field-label">Headcount Budget</label>
+        <input class="field-input" type="number" min="0" [(ngModel)]="deptForm.headcount_budget" placeholder="e.g. 25">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Status</label>
+        <select class="field-select-full" [(ngModel)]="deptForm.is_active">
+          <option [ngValue]="true">Active</option>
+          <option [ngValue]="false">Inactive</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-err" *ngIf="deptError"><mat-icon>error_outline</mat-icon> {{ deptError }}</div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn-outline" (click)="showDeptForm=false">Cancel</button>
+    <button class="btn-primary" (click)="saveDept()" [disabled]="submitting">
+      <mat-icon>{{ submitting ? 'hourglass_empty' : 'save' }}</mat-icon>
+      {{ submitting ? 'Saving…' : (deptEditId ? 'Update Department' : 'Create Department') }}
+    </button>
+  </div>
+</div>
+
+<!-- ── Designation Form Modal ─────────────────────────────────────────────── -->
+<div class="modal-backdrop" *ngIf="showDesigForm" (click)="showDesigForm=false"></div>
+<div class="modal-panel" *ngIf="showDesigForm">
+  <div class="modal-hdr">
+    <h3><mat-icon>{{ desigEditId ? 'edit' : 'badge' }}</mat-icon> {{ desigEditId ? 'Edit Designation' : 'Add Designation' }}</h3>
+    <button class="row-btn" (click)="showDesigForm=false"><mat-icon>close</mat-icon></button>
+  </div>
+  <div class="modal-body">
+    <div class="two-col">
+      <div class="field-group">
+        <label class="field-label">Title <span class="req">*</span></label>
+        <input class="field-input" [(ngModel)]="desigForm.title" placeholder="e.g. Software Engineer">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Level</label>
+        <select class="field-select-full" [(ngModel)]="desigForm.level">
+          <option value="">— None —</option>
+          <option *ngFor="let l of desigLevels" [value]="l">{{ l | titlecase }}</option>
+        </select>
+      </div>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Department</label>
+      <select class="field-select-full" [(ngModel)]="desigForm.department_id">
+        <option value="">— None —</option>
+        <option *ngFor="let d of departments" [value]="d.id">{{ d.name }}</option>
+      </select>
+    </div>
+    <div class="two-col">
+      <div class="field-group">
+        <label class="field-label">Min Salary</label>
+        <input class="field-input" type="number" min="0" [(ngModel)]="desigForm.min_salary" placeholder="e.g. 8000">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Max Salary</label>
+        <input class="field-input" type="number" min="0" [(ngModel)]="desigForm.max_salary" placeholder="e.g. 14000">
+      </div>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Status</label>
+      <select class="field-select-full" [(ngModel)]="desigForm.is_active">
+        <option [ngValue]="true">Active</option>
+        <option [ngValue]="false">Inactive</option>
+      </select>
+    </div>
+    <div class="form-err" *ngIf="desigError"><mat-icon>error_outline</mat-icon> {{ desigError }}</div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn-outline" (click)="showDesigForm=false">Cancel</button>
+    <button class="btn-primary" (click)="saveDesig()" [disabled]="submitting">
+      <mat-icon>{{ submitting ? 'hourglass_empty' : 'save' }}</mat-icon>
+      {{ submitting ? 'Saving…' : (desigEditId ? 'Update Designation' : 'Create Designation') }}
+    </button>
   </div>
 </div>

@@ -47,11 +47,32 @@ export class AdminComponent implements OnInit {
   roleColumns  = ['role','users','description','actions'];
 
   tabs = [
-    { id:'overview',    label:'Overview',    icon:'dashboard'          },
-    { id:'users',       label:'Users',       icon:'people'             },
-    { id:'roles',       label:'Roles',       icon:'security'           },
-    { id:'permissions', label:'Permissions', icon:'lock'               },
+    { id:'overview',     label:'Overview',     icon:'dashboard'          },
+    { id:'users',        label:'Users',        icon:'people'             },
+    { id:'roles',        label:'Roles',        icon:'security'           },
+    { id:'permissions',  label:'Permissions',  icon:'lock'               },
+    { id:'departments',  label:'Departments',  icon:'corporate_fare'     },
+    { id:'designations', label:'Designations', icon:'badge'              },
   ];
+
+  // ── Departments ───────────────────────────────────────────────────────
+  departments: any[]   = [];
+  deptColumns          = ['name','code','manager','parent','headcount','status','actions'];
+  showDeptForm         = false;
+  deptForm: any        = { name:'', code:'', description:'', parent_id:'', manager_id:'', headcount_budget:'', is_active:true };
+  deptEditId: number | null = null;
+  deptError            = '';
+
+  // ── Designations ──────────────────────────────────────────────────────
+  designations: any[]  = [];
+  desigColumns         = ['title','level','department','salary','status','actions'];
+  showDesigForm        = false;
+  desigForm: any       = { title:'', level:'', department_id:'', min_salary:'', max_salary:'', is_active:true };
+  desigEditId: number | null = null;
+  desigError           = '';
+
+  /** Designation seniority levels — mirrors backend validation enum. */
+  desigLevels = ['junior','mid','senior','lead','manager','director','executive','management','staff'];
 
   roleInfo: any = {
     super_admin:        { label:'Super Admin',        color:'#ef4444', icon:'shield'             },
@@ -140,9 +161,11 @@ export class AdminComponent implements OnInit {
 
   switchTab(id: string) {
     this.activeTab = id;
-    if (id === 'users')    this.loadUsers();
-    if (id === 'overview') this.loadOverview();
-    if (id === 'roles')    this.loadRoles();
+    if (id === 'users')        this.loadUsers();
+    if (id === 'overview')     this.loadOverview();
+    if (id === 'roles')        this.loadRoles();
+    if (id === 'departments')  this.loadDepartments();
+    if (id === 'designations') { this.loadDesignations(); this.loadDepartments(); }
   }
 
   // ── User CRUD ──────────────────────────────────────────────────────
@@ -264,6 +287,148 @@ export class AdminComponent implements OnInit {
 
   moduleBorder(role: any, moduleKey: string, alpha: string = '60'): string {
     return this.roleHasModule(role, moduleKey) ? this.roleData(role.name).color + alpha : 'transparent';
+  }
+
+  // ── Department CRUD ─────────────────────────────────────────────────
+  /** Fetch all departments (with manager + parent eager-loaded). */
+  loadDepartments() {
+    this.loading = true;
+    this.http.get<any>('/api/v1/departments').subscribe({
+      next: r => { this.departments = Array.isArray(r) ? r : (r?.data || []); this.loading = false; },
+      error: err => { this.loading = false; console.error('[Admin] departments error:', err?.status, err?.error); }
+    });
+  }
+
+  /** Open the department modal in create or edit mode. */
+  openDeptForm(dept?: any) {
+    if (dept) {
+      this.deptEditId = dept.id;
+      this.deptForm = {
+        name: dept.name, code: dept.code, description: dept.description || '',
+        parent_id: dept.parent_id || '', manager_id: dept.manager_id || '',
+        headcount_budget: dept.headcount_budget ?? '', is_active: dept.is_active ?? true,
+      };
+    } else {
+      this.deptEditId = null;
+      this.deptForm = { name:'', code:'', description:'', parent_id:'', manager_id:'', headcount_budget:'', is_active:true };
+    }
+    this.deptError = ''; this.showDeptForm = true;
+  }
+
+  /** Persist a department (create or update). */
+  saveDept() {
+    if (!this.deptForm.name?.trim() || !this.deptForm.code?.trim()) {
+      this.deptError = 'Name and code are required.'; return;
+    }
+    this.submitting = true; this.deptError = '';
+    const payload: any = {
+      name: this.deptForm.name.trim(),
+      code: this.deptForm.code.trim(),
+      description: this.deptForm.description?.trim() || null,
+      parent_id: this.deptForm.parent_id || null,
+      manager_id: this.deptForm.manager_id || null,
+      headcount_budget: this.deptForm.headcount_budget === '' ? null : Number(this.deptForm.headcount_budget),
+      is_active: !!this.deptForm.is_active,
+    };
+    const req = this.deptEditId
+      ? this.http.put<any>(`/api/v1/departments/${this.deptEditId}`, payload)
+      : this.http.post<any>('/api/v1/departments', payload);
+    req.subscribe({
+      next: () => { this.submitting = false; this.showDeptForm = false; this.loadDepartments(); },
+      error: err => { this.submitting = false; this.deptError = this.firstError(err) || 'Failed to save department.'; }
+    });
+  }
+
+  /** Soft-delete a department after confirmation. */
+  deleteDept(dept: any) {
+    if (!confirm(`Delete department "${dept.name}"? This cannot be undone from the UI.`)) return;
+    this.http.delete(`/api/v1/departments/${dept.id}`).subscribe({
+      next: () => this.loadDepartments(),
+      error: err => alert(this.firstError(err) || 'Failed to delete department.')
+    });
+  }
+
+  // ── Designation CRUD ────────────────────────────────────────────────
+  /** Fetch all designations (with department eager-loaded). */
+  loadDesignations() {
+    this.loading = true;
+    this.http.get<any>('/api/v1/designations').subscribe({
+      next: r => { this.designations = Array.isArray(r) ? r : (r?.data || []); this.loading = false; },
+      error: err => { this.loading = false; console.error('[Admin] designations error:', err?.status, err?.error); }
+    });
+  }
+
+  /** Open the designation modal in create or edit mode. */
+  openDesigForm(desig?: any) {
+    if (desig) {
+      this.desigEditId = desig.id;
+      this.desigForm = {
+        title: desig.title, level: desig.level || '',
+        department_id: desig.department_id || '',
+        min_salary: desig.min_salary ?? '', max_salary: desig.max_salary ?? '',
+        is_active: desig.is_active ?? true,
+      };
+    } else {
+      this.desigEditId = null;
+      this.desigForm = { title:'', level:'', department_id:'', min_salary:'', max_salary:'', is_active:true };
+    }
+    this.desigError = ''; this.showDesigForm = true;
+  }
+
+  /** Persist a designation (create or update). */
+  saveDesig() {
+    if (!this.desigForm.title?.trim()) { this.desigError = 'Title is required.'; return; }
+    const min = this.desigForm.min_salary === '' ? null : Number(this.desigForm.min_salary);
+    const max = this.desigForm.max_salary === '' ? null : Number(this.desigForm.max_salary);
+    if (min !== null && max !== null && max < min) {
+      this.desigError = 'Max salary must be greater than or equal to min salary.'; return;
+    }
+    this.submitting = true; this.desigError = '';
+    const payload: any = {
+      title: this.desigForm.title.trim(),
+      level: this.desigForm.level || null,
+      department_id: this.desigForm.department_id || null,
+      min_salary: min, max_salary: max,
+      is_active: !!this.desigForm.is_active,
+    };
+    const req = this.desigEditId
+      ? this.http.put<any>(`/api/v1/designations/${this.desigEditId}`, payload)
+      : this.http.post<any>('/api/v1/designations', payload);
+    req.subscribe({
+      next: () => { this.submitting = false; this.showDesigForm = false; this.loadDesignations(); },
+      error: err => { this.submitting = false; this.desigError = this.firstError(err) || 'Failed to save designation.'; }
+    });
+  }
+
+  /** Delete a designation after confirmation. */
+  deleteDesig(desig: any) {
+    if (!confirm(`Delete designation "${desig.title}"?`)) return;
+    this.http.delete(`/api/v1/designations/${desig.id}`).subscribe({
+      next: () => this.loadDesignations(),
+      error: err => alert(this.firstError(err) || 'Failed to delete designation.')
+    });
+  }
+
+  /** Resolve an employee's display name from the loaded employees list. */
+  employeeName(id: any): string {
+    const e = this.employees.find(x => x.id === id || x.id === Number(id));
+    return e ? `${e.first_name} ${e.last_name}` : '—';
+  }
+
+  /** Format a salary range for table display. */
+  salaryRange(d: any): string {
+    if (d.min_salary == null && d.max_salary == null) return '—';
+    const f = (v: any) => v == null ? '—' : Number(v).toLocaleString();
+    return `${f(d.min_salary)} – ${f(d.max_salary)}`;
+  }
+
+  /** Extract the first Laravel validation error message from an HTTP error. */
+  private firstError(err: any): string {
+    if (err?.error?.errors) {
+      const first = Object.values(err.error.errors)[0];
+      if (Array.isArray(first) && first.length) return first[0] as string;
+    }
+    return err?.error?.message || '';
   }
 
   unlinkEmployee(userId: number) {
