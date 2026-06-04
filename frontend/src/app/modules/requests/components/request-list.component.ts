@@ -38,6 +38,7 @@ export class RequestListComponent implements OnInit, OnDestroy {
   isHR           = false;
   isMgr          = false;
   currentUserId: number | null = null;
+  currentUserdepartment: number | null = null;
 
   // ── Panels ───────────────────────────────────────────────────────────────
   showNew      = false;
@@ -144,6 +145,7 @@ export class RequestListComponent implements OnInit, OnDestroy {
     this.isHR          = this.auth.isHRRole();
     this.isMgr         = this.auth.isManagerRole();
     this.currentUserId = this.auth.getUser()?.id ?? null;
+    this.currentUserdepartment = this.auth.getUser()?.employee?.departmentId ?? null;
     this.loadStats();
     this.loadRequestTypes();
     this.load();
@@ -575,7 +577,22 @@ export class RequestListComponent implements OnInit, OnDestroy {
   // ── Permission helpers ────────────────────────────────────────────────────
 
   canMgrApprove(req: any): boolean {
-    return req.status === 'pending_manager' && (this.isMgr || this.isHR);
+      if (req.status !== 'pending_manager') {
+    return false;
+  }
+
+  // HR can always approve
+  if (this.isHR) {
+    return true;
+  }
+
+  // Manager can approve only employees from the same department
+  if (this.isMgr) {
+    const employeeDeptId = req?.employee?.department_id;
+    return this.currentUserdepartment === employeeDeptId;
+  }
+
+  
   }
 
   canAssign(req: any): boolean {
@@ -590,6 +607,23 @@ export class RequestListComponent implements OnInit, OnDestroy {
 
   canReject(req: any): boolean {
     return ['pending', 'pending_manager', 'in_progress'].includes(req.status) && (this.isHR || this.isMgr);
+
+  const currentDeptId = this.currentUserdepartment;
+
+  const employeeDeptId = req?.employee?.department_id;
+
+  // Same department + in progress => cannot reject
+  if (
+      req.status === 'in_progress' &&
+      currentDeptId === employeeDeptId
+  ) {
+      return false;
+  }
+
+  return ['pending', 'pending_manager', 'in_progress'].includes(req.status)
+      && (this.isHR || this.isMgr);
+
+    
   }
 
   canCancel(req: any): boolean {

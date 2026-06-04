@@ -117,24 +117,43 @@ class RequestManagementController extends Controller {
 
                             if ($isMgr) {
 
-                                // Employees reporting to me
-                                $inner->orWhereHas('employee', function ($eq) use ($user) {
-                                    $eq->where('manager_id', $user->employee->id);
+
+                                // Employee belongs to my department and requires manager approval
+                                $inner->orWhere(function ($mgrQ) use ($deptId) {
+
+                                    $mgrQ->whereHas('employee', function ($eq) use ($deptId) {
+                                        $eq->where('department_id', $deptId);
+                                    })
+                                    ->whereHas('requestType', function ($rq) {
+                                        $rq->where('requires_manager_approval', 1);
+                                    });
                                 });
 
-                                // Department-routed requests
-                                if ($deptId) {
-                                    $inner->orWhereHas('requestType', function ($rq) use ($deptId) {
+                                // Request routed to my department after manager approval
+                                $inner->orWhere(function ($deptQ) use ($deptId) {
+
+                                    $deptQ->where('status', '!=', 'pending_manager')
+                                    ->whereHas('requestType', function ($rq) use ($deptId) {
                                         $rq->where('handling_department_id', $deptId);
                                     });
-                                }
+                                });
                             }
                         }
                     });
                 })
-                ->when($request->status,
-                        fn($q) => $q->where('status', $request->status)
-                )
+                ->when($request->status, function ($q) use ($request, $isMine) {
+
+                    if ($request->status === 'pending') {
+
+                        $q->whereIn('status', [
+                            'pending',
+                            'pending_manager'
+                        ]);
+                    } else {
+
+                        $q->where('status', $request->status);
+                    }
+                })
                 ->when($request->category,
                         fn($q) => $q->whereHas('requestType',
                                 fn($rq) => $rq->where('category', $request->category)
