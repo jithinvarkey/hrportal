@@ -160,7 +160,7 @@
                 (click)="openReject(l); $event.stopPropagation()">
                 <mat-icon style="color:var(--danger)">cancel</mat-icon>
               </button>
-              <button class="row-btn" matTooltip="Disburse" *ngIf="l.status==='approved'"
+              <button class="row-btn" matTooltip="Disburse" *ngIf="canDisburse(l)"
                 (click)="disburse(l); $event.stopPropagation()">
                 <mat-icon style="color:var(--accent2)">payments</mat-icon>
               </button>
@@ -443,7 +443,7 @@
         (click)="openReject(selectedLoan)">
         <mat-icon>cancel</mat-icon> Reject
       </button>
-      <button class="btn-outline" style="color:var(--accent2)" *ngIf="selectedLoan.status==='approved'"
+      <button class="btn-outline" style="color:var(--accent2)" *ngIf="canDisburse(selectedLoan)"
         (click)="disburse(selectedLoan)">
         <mat-icon>payments</mat-icon> Disburse
       </button>

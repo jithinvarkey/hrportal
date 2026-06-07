@@ -466,7 +466,7 @@ export class LeaveListComponent implements OnInit {
     if (this.isHR) {
       return true;
     }
-console.log(r.employee_id,this.employeeId);
+
     // Employee can cancel only own pending requests
     const isOwner = r.employee_id === this.employeeId;
 
