@@ -21,12 +21,14 @@ use Illuminate\Support\Facades\DB;
  * Permission guard mismatch that occurs with Sanctum authentication.
  * Never use `$user->hasRole()` or `$user->hasAnyRole()` in this codebase.
  */
-class LoanController extends Controller
-{
+class LoanController extends Controller {
+
     /**
      * @param  LoanService $service  Injected by the service container
      */
-    public function __construct(protected LoanService $service) {}
+    public function __construct(protected LoanService $service) {
+        
+    }
 
     // ── Role helper ───────────────────────────────────────────────────────
 
@@ -37,14 +39,13 @@ class LoanController extends Controller
      *
      * @return string[]
      */
-    private function userRoles(): array
-    {
+    private function userRoles(): array {
         return DB::table('model_has_roles')
-            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
-            ->where('model_has_roles.model_id', auth()->id())
-            ->where('model_has_roles.model_type', get_class(auth()->user()))
-            ->pluck('roles.name')
-            ->toArray();
+                        ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+                        ->where('model_has_roles.model_id', auth()->id())
+                        ->where('model_has_roles.model_type', get_class(auth()->user()))
+                        ->pluck('roles.name')
+                        ->toArray();
     }
 
     /**
@@ -53,8 +54,7 @@ class LoanController extends Controller
      * @param  string[] $roles
      * @return bool
      */
-    private function hasAnyRoleDB(array $roles): bool
-    {
+    private function hasAnyRoleDB(array $roles): bool {
         return (bool) array_intersect($this->userRoles(), $roles);
     }
 
@@ -65,8 +65,7 @@ class LoanController extends Controller
      *
      * @return JsonResponse
      */
-    public function types(): JsonResponse
-    {
+    public function types(): JsonResponse {
         return response()->json(['types' => LoanType::where('is_active', true)->get()]);
     }
 
@@ -75,8 +74,7 @@ class LoanController extends Controller
      *
      * @return JsonResponse
      */
-    public function allTypes(): JsonResponse
-    {
+    public function allTypes(): JsonResponse {
         return response()->json(['types' => LoanType::orderBy('name')->get()]);
     }
 
@@ -86,15 +84,14 @@ class LoanController extends Controller
      * @param  Request      $request
      * @return JsonResponse           201 with created type
      */
-    public function storeType(Request $request): JsonResponse
-    {
+    public function storeType(Request $request): JsonResponse {
         $validated = $request->validate([
-            'name'             => 'required|string|max:100',
-            'code'             => 'required|string|max:20|unique:loan_types',
-            'max_amount'       => 'required|numeric|min:0',
+            'name' => 'required|string|max:100',
+            'code' => 'required|string|max:20|unique:loan_types',
+            'max_amount' => 'required|numeric|min:0',
             'max_installments' => 'required|integer|min:1|max:120',
-            'interest_rate'    => 'nullable|numeric|min:0|max:100',
-            'is_active'        => 'boolean',
+            'interest_rate' => 'nullable|numeric|min:0|max:100',
+            'is_active' => 'boolean',
         ]);
 
         return response()->json(['type' => LoanType::create($validated)], 201);
@@ -107,16 +104,15 @@ class LoanController extends Controller
      * @param  int          $id
      * @return JsonResponse
      */
-    public function updateType(Request $request, int $id): JsonResponse
-    {
+    public function updateType(Request $request, int $id): JsonResponse {
         $type = LoanType::findOrFail($id);
 
         $validated = $request->validate([
-            'name'             => 'sometimes|string|max:100',
-            'max_amount'       => 'sometimes|numeric|min:0',
+            'name' => 'sometimes|string|max:100',
+            'max_amount' => 'sometimes|numeric|min:0',
             'max_installments' => 'sometimes|integer|min:1|max:120',
-            'interest_rate'    => 'nullable|numeric|min:0|max:100',
-            'is_active'        => 'boolean',
+            'interest_rate' => 'nullable|numeric|min:0|max:100',
+            'is_active' => 'boolean',
         ]);
 
         $type->update($validated);
@@ -131,8 +127,7 @@ class LoanController extends Controller
      *
      * @return JsonResponse
      */
-    public function stats(): JsonResponse
-    {
+    public function stats(): JsonResponse {
         return response()->json($this->service->stats());
     }
 
@@ -147,32 +142,31 @@ class LoanController extends Controller
      * @param  Request      $request
      * @return JsonResponse
      */
-    public function index(Request $request): JsonResponse
-    {
-        $user    = auth()->user();
+    public function index(Request $request): JsonResponse {
+        $user = auth()->user();
         // FIX: Use raw DB query instead of Spatie hasRole() to avoid guard mismatch
         $isAdmin = $this->hasAnyRoleDB(['super_admin', 'hr_manager', 'finance_manager']);
-        $isMgr   = $this->hasAnyRoleDB(['department_manager']);
+        $isMgr = $this->hasAnyRoleDB(['department_manager']);
 
         $query = Loan::with(['employee.department', 'loanType'])
-            ->when(!$isAdmin, function ($q) use ($user, $isMgr) {
-                if ($isMgr && $user->employee) {
-                    $teamIds = $user->employee->subordinates()->pluck('id');
-                    $q->whereIn('employee_id', $teamIds->push($user->employee->id));
-                } elseif ($user->employee) {
-                    $q->where('employee_id', $user->employee->id);
-                }
-            })
-            ->when($request->status,       fn ($q) => $q->where('status', $request->status))
-            ->when($request->loan_type_id, fn ($q) => $q->where('loan_type_id', $request->loan_type_id))
-            ->when($request->search, fn ($q) =>
-                $q->whereHas('employee', fn ($eq) =>
-                    $eq->where('first_name', 'like', "%{$request->search}%")
-                       ->orWhere('last_name',  'like', "%{$request->search}%")
-                       ->orWhere('employee_code', 'like', "%{$request->search}%")
+                ->when(!$isAdmin, function ($q) use ($user, $isMgr) {
+                    if ($isMgr && $user->employee) {
+                        $teamIds = $user->employee->subordinates()->pluck('id');
+                        $q->whereIn('employee_id', $teamIds->push($user->employee->id));
+                    } elseif ($user->employee) {
+                        $q->where('employee_id', $user->employee->id);
+                    }
+                })
+                ->when($request->status, fn($q) => $q->where('status', $request->status))
+                ->when($request->loan_type_id, fn($q) => $q->where('loan_type_id', $request->loan_type_id))
+                ->when($request->search, fn($q) =>
+                        $q->whereHas('employee', fn($eq) =>
+                                $eq->where('first_name', 'like', "%{$request->search}%")
+                                ->orWhere('last_name', 'like', "%{$request->search}%")
+                                ->orWhere('employee_code', 'like', "%{$request->search}%")
+                        )
                 )
-            )
-            ->orderBy('created_at', 'desc');
+                ->orderBy('created_at', 'desc');
 
         return response()->json($query->paginate(15));
     }
@@ -185,14 +179,13 @@ class LoanController extends Controller
      * @param  Request      $request
      * @return JsonResponse           201 with created loan
      */
-    public function store(Request $request): JsonResponse
-    {
+    public function store(Request $request): JsonResponse {
         $request->validate([
-            'loan_type_id'     => 'required|exists:loan_types,id',
+            'loan_type_id' => 'required|exists:loan_types,id',
             'requested_amount' => 'required|numeric|min:100',
-            'installments'     => 'required|integer|min:1|max:120',
-            'purpose'          => 'required|string|min:10',
-            'notes'            => 'nullable|string|max:1000',
+            'installments' => 'required|integer|min:1|max:120',
+            'purpose' => 'required|string|min:10',
+            'notes' => 'nullable|string|max:1000',
         ]);
 
         $employee = auth()->user()->employee;
@@ -200,41 +193,37 @@ class LoanController extends Controller
 
         if ($loanType->max_amount > 0 && $request->requested_amount > $loanType->max_amount) {
             return response()->json([
-                'message' => "Amount exceeds maximum allowed ({$loanType->max_amount} SAR) for this loan type.",
-            ], 422);
+                        'message' => "Amount exceeds maximum allowed ({$loanType->max_amount} SAR) for this loan type.",
+                            ], 422);
         }
 
         if ($request->installments > $loanType->max_installments) {
             return response()->json([
-                'message' => "Maximum installments for this loan type is {$loanType->max_installments}.",
-            ], 422);
+                        'message' => "Maximum installments for this loan type is {$loanType->max_installments}.",
+                            ], 422);
         }
 
         $active = Loan::where('employee_id', $employee->id)
-            ->where('loan_type_id', $request->loan_type_id)
-            ->whereIn('status', ['pending_manager', 'pending_hr', 'pending_finance', 'approved', 'disbursed'])
-            ->exists();
+                ->where('loan_type_id', $request->loan_type_id)
+                ->whereIn('status', ['pending_manager', 'pending_hr', 'pending_finance', 'approved', 'disbursed'])
+                ->exists();
 
         if ($active) {
             return response()->json(['message' => 'You already have an active loan of this type.'], 422);
         }
 
-        $monthly = $this->service->calculateMonthlyInstallment(
-            $request->requested_amount,
-            $request->installments,
-            $loanType->interest_rate ?? 0
-        );
+        $monthly = $this->service->calculateMonthlyInstallment((float) $request->requested_amount, (int) $request->installments, (float) ($loanType->interest_rate ?? 0));
 
         $loan = Loan::create([
-            'reference'           => $this->service->generateReference(),
-            'employee_id'         => $employee->id,
-            'loan_type_id'        => $request->loan_type_id,
-            'requested_amount'    => $request->requested_amount,
-            'installments'        => $request->installments,
-            'monthly_installment' => $monthly,
-            'purpose'             => $request->purpose,
-            'notes'               => $request->notes,
-            'status'              => 'pending_manager',
+                    'reference' => $this->service->generateReference(),
+                    'employee_id' => $employee->id,
+                    'loan_type_id' => $request->loan_type_id,
+                    'requested_amount' => $request->requested_amount,
+                    'installments' => $request->installments,
+                    'monthly_installment' => $monthly,
+                    'purpose' => $request->purpose,
+                    'notes' => $request->notes,
+                    'status' => 'pending_manager',
         ]);
 
         return response()->json(['message' => 'Loan request submitted.', 'loan' => $loan->load('loanType')], 201);
@@ -248,17 +237,16 @@ class LoanController extends Controller
      * @param  int          $id
      * @return JsonResponse
      */
-    public function show(int $id): JsonResponse
-    {
+    public function show(int $id): JsonResponse {
         $loan = Loan::with([
-            'employee.department', 'loanType',
-            'installments.processedBy',
-            'managerApprover', 'hrApprover', 'financeApprover', 'rejectedBy',
-        ])->findOrFail($id);
+                    'employee.department', 'loanType',
+                    'installments.processedBy',
+                    'managerApprover', 'hrApprover', 'financeApprover', 'rejectedBy',
+                ])->findOrFail($id);
 
         $data = $loan->toArray();
         $data['installment_schedule'] = $data['installments'];
-        $data['installments']         = $loan->getRawOriginal('installments');
+        $data['installments'] = $loan->getRawOriginal('installments');
 
         return response()->json(['loan' => $data]);
     }
@@ -275,15 +263,14 @@ class LoanController extends Controller
      * @param  int          $id
      * @return JsonResponse
      */
-    public function approve(Request $request, int $id): JsonResponse
-    {
+    public function approve(Request $request, int $id): JsonResponse {
         $loan = Loan::findOrFail($id);
         $user = auth()->user();
 
         switch ($loan->status) {
             case 'pending_manager':
                 $loan->update([
-                    'status'              => 'pending_hr',
+                    'status' => 'pending_hr',
                     'manager_approved_by' => $user->id,
                     'manager_approved_at' => now(),
                 ]);
@@ -291,7 +278,7 @@ class LoanController extends Controller
 
             case 'pending_hr':
                 $loan->update([
-                    'status'         => 'pending_finance',
+                    'status' => 'pending_finance',
                     'hr_approved_by' => $user->id,
                     'hr_approved_at' => now(),
                 ]);
@@ -299,28 +286,23 @@ class LoanController extends Controller
 
             case 'pending_finance':
                 $request->validate([
-                    'approved_amount'        => 'nullable|numeric|min:1',
-                    'disbursed_date'         => 'nullable|date',
+                    'approved_amount' => 'nullable|numeric|min:1',
+                    'disbursed_date' => 'nullable|date',
                     'first_installment_date' => 'nullable|date',
                 ]);
 
                 $approvedAmt = $request->approved_amount ?? $loan->requested_amount;
-                $monthly     = $this->service->calculateMonthlyInstallment(
-                    $approvedAmt,
-                    $loan->installments,
-                    $loan->loanType->interest_rate ?? 0
-                );
+                $monthly = $this->service->calculateMonthlyInstallment((float) $approvedAmt, (int) $loan->installments,  (float) ($loan->loanType->interest_rate ?? 0)  );
 
                 $loan->update([
-                    'status'                 => 'approved',
-                    'finance_approved_by'    => $user->id,
-                    'finance_approved_at'    => now(),
-                    'approved_amount'        => $approvedAmt,
-                    'monthly_installment'    => $monthly,
-                    'balance_remaining'      => $approvedAmt,
-                    'disbursed_date'         => $request->disbursed_date ?? now()->toDateString(),
-                    'first_installment_date' => $request->first_installment_date
-                                             ?? now()->addMonth()->startOfMonth()->toDateString(),
+                    'status' => 'approved',
+                    'finance_approved_by' => $user->id,
+                    'finance_approved_at' => now(),
+                    'approved_amount' => $approvedAmt,
+                    'monthly_installment' => $monthly,
+                    'balance_remaining' => $approvedAmt,
+                    'disbursed_date' => $request->disbursed_date ?? now()->toDateString(),
+                    'first_installment_date' => $request->first_installment_date ?? now()->addMonth()->startOfMonth()->toDateString(),
                 ]);
 
                 $loan->refresh();
@@ -343,16 +325,15 @@ class LoanController extends Controller
      * @param  int          $id
      * @return JsonResponse
      */
-    public function reject(Request $request, int $id): JsonResponse
-    {
+    public function reject(Request $request, int $id): JsonResponse {
         $request->validate(['reason' => 'required|string|min:5']);
 
-        $loan  = Loan::findOrFail($id);
+        $loan = Loan::findOrFail($id);
         $stage = match ($loan->status) {
             'pending_manager' => 'manager',
-            'pending_hr'      => 'hr',
+            'pending_hr' => 'hr',
             'pending_finance' => 'finance',
-            default           => null,
+            default => null,
         };
 
         if (!$stage) {
@@ -360,11 +341,11 @@ class LoanController extends Controller
         }
 
         $loan->update([
-            'status'           => 'rejected',
+            'status' => 'rejected',
             'rejection_reason' => $request->reason,
-            'rejected_by'      => auth()->id(),
-            'rejected_at'      => now(),
-            'rejected_stage'   => $stage,
+            'rejected_by' => auth()->id(),
+            'rejected_at' => now(),
+            'rejected_stage' => $stage,
         ]);
 
         return response()->json(['message' => 'Loan rejected.']);
@@ -378,8 +359,7 @@ class LoanController extends Controller
      * @param  int          $id
      * @return JsonResponse
      */
-    public function cancel(int $id): JsonResponse
-    {
+    public function cancel(int $id): JsonResponse {
         $loan = Loan::findOrFail($id);
 
         if (!in_array($loan->status, ['pending_manager', 'pending_hr', 'pending_finance'])) {
@@ -400,8 +380,7 @@ class LoanController extends Controller
      * @param  int          $id
      * @return JsonResponse
      */
-    public function disburse(Request $request, int $id): JsonResponse
-    {
+    public function disburse(Request $request, int $id): JsonResponse {
         $loan = Loan::findOrFail($id);
 
         if ($loan->status !== 'approved') {
@@ -409,8 +388,8 @@ class LoanController extends Controller
         }
 
         $loan->update([
-            'status'        => 'disbursed',
-            'disbursed_date'=> $request->disbursed_date ?? now()->toDateString(),
+            'status' => 'disbursed',
+            'disbursed_date' => $request->disbursed_date ?? now()->toDateString(),
         ]);
 
         return response()->json(['message' => 'Loan marked as disbursed.']);
@@ -426,8 +405,7 @@ class LoanController extends Controller
      * @param  int     $instId
      * @return JsonResponse
      */
-    public function payInstallment(Request $request, int $loanId, int $instId): JsonResponse
-    {
+    public function payInstallment(Request $request, int $loanId, int $instId): JsonResponse {
         $inst = LoanInstallment::where('loan_id', $loanId)->findOrFail($instId);
 
         if (!in_array($inst->status, ['pending', 'overdue'])) {
@@ -447,8 +425,7 @@ class LoanController extends Controller
      * @param  int     $instId
      * @return JsonResponse
      */
-    public function skipInstallment(Request $request, int $loanId, int $instId): JsonResponse
-    {
+    public function skipInstallment(Request $request, int $loanId, int $instId): JsonResponse {
         $inst = LoanInstallment::where('loan_id', $loanId)->findOrFail($instId);
 
         if (!in_array($inst->status, ['pending', 'overdue'])) {
@@ -465,8 +442,7 @@ class LoanController extends Controller
      *
      * @return JsonResponse
      */
-    public function markOverdue(): JsonResponse
-    {
+    public function markOverdue(): JsonResponse {
         $count = $this->service->markOverdue();
 
         return response()->json(['message' => "{$count} installments marked as overdue."]);
@@ -479,8 +455,7 @@ class LoanController extends Controller
      *
      * @return JsonResponse
      */
-    public function myLoans(): JsonResponse
-    {
+    public function myLoans(): JsonResponse {
         $employee = auth()->user()->employee;
 
         if (!$employee) {
@@ -488,14 +463,14 @@ class LoanController extends Controller
         }
 
         $loans = Loan::with(['loanType'])
-            ->where('employee_id', $employee->id)
-            ->orderBy('created_at', 'desc')
-            ->get()
-            ->map(function (Loan $loan) {
-                $data = $loan->toArray();
-                $data['total_installments'] = $loan->getRawOriginal('installments');
-                return $data;
-            });
+                ->where('employee_id', $employee->id)
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function (Loan $loan) {
+            $data = $loan->toArray();
+            $data['total_installments'] = $loan->getRawOriginal('installments');
+            return $data;
+        });
 
         return response()->json(['loans' => $loans]);
     }
