@@ -291,3 +291,14 @@
 
 /* ── att-body (attention grid item body) ───────────────────────── */
 .att-body { display:flex; flex-direction:column; min-width:0; }
+
+/* ── Department / Designation management ─────────────────────────────── */
+.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap;}
+.section-title{font-size:18px;font-weight:700;color:var(--text);margin:0;}
+.section-sub{font-size:13px;color:var(--text3);margin:4px 0 0;max-width:560px;}
+.code-chip{display:inline-block;padding:2px 8px;border-radius:6px;background:var(--surface2);border:1px solid var(--border2);
+  font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;}
+.status-pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;
+  &.on{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success);}
+  &.off{background:color-mix(in srgb,var(--text3) 16%,transparent);color:var(--text3);}}
+.row-btn.danger:hover{background:color-mix(in srgb,var(--danger) 14%,transparent);color:var(--danger);}

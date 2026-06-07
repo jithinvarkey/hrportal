@@ -113,6 +113,7 @@ class AuthController extends Controller
                 'full_name'  => $user->employee->full_name,
                 'avatar_url' => $user->employee->avatar_url,
                 'department' => optional($user->employee->department)->name,
+                'departmentId'=>optional($user->employee)->department_id,
             ] : null,
         ];
     }

@@ -1,6 +1,11 @@
-import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import {
+  Component, OnInit,
+  OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef
+} from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
+import { Subject, interval } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 
 @Component({
   standalone: false,
@@ -9,139 +14,144 @@ import { AuthService } from '../../../core/services/auth.service';
   styleUrls: ['./request-list.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class RequestListComponent implements OnInit {
+export class RequestListComponent implements OnInit, OnDestroy {
 
   // ── Tabs ────────────────────────────────────────────────────────────────
-  activeTab    = 'mine';
+  activeTab = 'mine';
   activeStatus = '';
-  loading      = false;
-  submitting   = false;
+  loading = false;
+  submitting = false;
 
   // ── Data ─────────────────────────────────────────────────────────────────
-  requests:       any[] = [];
-  requestTypes:   any[] = [];
-  allRequestTypes:any[] = [];
-  stats:          any   = {};
-  statItems:      any[] = [];
-  pagination:     any   = null;
-  currentPage           = 1;
+  requests: any[] = [];
+  requestTypes: any[] = [];
+  allRequestTypes: any[] = [];
+  stats: any = {};
+  statItems: any[] = [];
+  pagination: any = null;
+  currentPage = 1;
 
   // ── Filters ──────────────────────────────────────────────────────────────
-  filterSearch   = '';
+  filterSearch = '';
   filterCategory = '';
-  filterTypeId   = '';
+  filterTypeId = '';
 
   // ── Role flags ───────────────────────────────────────────────────────────
-  isHR           = false;
-  isMgr          = false;
+  isHR = false;
+  isMgr = false;
   currentUserId: number | null = null;
+  currentUserdepartment: number | null = null;
 
   // ── Panels ───────────────────────────────────────────────────────────────
-  showNew      = false;
-  showDetail   = false;
-  showReject   = false;
+  showNew = false;
+  showDetail = false;
+  showReject = false;
   showComplete = false;
   showTypeForm = false;
-  showAssign   = false;
+  showAssign = false;
 
-  selectedReq:   any = null;
-  rejectTarget:  any = null;
-  assignTarget:  any = null;
-  rejectReason       = '';
-  newComment         = '';
-  sendingComment     = false;
+  selectedReq: any = null;
+  rejectTarget: any = null;
+  assignTarget: any = null;
+  rejectReason = '';
+  newComment = '';
+  sendingComment = false;
 
   // ── New request form ──────────────────────────────────────────────────────
-  form: any    = { request_type_id: '', details: '', required_by: '', copies_needed: 1 };
-  formError    = '';
-  selectedType:any = null;
+  form: any = { request_type_id: '', details: '', required_by: '', copies_needed: 1 };
+  formError = '';
+  selectedType: any = null;
   selectedFile: File | null = null;
-  fileError    = '';
+  fileError = '';
 
   // ── Complete form ─────────────────────────────────────────────────────────
-  completeForm:    any  = { completion_notes: '', hr_notes: '' };
-  completionFile:  File | null = null;
+  completeForm: any = { completion_notes: '', hr_notes: '' };
+  completionFile: File | null = null;
 
   // ── Assign form ───────────────────────────────────────────────────────────
-  assignForm       = { assigned_to: '', notes: '' };
+  assignForm = { assigned_to: '', notes: '' };
   assignableGroups: any[] = [];
-  assigning        = false;
+  assigning = false;
 
   // ── Type form ─────────────────────────────────────────────────────────────
   typeForm: any = {
     name: '', code: '', category: 'documents', description: '', instructions: '',
     sla_days: 3, requires_attachment: false, requires_manager_approval: false,
-    is_active: true, sort_order: 0, icon: 'description', color: '#6366f1',
+    is_active: true, sort_order: 0, icon: 'description', color: '#6366f1', handling_department_id: ''
   };
-  typeEditId:   number | null = null;
-  typeSaving    = false;
-  typeToDelete: any  = null;
-  typeDeleting  = false;
+  typeEditId: number | null = null;
+  typeSaving = false;
+  typeToDelete: any = null;
+  typeDeleting = false;
 
   // ── Table columns ─────────────────────────────────────────────────────────
-  displayedColumns = ['ref','employee','type','details','required_by','status','sla','actions'];
-  mineColumns      = ['ref','type','details','required_by','status','sla','actions'];
-  typeColumns      = ['name','category','sla','approval','actions'];
+  displayedColumns = ['ref', 'employee', 'type', 'details', 'required_by', 'status', 'sla', 'actions'];
+  mineColumns = ['ref', 'type', 'details', 'required_by', 'status', 'sla', 'actions'];
+  typeColumns = ['name', 'category', 'sla', 'approval', 'actions'];
 
   tabs = [
-    { id: 'mine',  label: 'My Requests',   icon: 'person'   },
-    { id: 'all',   label: 'All Requests',  icon: 'list_alt' },
-    { id: 'types', label: 'Request Types', icon: 'tune'     },
+    { id: 'mine', label: 'My Requests', icon: 'person' },
+    { id: 'all', label: 'All Requests', icon: 'list_alt' },
+    { id: 'types', label: 'Request Types', icon: 'tune' },
   ];
 
   statusTabs = [
-    { id: '',            label: 'All'         },
-    { id: 'pending',     label: 'Pending'     },
+    { id: '', label: 'All' },
+    { id: 'pending', label: 'Pending' },
     { id: 'in_progress', label: 'In Progress' },
-    { id: 'completed',   label: 'Completed'   },
-    { id: 'rejected',    label: 'Rejected'    },
+    { id: 'completed', label: 'Completed' },
+    { id: 'rejected', label: 'Rejected' },
   ];
 
   categories = [
-    { id: 'visa',      label: 'Visa',       icon: 'flight_takeoff',       color: '#3b82f6' },
-    { id: 'travel',    label: 'Travel',     icon: 'airplane_ticket',      color: '#f59e0b' },
-    { id: 'documents', label: 'Documents',  icon: 'description',          color: '#10b981' },
-    { id: 'hr',        label: 'HR',         icon: 'badge',                color: '#8b5cf6' },
-    { id: 'it',        label: 'IT',         icon: 'computer',             color: '#ef4444' },
-    { id: 'admin',     label: 'Admin',      icon: 'admin_panel_settings', color: '#ec4899' },
-    { id: 'finance',   label: 'Finance',    icon: 'payments',             color: '#0ea5e9' },
-    { id: 'other',     label: 'Other',      icon: 'help_outline',         color: '#6b7280' },
+    { id: 'visa', label: 'Visa', icon: 'flight_takeoff', color: '#3b82f6' },
+    { id: 'travel', label: 'Travel', icon: 'airplane_ticket', color: '#f59e0b' },
+    { id: 'documents', label: 'Documents', icon: 'description', color: '#10b981' },
+    { id: 'hr', label: 'HR', icon: 'badge', color: '#8b5cf6' },
+    { id: 'it', label: 'IT', icon: 'computer', color: '#ef4444' },
+    { id: 'admin', label: 'Admin', icon: 'admin_panel_settings', color: '#ec4899' },
+    { id: 'finance', label: 'Finance', icon: 'payments', color: '#0ea5e9' },
+    { id: 'other', label: 'Other', icon: 'help_outline', color: '#6b7280' },
   ];
 
   materialIcons = [
-    'description','flight_takeoff','airplane_ticket','family_restroom','payments',
-    'badge','account_balance','verified','mail','computer','lock_open','email',
-    'admin_panel_settings','local_parking','contact_page','inventory_2',
-    'monetization_on','manage_accounts','home_work','school','workspace_premium',
-    'health_and_safety','business_center','swap_horiz','help_outline',
+    'description', 'flight_takeoff', 'airplane_ticket', 'family_restroom', 'payments',
+    'badge', 'account_balance', 'verified', 'mail', 'computer', 'lock_open', 'email',
+    'admin_panel_settings', 'local_parking', 'contact_page', 'inventory_2',
+    'monetization_on', 'manage_accounts', 'home_work', 'school', 'workspace_premium',
+    'health_and_safety', 'business_center', 'swap_horiz', 'help_outline',
   ];
+
+  departments: any[] = [];
+  private readonly destroy$ = new Subject<void>();
 
   /** Category → department keyword mapping for smart assignment */
   private categoryDeptMap: Record<string, string> = {
-    it:        'IT',
-    finance:   'Finance',
-    admin:     'Admin',
-    hr:        'Human Resources',
-    travel:    'Admin',
-    visa:      'Admin',
+    it: 'IT',
+    finance: 'Finance',
+    admin: 'Admin',
+    hr: 'Human Resources',
+    travel: 'Admin',
+    visa: 'Admin',
     documents: 'Human Resources',
-    other:     '',
+    other: '',
   };
 
   constructor(
     private http: HttpClient,
     private auth: AuthService,
-    private cdr:  ChangeDetectorRef,
-  ) {}
+    private cdr: ChangeDetectorRef,
+  ) { }
 
   ngOnInit(): void {
-    this.isHR          = this.auth.isHRRole();
-    this.isMgr         = this.auth.isManagerRole();
+    this.isHR = this.auth.isHRRole();
+    this.isMgr = this.auth.isManagerRole();
     this.currentUserId = this.auth.getUser()?.id ?? null;
+    this.currentUserdepartment = this.auth.getUser()?.employee?.departmentId ?? null;
     this.loadStats();
     this.loadRequestTypes();
     this.load();
-    if (this.isHR || this.isMgr) this.loadAssignableUsers();
+    if (this.isHR || this.isMgr) { this.loadDepartments(); this.loadAssignableUsers(); }
   }
 
   // ── Data loaders ────────────────────────────────────────────────────────
@@ -149,12 +159,12 @@ export class RequestListComponent implements OnInit {
   loadStats(): void {
     this.http.get<any>('/api/v1/requests/stats').subscribe({
       next: r => {
-        this.stats     = r;
+        this.stats = r;
         this.statItems = [
-          { label: 'Pending',     value: r.pending,     icon: 'hourglass_empty', color: '#f59e0b' },
-          { label: 'In Progress', value: r.in_progress, icon: 'sync',            color: '#3b82f6' },
-          { label: 'Completed',   value: r.completed,   icon: 'check_circle',    color: '#10b981' },
-          { label: 'Overdue',     value: r.overdue,     icon: 'warning',         color: '#ef4444' },
+          { label: 'Pending', value: r.pending, icon: 'hourglass_empty', color: '#f59e0b' },
+          { label: 'In Progress', value: r.in_progress, icon: 'sync', color: '#3b82f6' },
+          { label: 'Completed', value: r.completed, icon: 'check_circle', color: '#10b981' },
+          { label: 'Overdue', value: r.overdue, icon: 'warning', color: '#ef4444' },
         ];
         this.cdr.markForCheck();
       },
@@ -169,22 +179,28 @@ export class RequestListComponent implements OnInit {
       next: r => { this.allRequestTypes = r?.types || []; this.cdr.markForCheck(); },
     });
   }
+  loadDepartments(): void {
+    this.http.get<any>('/api/v1/departments').pipe(takeUntil(this.destroy$)).subscribe({
+      next: (r) => { this.departments = r?.data ?? r ?? []; this.cdr.markForCheck(); },
+      error: () => { },
+    });
+  }
 
   load(page = 1): void {
     this.loading = true;
     this.currentPage = page;
     const params: any = { per_page: 15, page };
-    if (this.activeTab === 'mine') params.scope           = 'mine';
-    if (this.activeStatus)        params.status          = this.activeStatus;
-    if (this.filterCategory)      params.category        = this.filterCategory;
-    if (this.filterTypeId)        params.request_type_id = this.filterTypeId;
-    if (this.filterSearch)        params.search          = this.filterSearch;
+    if (this.activeTab === 'mine') params.scope = 'mine';
+    if (this.activeStatus) params.status = this.activeStatus;
+    if (this.filterCategory) params.category = this.filterCategory;
+    if (this.filterTypeId) params.request_type_id = this.filterTypeId;
+    if (this.filterSearch) params.search = this.filterSearch;
 
     this.http.get<any>('/api/v1/requests', { params }).subscribe({
       next: r => {
-        this.requests   = r?.data || [];
+        this.requests = r?.data || [];
         this.pagination = r;
-        this.loading    = false;
+        this.loading = false;
         this.cdr.markForCheck();
       },
       error: () => { this.loading = false; this.cdr.markForCheck(); },
@@ -200,7 +216,7 @@ export class RequestListComponent implements OnInit {
   // ── Tab / filter ────────────────────────────────────────────────────────
 
   switchTab(id: string): void {
-    this.activeTab    = id;
+    this.activeTab = id;
     this.activeStatus = '';
     this.filterCategory = '';
     if (id !== 'types') this.load();
@@ -214,8 +230,8 @@ export class RequestListComponent implements OnInit {
     this.http.get<any>(`/api/v1/requests/${r.id}`).subscribe({
       next: res => {
         this.selectedReq = res.request;
-        this.showDetail  = true;
-        this.newComment  = '';
+        this.showDetail = true;
+        this.newComment = '';
         this.cdr.markForCheck();
       },
     });
@@ -231,12 +247,12 @@ export class RequestListComponent implements OnInit {
   // ── New request ─────────────────────────────────────────────────────────
 
   openNew(): void {
-    this.form         = { request_type_id: '', details: '', required_by: '', copies_needed: 1 };
-    this.formError    = '';
+    this.form = { request_type_id: '', details: '', required_by: '', copies_needed: 1 };
+    this.formError = '';
     this.selectedType = null;
     this.selectedFile = null;
-    this.fileError    = '';
-    this.showNew      = true;
+    this.fileError = '';
+    this.showNew = true;
     this.cdr.markForCheck();
   }
 
@@ -253,15 +269,15 @@ export class RequestListComponent implements OnInit {
       this.formError = 'A supporting document is required.'; return;
     }
     this.submitting = true;
-    this.formError  = '';
+    this.formError = '';
     const fd = new FormData();
     Object.entries(this.form).forEach(([k, v]) => { if (v) fd.append(k, String(v)); });
     if (this.selectedFile) fd.append('attachment', this.selectedFile, this.selectedFile.name);
 
     this.http.post<any>('/api/v1/requests', fd).subscribe({
       next: () => {
-        this.submitting   = false;
-        this.showNew      = false;
+        this.submitting = false;
+        this.showNew = false;
         this.selectedFile = null;
         this.load();
         this.loadStats();
@@ -269,7 +285,7 @@ export class RequestListComponent implements OnInit {
       },
       error: err => {
         this.submitting = false;
-        this.formError  = err?.error?.message || 'Failed to submit.';
+        this.formError = err?.error?.message || 'Failed to submit.';
         this.cdr.markForCheck();
       },
     });
@@ -305,9 +321,9 @@ export class RequestListComponent implements OnInit {
 
   openAssign(req: any): void {
     this.assignTarget = req;
-    this.assignForm   = { assigned_to: '', notes: '' };
-    this.assigning    = false;
-    this.showAssign   = true;
+    this.assignForm = { assigned_to: '', notes: '' };
+    this.assigning = false;
+    this.showAssign = true;
     this.cdr.markForCheck();
   }
 
@@ -319,7 +335,7 @@ export class RequestListComponent implements OnInit {
 
     this.http.post(`/api/v1/requests/${this.assignTarget.id}/assign`, body).subscribe({
       next: () => {
-        this.assigning  = false;
+        this.assigning = false;
         this.showAssign = false;
         this.load(this.currentPage);
         this.loadStats();
@@ -336,7 +352,7 @@ export class RequestListComponent implements OnInit {
 
   /** Returns staff in the recommended department based on request category */
   recommendedUsers(req: any): any[] {
-    const cat     = req?.request_type?.category || '';
+    const cat = req?.request_type?.category || '';
     const keyword = (this.categoryDeptMap[cat] || '').toLowerCase();
     if (!keyword) return [];
     return this.assignableGroups
@@ -347,7 +363,7 @@ export class RequestListComponent implements OnInit {
   // ── Complete ─────────────────────────────────────────────────────────────
 
   openComplete(req: any): void {
-    this.selectedReq  = req;
+    this.selectedReq = req;
     this.completeForm = { completion_notes: '', hr_notes: '' };
     this.completionFile = null;
     this.showComplete = true;
@@ -357,12 +373,12 @@ export class RequestListComponent implements OnInit {
   submitComplete(): void {
     const fd = new FormData();
     if (this.completeForm.completion_notes) fd.append('completion_notes', this.completeForm.completion_notes);
-    if (this.completeForm.hr_notes)         fd.append('hr_notes',         this.completeForm.hr_notes);
+    if (this.completeForm.hr_notes) fd.append('hr_notes', this.completeForm.hr_notes);
     if (this.completionFile) fd.append('completion_file', this.completionFile, this.completionFile.name);
 
     this.http.post(`/api/v1/requests/${this.selectedReq.id}/complete`, fd).subscribe({
       next: () => {
-        this.showComplete   = false;
+        this.showComplete = false;
         this.completionFile = null;
         this.load(this.currentPage);
         this.loadStats();
@@ -381,7 +397,7 @@ export class RequestListComponent implements OnInit {
   openReject(req: any): void {
     this.rejectTarget = req;
     this.rejectReason = '';
-    this.showReject   = true;
+    this.showReject = true;
     this.cdr.markForCheck();
   }
 
@@ -422,7 +438,7 @@ export class RequestListComponent implements OnInit {
     this.http.post(`/api/v1/requests/${this.selectedReq.id}/comments`, { comment: this.newComment }).subscribe({
       next: () => {
         this.sendingComment = false;
-        this.newComment     = '';
+        this.newComment = '';
         this.reloadDetail();
         this.cdr.markForCheck();
       },
@@ -435,13 +451,13 @@ export class RequestListComponent implements OnInit {
   openTypeForm(t?: any): void {
     if (t) {
       this.typeEditId = t.id;
-      this.typeForm   = { ...t };
+      this.typeForm = { ...t };
     } else {
       this.typeEditId = null;
-      this.typeForm   = {
+      this.typeForm = {
         name: '', code: '', category: 'documents', description: '', instructions: '',
         sla_days: 3, requires_attachment: false, requires_manager_approval: false,
-        is_active: true, sort_order: 0, icon: 'description', color: '#6366f1',
+        is_active: true, sort_order: 0, icon: 'description', color: '#6366f1', handling_department_id: ''
       };
     }
     this.showTypeForm = true;
@@ -457,7 +473,7 @@ export class RequestListComponent implements OnInit {
 
     req.subscribe({
       next: () => {
-        this.typeSaving   = false;
+        this.typeSaving = false;
         this.showTypeForm = false;
         this.loadRequestTypes();
         this.cdr.markForCheck();
@@ -549,21 +565,36 @@ export class RequestListComponent implements OnInit {
   slaStatus(req: any): { label: string; cls: string } | null {
     if (!req.due_date || ['completed', 'rejected', 'cancelled'].includes(req.status)) return null;
     const days = Math.ceil((new Date(req.due_date).getTime() - Date.now()) / 86400000);
-    if (days < 0)   return { label: Math.abs(days) + 'd overdue', cls: 'sla-red'    };
-    if (days === 0) return { label: 'Due today',                   cls: 'sla-red'    };
-    if (days <= 1)  return { label: days + 'd left',               cls: 'sla-orange' };
+    if (days < 0) return { label: Math.abs(days) + 'd overdue', cls: 'sla-red' };
+    if (days === 0) return { label: 'Due today', cls: 'sla-red' };
+    if (days <= 1) return { label: days + 'd left', cls: 'sla-orange' };
     return { label: days + 'd left', cls: 'sla-green' };
   }
 
   avatarColor(name: string): string {
-    const colors = ['#3b82f6','#6366f1','#8b5cf6','#ec4899','#10b981','#f59e0b','#ef4444','#0ea5e9'];
+    const colors = ['#3b82f6', '#6366f1', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#ef4444', '#0ea5e9'];
     return colors[(name?.charCodeAt(0) || 0) % colors.length];
   }
 
   // ── Permission helpers ────────────────────────────────────────────────────
 
   canMgrApprove(req: any): boolean {
-    return req.status === 'pending_manager' && (this.isMgr || this.isHR);
+    if (req.status !== 'pending_manager') {
+      return false;
+    }
+
+    // HR can always approve
+    if (this.isHR) {
+      return true;
+    }
+
+    // Manager can approve only employees from the same department
+    if (this.isMgr) {
+      const employeeDeptId = req?.employee?.department_id;
+      return this.currentUserdepartment === employeeDeptId;
+    }
+    return false;
+
   }
 
   canAssign(req: any): boolean {
@@ -577,10 +608,38 @@ export class RequestListComponent implements OnInit {
   }
 
   canReject(req: any): boolean {
-    return ['pending', 'pending_manager', 'in_progress'].includes(req.status) && (this.isHR || this.isMgr);
+
+    if (!['pending', 'pending_manager', 'in_progress'].includes(req.status)) {
+      return false;
+    }
+
+    // HR can always reject
+    if (this.isHR) {
+      return true;
+    }
+
+    // Manager restriction
+    if (this.isMgr) {
+
+      const currentDeptId = this.currentUserdepartment;
+
+      const employeeDeptId =
+        req?.employee?.department_id ??
+        req?.employee?.department?.id;
+
+      // Manager cannot reject in-progress requests from own department
+      if (req.status === 'in_progress' && currentDeptId === employeeDeptId) {
+        return false;
+      }
+
+      return true;
+    }
+
+    return false;
   }
 
   canCancel(req: any): boolean {
     return ['pending', 'pending_manager'].includes(req.status);
   }
+  ngOnDestroy(): void { this.destroy$.next(); this.destroy$.complete(); }
 }

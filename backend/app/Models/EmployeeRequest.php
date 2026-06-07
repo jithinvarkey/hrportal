@@ -9,7 +9,7 @@ class EmployeeRequest extends Model {
         'rejection_reason','required_by','copies_needed','attachment_path',
         'manager_approved_by','manager_approved_at','assigned_to',
         'completed_by','completed_at','rejected_by','rejected_at',
-        'due_date','is_overdue','completion_file','completion_notes',
+        'due_date','is_overdue','completion_file','completion_notes'
     ];
     protected $casts = [
         'required_by'=>'date','due_date'=>'date',
