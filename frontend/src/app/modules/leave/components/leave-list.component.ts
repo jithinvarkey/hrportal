@@ -11,46 +11,46 @@ import { AuthService } from '../../../core/services/auth.service';
 export class LeaveListComponent implements OnInit {
 
   // ── State ────────────────────────────────────────────────────────────────
-  activeTab     = 'requests';   // requests | calendar | balances | types
-  activeStatus  = 'needs_action';
-  loading       = false;
-  submitting    = false;
+  activeTab = 'requests';   // requests | calendar | balances | types
+  activeStatus = 'needs_action';
+  loading = false;
+  submitting = false;
 
   // Data
-  requests:   any[] = [];
+  requests: any[] = [];
   leaveTypes: any[] = [];
   myBalances: any[] = [];
-  allBalances:any[] = [];
-  stats:      any   = {};
+  allBalances: any[] = [];
+  stats: any = {};
   calendarEvents: any[] = [];
-  holidays:   any[] = [];
-  pagination: any   = null;
+  holidays: any[] = [];
+  pagination: any = null;
   balancePagination: any = null;
 
   // Modals / drawers
-  showNewRequest  = false;
-  showReject      = false;
-  showDetail      = false;
-  showTypeForm    = false;
+  showNewRequest = false;
+  showReject = false;
+  showDetail = false;
+  showTypeForm = false;
   showHolidayForm = false;
 
-  selectedRequest: any  = null;
-  rejectTarget:   any   = null;
-  rejectReason          = '';
+  selectedRequest: any = null;
+  rejectTarget: any = null;
+  rejectReason = '';
 
   // Filters
-  filterSearch  = '';
-  filterType    = '';
-  filterDept    = '';
-  currentPage   = 1;
+  filterSearch = '';
+  filterType = '';
+  filterDept = '';
+  currentPage = 1;
 
   // Calendar
-  calYear   = new Date().getFullYear();
-  calMonth  = new Date().getMonth(); // 0-based
-  calDays:  any[] = [];
+  calYear = new Date().getFullYear();
+  calMonth = new Date().getMonth(); // 0-based
+  calDays: any[] = [];
 
   // Leave type form
-  typeForm: any = { name:'', code:'', days_allowed:0, is_paid:true, carry_forward:false, max_carry_forward:0, requires_document:false, description:'' };
+  typeForm: any = { name: '', code: '', days_allowed: 0, is_paid: true, carry_forward: false, max_carry_forward: 0, requires_document: false, description: '' };
   typeEditId: number | null = null;
   typeError = '';
   typeSaving = false;
@@ -66,44 +66,45 @@ export class LeaveListComponent implements OnInit {
   formError = '';
 
   // Department limits panel
-  showLimitsPanel   = false;
-  limitsLeaveType:  any   = null;
-  deptLimits:       any[] = [];
-  limitsLoading     = false;
-  limitsSaving      = false;
-  limitsError       = '';
-  limitsDirty       = false;
+  showLimitsPanel = false;
+  limitsLeaveType: any = null;
+  deptLimits: any[] = [];
+  limitsLoading = false;
+  limitsSaving = false;
+  limitsError = '';
+  limitsDirty = false;
 
   // Stat cards
-  statItems:    any[] = [];
-  excuseUsage:  any   = null;   // monthly business excuse usage
-  loadingUsage  = false;
+  statItems: any[] = [];
+  excuseUsage: any = null;   // monthly business excuse usage
+  loadingUsage = false;
 
   // Table columns
   displayedColumns = ['employee', 'type', 'dates', 'days', 'reason', 'status', 'actions'];
-  isHR  = false;
+  isHR = false;
   isMgr = false;
-  balanceColumns   = ['employee', 'leave_type', 'allocated', 'used', 'pending', 'remaining', 'bar'];
-  typeColumns      = ['name', 'code', 'days', 'paid', 'carry', 'actions'];
+  employeeId = '';
+  balanceColumns = ['employee', 'leave_type', 'allocated', 'used', 'pending', 'remaining', 'bar'];
+  typeColumns = ['name', 'code', 'days', 'paid', 'carry', 'actions'];
 
   tabs = [
-    { id: 'requests',  label: 'Requests',   icon: 'event_note'    },
-    { id: 'calendar',  label: 'Calendar',   icon: 'calendar_month' },
-    { id: 'balances',  label: 'Balances',   icon: 'account_balance_wallet' },
-    { id: 'types',     label: 'Leave Types',icon: 'tune'          },
+    { id: 'requests', label: 'Requests', icon: 'event_note' },
+    { id: 'calendar', label: 'Calendar', icon: 'calendar_month' },
+    { id: 'balances', label: 'Balances', icon: 'account_balance_wallet' },
+    { id: 'types', label: 'Leave Types', icon: 'tune' },
   ];
 
   statusTabs = [
-    { id: 'needs_action',     label: 'Needs Action'      },
-    { id: 'pending',          label: 'Awaiting Manager'  },
-    { id: 'manager_approved', label: 'Awaiting HR'       },
-    { id: 'approved',         label: 'Approved'          },
-    { id: 'rejected',         label: 'Rejected'          },
-    { id: 'cancelled',        label: 'Cancelled'         },
-    { id: '',                 label: 'All'               },
+    { id: 'needs_action', label: 'Needs Action' },
+    { id: 'pending', label: 'Awaiting Manager' },
+    { id: 'manager_approved', label: 'Awaiting HR' },
+    { id: 'approved', label: 'Approved' },
+    { id: 'rejected', label: 'Rejected' },
+    { id: 'cancelled', label: 'Cancelled' },
+    { id: '', label: 'All' },
   ];
 
-  constructor(private http: HttpClient, private auth: AuthService) {}
+  constructor(private http: HttpClient, private auth: AuthService) { }
 
   ngOnInit() {
     this.loadStats();
@@ -115,17 +116,18 @@ export class LeaveListComponent implements OnInit {
   // ── Stats ─────────────────────────────────────────────────────────────────
   loadStats() {
     // Role detection
-    this.isHR  = this.auth.isHRRole();
+    this.isHR = this.auth.isHRRole();
     this.isMgr = this.auth.isManagerRole();
+    this.employeeId = this.auth.getUser()?.employee?.id ?? null;
 
     this.http.get<any>('/api/v1/leave/stats').subscribe({
       next: r => {
         this.stats = r;
         this.statItems = [
-          { label: 'Pending Requests',    value: r.pending_count,  icon: 'pending_actions',   color: '#f59e0b' },
-          { label: 'On Leave Today',       value: r.on_leave_today, icon: 'beach_access',      color: '#6366f1' },
-          { label: 'Approved This Month',  value: r.approved_month, icon: 'check_circle',      color: '#10b981' },
-          { label: 'Cancelled',            value: r.cancelled_count,icon: 'cancel',            color: '#ef4444' },
+          { label: 'Pending Requests', value: r.pending_count, icon: 'pending_actions', color: '#f59e0b' },
+          { label: 'On Leave Today', value: r.on_leave_today, icon: 'beach_access', color: '#6366f1' },
+          { label: 'Approved This Month', value: r.approved_month, icon: 'check_circle', color: '#10b981' },
+          { label: 'Cancelled', value: r.cancelled_count, icon: 'cancel', color: '#ef4444' },
         ];
       }
     });
@@ -133,7 +135,7 @@ export class LeaveListComponent implements OnInit {
 
   // ── Requests ──────────────────────────────────────────────────────────────
   load(page = 1) {
-    this.loading     = true;
+    this.loading = true;
     this.currentPage = page;
     const params: any = { per_page: 15, page };
     if (this.activeStatus === 'needs_action') {
@@ -141,8 +143,8 @@ export class LeaveListComponent implements OnInit {
     } else if (this.activeStatus) {
       params.status = this.activeStatus;
     }
-    if (this.filterType)   params.leave_type_id  = this.filterType;
-    if (this.filterSearch) params.search         = this.filterSearch;
+    if (this.filterType) params.leave_type_id = this.filterType;
+    if (this.filterSearch) params.search = this.filterSearch;
 
     this.http.get<any>('/api/v1/leave/requests', { params }).subscribe({
       next: r => { this.requests = r?.data || []; this.pagination = r; this.loading = false; },
@@ -157,7 +159,7 @@ export class LeaveListComponent implements OnInit {
   approve(r: any) {
     if (!confirm(`Approve ${r.total_days} day(s) leave for ${r.employee?.first_name}?`)) return;
     this.http.post(`/api/v1/leave/requests/${r.id}/approve`, {}).subscribe({
-      next: () => { this.load(this.currentPage); this.loadStats(); this.loadMyBalance(); if (this.showDetail) this.showDetail = false; }
+      next: () => { console.log('after the approve action'); this.load(this.currentPage); this.loadStats(); this.loadMyBalance(); if (this.showDetail) this.showDetail = false; }
     });
   }
 
@@ -179,10 +181,10 @@ export class LeaveListComponent implements OnInit {
 
   // ── New Request ───────────────────────────────────────────────────────────
   openNewRequest() {
-    this.form         = { leave_type_id: '', start_date: '', end_date: '', start_time: '08:00', end_time: '09:00', reason: '', employee_id: '', is_half_day: false, half_day_period: 'morning', requires_exit_reentry: false, requires_ticket: false, destination_country: '' };
-    this.formError    = '';
+    this.form = { leave_type_id: '', start_date: '', end_date: '', start_time: '08:00', end_time: '09:00', reason: '', employee_id: '', is_half_day: false, half_day_period: 'morning', requires_exit_reentry: false, requires_ticket: false, destination_country: '' };
+    this.formError = '';
     this.selectedFile = null;
-    this.fileError    = '';
+    this.fileError = '';
     this.showNewRequest = true;
   }
 
@@ -207,7 +209,7 @@ export class LeaveListComponent implements OnInit {
 
     // Build multipart FormData so file is included
     const fd = new FormData();
-    const booleanFields = ['is_half_day','requires_exit_reentry','requires_ticket'];
+    const booleanFields = ['is_half_day', 'requires_exit_reentry', 'requires_ticket'];
     Object.entries(this.form).forEach(([k, v]) => {
       if (booleanFields.includes(k)) {
         // Always send booleans as '1'/'0' so Laravel's boolean validation passes
@@ -231,7 +233,7 @@ export class LeaveListComponent implements OnInit {
 
   // ── My balance ───────────────────────────────────────────────────────────
   loadMyBalance() {
-    const user  = JSON.parse(localStorage.getItem('hrms_user') || '{}');
+    const user = JSON.parse(localStorage.getItem('hrms_user') || '{}');
     const empId = user?.employee?.id || user?.employee_id;
     if (!empId) return;
     this.http.get<any>(`/api/v1/leave/balance/${empId}`).subscribe({
@@ -249,12 +251,12 @@ export class LeaveListComponent implements OnInit {
   openTypeForm(t?: any) {
     if (t) {
       this.typeEditId = t.id;
-      this.typeForm   = { ...t };
+      this.typeForm = { ...t };
     } else {
       this.typeEditId = null;
-      this.typeForm   = { name:'', code:'', days_allowed:0, is_paid:true, carry_forward:false, max_carry_forward:0, requires_document:false, description:'', skip_manager_approval: false };
+      this.typeForm = { name: '', code: '', days_allowed: 0, is_paid: true, carry_forward: false, max_carry_forward: 0, requires_document: false, description: '', skip_manager_approval: false };
     }
-    this.typeError   = '';
+    this.typeError = '';
     this.showTypeForm = true;
   }
 
@@ -274,7 +276,7 @@ export class LeaveListComponent implements OnInit {
   loadAllBalances(page = 1) {
     const params: any = { page, per_page: 25 };
     if (this.filterSearch) params.search = this.filterSearch;
-    if (this.filterDept)   params.department_id = this.filterDept;
+    if (this.filterDept) params.department_id = this.filterDept;
     this.http.get<any>('/api/v1/leave/all-balances', { params }).subscribe({
       next: r => { this.allBalances = r?.data || []; this.balancePagination = r; }
     });
@@ -283,10 +285,10 @@ export class LeaveListComponent implements OnInit {
   // ── Calendar ──────────────────────────────────────────────────────────────
   loadCalendar() {
     const month = String(this.calMonth + 1).padStart(2, '0');
-    this.http.get<any>('/api/v1/leave/calendar', { params: { month: this.calMonth + 1, year: this.calYear }}).subscribe({
+    this.http.get<any>('/api/v1/leave/calendar', { params: { month: this.calMonth + 1, year: this.calYear } }).subscribe({
       next: r => { this.calendarEvents = r?.leaves || []; this.buildCalendar(); }
     });
-    this.http.get<any>('/api/v1/leave/holidays', { params: { year: this.calYear }}).subscribe({
+    this.http.get<any>('/api/v1/leave/holidays', { params: { year: this.calYear } }).subscribe({
       next: r => { this.holidays = r?.holidays || []; this.buildCalendar(); }
     });
   }
@@ -301,25 +303,25 @@ export class LeaveListComponent implements OnInit {
     for (let i = 0; i < startPad; i++) cells.push(null);
 
     for (let d = 1; d <= daysInMonth; d++) {
-      const dateStr = `${this.calYear}-${String(this.calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const dateStr = `${this.calYear}-${String(this.calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dow = new Date(dateStr).getDay();
       const isWeekend = dow === 5 || dow === 6; // Fri=5, Sat=6
-      const holiday   = this.holidays.find(h => h.date?.slice(0,10) === dateStr);
-      const leaves    = this.calendarEvents.filter(e => e.start_date?.slice(0,10) <= dateStr && e.end_date?.slice(0,10) >= dateStr);
-      const isToday   = dateStr === new Date().toISOString().slice(0,10);
+      const holiday = this.holidays.find(h => h.date?.slice(0, 10) === dateStr);
+      const leaves = this.calendarEvents.filter(e => e.start_date?.slice(0, 10) <= dateStr && e.end_date?.slice(0, 10) >= dateStr);
+      const isToday = dateStr === new Date().toISOString().slice(0, 10);
       cells.push({ d, dateStr, isWeekend, holiday, leaves, isToday });
     }
     this.calDays = cells;
   }
 
   prevMonth() { if (this.calMonth === 0) { this.calMonth = 11; this.calYear--; } else this.calMonth--; this.loadCalendar(); }
-  nextMonth() { if (this.calMonth === 11) { this.calMonth = 0;  this.calYear++; } else this.calMonth++; this.loadCalendar(); }
+  nextMonth() { if (this.calMonth === 11) { this.calMonth = 0; this.calYear++; } else this.calMonth++; this.loadCalendar(); }
 
   // ── Tab switch ────────────────────────────────────────────────────────────
   switchTab(id: string) {
     this.activeTab = id;
-    if (id === 'calendar')  this.loadCalendar();
-    if (id === 'balances')  this.loadAllBalances();
+    if (id === 'calendar') this.loadCalendar();
+    if (id === 'balances') this.loadAllBalances();
   }
 
   // ── Holidays ──────────────────────────────────────────────────────────────
@@ -357,7 +359,7 @@ export class LeaveListComponent implements OnInit {
 
   onFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
-    const file  = input.files?.[0] ?? null;
+    const file = input.files?.[0] ?? null;
     this.fileError = '';
     if (!file) { this.selectedFile = null; return; }
     if (file.size > 5 * 1024 * 1024) {
@@ -395,7 +397,7 @@ export class LeaveListComponent implements OnInit {
   }
 
   loadExcuseUsage() {
-    const user  = JSON.parse(localStorage.getItem('hrms_user') || '{}');
+    const user = JSON.parse(localStorage.getItem('hrms_user') || '{}');
     const empId = user?.employee?.id || user?.employee_id;
     if (!empId) return;
     this.loadingUsage = true;
@@ -411,7 +413,7 @@ export class LeaveListComponent implements OnInit {
   workingDaysPreview(): number {
     if (!this.form.start_date || !this.form.end_date) return 0;
     const start = new Date(this.form.start_date);
-    const end   = new Date(this.form.end_date);
+    const end = new Date(this.form.end_date);
     if (end < start) return 0;
     let count = 0;
     const cur = new Date(start);
@@ -448,18 +450,32 @@ export class LeaveListComponent implements OnInit {
     return new Date(this.calYear, this.calMonth, 1).toLocaleString('en', { month: 'long', year: 'numeric' });
   }
 
-  get calWeekDays() { return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']; }
+  get calWeekDays() { return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; }
 
   canApprove(r: any): boolean {
-    if (r.status === 'pending')          return this.isMgr;
+    if (r.status === 'pending') return this.isMgr;
     if (r.status === 'manager_approved') return this.isHR;
     return false;
   }
 
   canReject(r: any): boolean { return this.canApprove(r); }
 
+  canCancel(r: any): boolean {
+
+    // HR can always cancel
+    if (this.isHR) {
+      return true;
+    }
+console.log(r.employee_id,this.employeeId);
+    // Employee can cancel only own pending requests
+    const isOwner = r.employee_id === this.employeeId;
+
+    return isOwner &&
+      ['pending', 'pending_manager'].includes(r.status);
+  }
+
   approveLabel(r: any): string {
-    if (r.status === 'pending')          return 'Approve (Manager Level)';
+    if (r.status === 'pending') return 'Approve (Manager Level)';
     if (r.status === 'manager_approved') return 'Approve (HR Level)';
     return 'Approve';
   }
@@ -469,37 +485,37 @@ export class LeaveListComponent implements OnInit {
   }
 
   stageLabel(r: any): string {
-    if (r.status === 'pending')          return 'Awaiting Manager';
+    if (r.status === 'pending') return 'Awaiting Manager';
     if (r.status === 'manager_approved') return 'Awaiting HR';
-    if (r.status === 'approved')         return 'Approved';
-    if (r.status === 'rejected')         return `Rejected (${r.rejected_stage ?? ''})`;
+    if (r.status === 'approved') return 'Approved';
+    if (r.status === 'rejected') return `Rejected (${r.rejected_stage ?? ''})`;
     return r.status;
   }
 
   statusCls(s: string): string {
-    const m: Record<string,string> = {
-      pending:          'badge-yellow',
+    const m: Record<string, string> = {
+      pending: 'badge-yellow',
       manager_approved: 'badge-blue',
-      approved:         'badge-green',
-      rejected:         'badge-red',
-      cancelled:        'badge-gray',
+      approved: 'badge-green',
+      rejected: 'badge-red',
+      cancelled: 'badge-gray',
     };
     return m[s] ?? 'badge-gray';
   }
 
   statusIcon(s: string): string {
-    const m: Record<string,string> = {
-      pending:          'pending_actions',
+    const m: Record<string, string> = {
+      pending: 'pending_actions',
       manager_approved: 'supervisor_account',
-      approved:         'check_circle',
-      rejected:         'cancel',
-      cancelled:        'block',
+      approved: 'check_circle',
+      rejected: 'cancel',
+      cancelled: 'block',
     };
     return m[s] ?? 'help';
   }
 
   avatarColor(name: string): string {
-    const colors = ['#3b82f6','#6366f1','#8b5cf6','#ec4899','#10b981','#f59e0b','#ef4444','#0ea5e9'];
+    const colors = ['#3b82f6', '#6366f1', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#ef4444', '#0ea5e9'];
     const idx = (name?.charCodeAt(0) || 0) % colors.length;
     return colors[idx];
   }
@@ -516,8 +532,8 @@ export class LeaveListComponent implements OnInit {
   openLimitsPanel(t: any) {
     this.limitsLeaveType = t;
     this.showLimitsPanel = true;
-    this.limitsError     = '';
-    this.limitsDirty     = false;
+    this.limitsError = '';
+    this.limitsDirty = false;
     this.loadDeptLimits(t.id);
   }
 
@@ -525,7 +541,7 @@ export class LeaveListComponent implements OnInit {
     this.limitsLoading = true;
     this.http.get<any>('/api/v1/leave/excuse-limits', { params: { leave_type_id: leaveTypeId } }).subscribe({
       next: r => {
-        this.deptLimits    = r?.limits || [];
+        this.deptLimits = r?.limits || [];
         this.limitsLoading = false;
       },
       error: () => this.limitsLoading = false
@@ -550,23 +566,23 @@ export class LeaveListComponent implements OnInit {
       }
     }
     this.limitsSaving = true;
-    this.limitsError  = '';
+    this.limitsError = '';
     this.http.post('/api/v1/leave/excuse-limits/bulk', {
       leave_type_id: this.limitsLeaveType.id,
       limits: this.deptLimits.map(r => ({
-        department_id:       r.department_id,
-        is_limited:          r.is_limited,
+        department_id: r.department_id,
+        is_limited: r.is_limited,
         monthly_hours_limit: r.is_limited ? r.monthly_hours_limit : null,
       }))
     }).subscribe({
       next: () => {
         this.limitsSaving = false;
-        this.limitsDirty  = false;
-        this.limitsError  = '';
+        this.limitsDirty = false;
+        this.limitsError = '';
       },
       error: err => {
         this.limitsSaving = false;
-        this.limitsError  = err?.error?.message || 'Save failed.';
+        this.limitsError = err?.error?.message || 'Save failed.';
       }
     });
   }

@@ -313,7 +313,7 @@ class LeaveController extends Controller {
                 'manager_approved_at'  => now(),
                 'manager_notes'        => $request->input('notes'),
             ]);
-
+            $this->service->updateLeaveBalance($leave, 'approve');
             return response()->json([
                 'message' => 'Approved at manager level. Awaiting HR approval.',
                 'leave'   => $leave->fresh(['leaveType', 'employee', 'managerApprover']),
@@ -362,6 +362,7 @@ class LeaveController extends Controller {
             'rejected_stage'   => $stage,
             'approved_by'      => $user->id,
         ]);
+        $this->service->updateLeaveBalance($leave, 'cancel');
         $this->service->notifyEmployee($leave, 'rejected');
         return response()->json(['message' => "Leave rejected at {$stage} stage."]);
     }
@@ -426,7 +427,7 @@ class LeaveController extends Controller {
             $baseQ->where('employee_id', $user->employee->id);
         }
 
-        $pendingCount   = (clone $baseQ)->where('status','pending')->count();
+        $pendingCount   = (clone $baseQ)->whereIn('status',['pending','manager_approved'])->count();
         $approvedMonth  = (clone $baseQ)->where('status','approved')
             ->whereMonth('start_date', now()->month)->whereYear('start_date', now()->year)->count();
         $onLeaveToday   = LeaveRequest::where('status','approved')

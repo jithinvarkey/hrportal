@@ -190,7 +190,7 @@
                       *ngIf="canReject(r)" (click)="openReject(r); $event.stopPropagation()">
                 <mat-icon>cancel</mat-icon>
               </button>
-              <button class="row-btn" matTooltip="Cancel" *ngIf="r.status==='pending'||r.status==='approved'" (click)="cancel(r)">
+              <button class="row-btn" matTooltip="Cancel" *ngIf="canCancel(r)" (click)="cancel(r)">
                 <mat-icon style="color:var(--text3)">block</mat-icon>
               </button>
             </div>
@@ -578,7 +578,7 @@
       <button class="btn-outline" style="color:var(--danger)" *ngIf="selectedRequest.status==='pending'" (click)="openReject(selectedRequest)">
         <mat-icon>cancel</mat-icon> Reject
       </button>
-      <button class="btn-outline" style="color:var(--text3)" *ngIf="selectedRequest.status==='pending'||selectedRequest.status==='approved'" (click)="cancel(selectedRequest)">
+      <button class="btn-outline" style="color:var(--text3)"  *ngIf="canCancel(selectedRequest)"  (click)="cancel(selectedRequest)">
         <mat-icon>block</mat-icon> Cancel
       </button>
     </div>
