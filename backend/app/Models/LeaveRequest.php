@@ -25,5 +25,6 @@ class LeaveRequest extends Model {
     public function employee()  { return $this->belongsTo(Employee::class); }
     public function leaveType() { return $this->belongsTo(LeaveType::class); }
     public function approver()  { return $this->belongsTo(User::class,'approved_by'); }
+    public function managerApprover()  { return $this->belongsTo(User::class,'manager_approved_by'); }
     public function scopePending($q) { return $q->where('status','pending'); }
 }
