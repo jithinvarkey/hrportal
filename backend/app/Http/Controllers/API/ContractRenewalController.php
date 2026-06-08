@@ -53,14 +53,14 @@ class ContractRenewalController extends Controller {
                     'rejectedBy',
                 ])
                 // Department managers only see their team's renewals
-//                ->when(!$isHRAdmin, function ($q) use ($user, $isMgr) {
-//                    if ($isMgr && $user->employee) {
-//                        $teamIds = $user->employee->subordinates()->pluck('id');
-//                        $q->whereIn('employee_id', $teamIds->push($user->employee->id));
-//                    } elseif ($user->employee) {
-//                        $q->where('employee_id', $user->employee->id);
-//                    }
-//                })
+                ->when(!$isHRAdmin, function ($q) use ($user, $isMgr) {
+                    if ($isMgr && $user->employee) {
+                        $teamIds = $user->employee->subordinates()->pluck('id');
+                        $q->whereIn('employee_id', $teamIds->push($user->employee->id));
+                    } elseif ($user->employee) {
+                        $q->where('employee_id', $user->employee->id);
+                    }
+                })
                 ->when($request->status, fn($q) => $q->where('status', $request->status))
                 ->when($request->employee_id, fn($q) => $q->where('employee_id', $request->employee_id))
                 ->when($request->search, fn($q) => $q->whereHas('employee', fn($e) =>
