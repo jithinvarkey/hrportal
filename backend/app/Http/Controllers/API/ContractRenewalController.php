@@ -83,16 +83,80 @@ class ContractRenewalController extends Controller {
      *
      * @return JsonResponse
      */
+
     public function stats(): JsonResponse {
-        $safe = fn(callable $fn) => rescue($fn, 0, false);
+        $safe = fn($cb, $default = 0) => rescue($cb, $default, false);
+
+        $user = auth()->user();
+
+        $isHR = $user->hasAnyRole([
+            'super_admin',
+            'hr_manager',
+            'hr_staff'
+        ]);
+
+        $isMgr = $user->hasRole('department_manager');
+
+        $deptId = $user->employee?->department_id;
+        $employeeId = $user->employee?->id;
+
+        $baseQuery = ContractRenewalRequest::query();
+
+        // HR sees everything
+        if ($isHR) {
+
+            $baseQuery = ContractRenewalRequest::query();
+        }
+        // Manager sees renewals for employees in own department
+        elseif ($isMgr && $deptId) {
+
+            $baseQuery = ContractRenewalRequest::whereHas(
+                            'contract.employee',
+                            function ($q) use ($deptId) {
+                                $q->where('department_id', $deptId);
+                            }
+            );
+        }
+        // Employee sees only own renewals
+        else {
+
+            $baseQuery = ContractRenewalRequest::whereHas(
+                            'contract',
+                            function ($q) use ($employeeId) {
+                                $q->where('employee_id', $employeeId);
+                            }
+            );
+        }
 
         return response()->json([
-                    'total' => $safe(fn() => ContractRenewalRequest::count()),
-                    'pending' => $safe(fn() => ContractRenewalRequest::where('status', 'pending')->count()),
-                    'manager_approved' => $safe(fn() => ContractRenewalRequest::where('status', 'manager_approved')->count()),
-                    'hr_approved' => $safe(fn() => ContractRenewalRequest::where('status', 'hr_approved')->count()),
-                    'approved' => $safe(fn() => ContractRenewalRequest::where('status', 'approved')->count()),
-                    'rejected' => $safe(fn() => ContractRenewalRequest::where('status', 'rejected')->count()),
+                    'total' => $safe(
+                            fn() => (clone $baseQuery)->count()
+                    ),
+                    'pending' => $safe(
+                            fn() => (clone $baseQuery)
+                                    ->where('status', 'pending')
+                                    ->count()
+                    ),
+                    'manager_approved' => $safe(
+                            fn() => (clone $baseQuery)
+                                    ->where('status', 'manager_approved')
+                                    ->count()
+                    ),
+                    'hr_approved' => $safe(
+                            fn() => (clone $baseQuery)
+                                    ->where('status', 'hr_approved')
+                                    ->count()
+                    ),
+                    'approved' => $safe(
+                            fn() => (clone $baseQuery)
+                                    ->where('status', 'approved')
+                                    ->count()
+                    ),
+                    'rejected' => $safe(
+                            fn() => (clone $baseQuery)
+                                    ->where('status', 'rejected')
+                                    ->count()
+                    ),
         ]);
     }
 
@@ -108,11 +172,11 @@ class ContractRenewalController extends Controller {
         $request->validate([
             'contract_id' => 'required|exists:employee_contracts,id',
             'proposed_start_date' => 'required|date',
-            'proposed_end_date'   => 'nullable|date|after:proposed_start_date',
-            'proposed_salary'     => 'nullable|numeric|min:0',
-            'proposed_type'       => 'nullable|in:full_time,part_time,contract,intern,probation,fixed_term,unlimited',
-            'notes'               => 'nullable|string|max:1000',
-            'document'            => 'nullable|file|mimes:pdf,doc,docx|max:10240',
+            'proposed_end_date' => 'nullable|date|after:proposed_start_date',
+            'proposed_salary' => 'nullable|numeric|min:0',
+            'proposed_type' => 'nullable|in:full_time,part_time,contract,intern,probation,fixed_term,unlimited',
+            'notes' => 'nullable|string|max:1000',
+            'document' => 'nullable|file|mimes:pdf,doc,docx|max:10240',
         ]);
 
         $contract = Contract::with('employee.manager')->findOrFail($request->contract_id);
@@ -132,14 +196,14 @@ class ContractRenewalController extends Controller {
                     'reference' => ContractRenewalRequest::generateReference(),
                     'status' => 'pending',
                     'proposed_start_date' => $request->proposed_start_date,
-            'proposed_end_date'   => $request->proposed_end_date,
-            'proposed_salary'     => $request->proposed_salary ?? $contract->salary,
-            'proposed_type'       => $request->proposed_type  ?? $contract->type,
-            'manager_id'          => $contract->employee?->manager_id,
-            'auto_generated'      => false,
-            'notified_at'         => now(),
-            'notes'               => $request->notes,
-            ...$docData,
+                    'proposed_end_date' => $request->proposed_end_date,
+                    'proposed_salary' => $request->proposed_salary ?? $contract->salary,
+                    'proposed_type' => $request->proposed_type ?? $contract->type,
+                    'manager_id' => $contract->employee?->manager_id,
+                    'auto_generated' => false,
+                    'notified_at' => now(),
+                    'notes' => $request->notes,
+                    ...$docData,
         ]);
 
         return response()->json([
@@ -316,8 +380,7 @@ class ContractRenewalController extends Controller {
      * @return JsonResponse
      * @throws \Illuminate\Validation\ValidationException
      */
-    public function uploadDocument(Request $request, int $id): JsonResponse
-    {
+    public function uploadDocument(Request $request, int $id): JsonResponse {
         $request->validate([
             'document' => 'required|file|mimes:pdf,doc,docx|max:10240',
         ]);
@@ -337,9 +400,9 @@ class ContractRenewalController extends Controller {
         ]);
 
         return response()->json([
-            'message' => 'Renewal document uploaded.',
-            'renewal' => $this->formatRenewal($renewal->fresh(['employee', 'contract'])),
-        ], 201);
+                    'message' => 'Renewal document uploaded.',
+                    'renewal' => $this->formatRenewal($renewal->fresh(['employee', 'contract'])),
+                        ], 201);
     }
 
     /**
@@ -348,8 +411,7 @@ class ContractRenewalController extends Controller {
      * @param  int $id
      * @return StreamedResponse|JsonResponse
      */
-    public function downloadDocument(int $id): StreamedResponse|JsonResponse
-    {
+    public function downloadDocument(int $id): StreamedResponse|JsonResponse {
         $renewal = ContractRenewalRequest::findOrFail($id);
 
         if (!$renewal->document_path || !Storage::disk('public')->exists($renewal->document_path)) {
@@ -357,8 +419,8 @@ class ContractRenewalController extends Controller {
         }
 
         return Storage::disk('public')->download(
-            $renewal->document_path,
-            $renewal->document_name ?: "{$renewal->reference}.pdf"
+                        $renewal->document_path,
+                        $renewal->document_name ?: "{$renewal->reference}.pdf"
         );
     }
 
@@ -368,8 +430,7 @@ class ContractRenewalController extends Controller {
      * @param  int          $id
      * @return JsonResponse
      */
-    public function deleteDocument(int $id): JsonResponse
-    {
+    public function deleteDocument(int $id): JsonResponse {
         $renewal = ContractRenewalRequest::findOrFail($id);
 
         if ($renewal->document_path) {
@@ -401,19 +462,17 @@ class ContractRenewalController extends Controller {
             'auto_generated' => $r->auto_generated,
             'notes' => $r->notes,
             'proposed_start_date' => $r->proposed_start_date?->toDateString(),
-            'proposed_end_date'   => $r->proposed_end_date?->toDateString(),
-            'proposed_salary'     => $r->proposed_salary,
-            'proposed_type'       => $r->proposed_type,
-            'created_at'          => $r->created_at?->toDateTimeString(),
-            'notified_at'         => $r->notified_at?->toDateTimeString(),
-
+            'proposed_end_date' => $r->proposed_end_date?->toDateString(),
+            'proposed_salary' => $r->proposed_salary,
+            'proposed_type' => $r->proposed_type,
+            'created_at' => $r->created_at?->toDateTimeString(),
+            'notified_at' => $r->notified_at?->toDateTimeString(),
             'document' => $r->document_path ? [
-                'name' => $r->document_name,
-                'mime' => $r->document_mime,
-                'size' => $r->document_size,
-                'url'  => Storage::disk('public')->url($r->document_path),
+        'name' => $r->document_name,
+        'mime' => $r->document_mime,
+        'size' => $r->document_size,
+        'url' => Storage::disk('public')->url($r->document_path),
             ] : null,
-
             'employee' => $r->employee ? [
         'id' => $r->employee->id,
         'full_name' => $r->employee->full_name,

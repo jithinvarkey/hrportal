@@ -7,6 +7,7 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { FormControl } from '@angular/forms';
+import { AuthService } from '../../../core/services/auth.service';
 
 export interface Contract {
   id:           number;
@@ -114,6 +115,8 @@ export class ContractListComponent implements OnInit, OnDestroy {
 
   contractForm!: FormGroup;
 
+  isHR = false;
+
   private readonly api      = '/api/v1/contracts';
   private readonly destroy$ = new Subject<void>();
 
@@ -121,6 +124,7 @@ export class ContractListComponent implements OnInit, OnDestroy {
     private readonly http: HttpClient,
     private readonly fb:   FormBuilder,
     private readonly cdr:  ChangeDetectorRef,
+    private auth: AuthService
   ) {}
 
   ngOnInit(): void {
@@ -141,6 +145,7 @@ export class ContractListComponent implements OnInit, OnDestroy {
   // ── Form ──────────────────────────────────────────────────────────────
 
   private buildForm(): void {
+     this.isHR = this.auth.isHRRole();
     this.contractForm = this.fb.group({
       employee_id:   ['', Validators.required],
       type:          ['full_time', Validators.required],
@@ -489,5 +494,6 @@ export class ContractListComponent implements OnInit, OnDestroy {
       });
   }
 
+  
   ngOnDestroy(): void { this.destroy$.next(); this.destroy$.complete(); }
 }

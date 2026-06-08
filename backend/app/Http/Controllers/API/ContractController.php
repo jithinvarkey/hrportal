@@ -82,18 +82,83 @@ class ContractController extends Controller {
      *
      * @return JsonResponse
      */
-    public function stats(): JsonResponse {
-        $safe = fn(callable $fn) => rescue($fn, 0, false);
 
-        return response()->json([
-                    'total' => $safe(fn() => Contract::count()),
-                    'active' => $safe(fn() => Contract::where('status', 'active')->count()),
-                    'draft' => $safe(fn() => Contract::where('status', 'draft')->count()),
-                    'expiring_soon' => $safe(fn() => Contract::expiringSoon(30)->count()),
-                    'expired' => $safe(fn() => Contract::where('status', 'expired')->count()),
-                    'terminated' => $safe(fn() => Contract::where('status', 'terminated')->count()),
-        ]);
+    
+    public function stats(): JsonResponse
+{
+    $safe = fn(callable $fn) => rescue($fn, 0, false);
+
+    $user = auth()->user();
+
+    $isHR = $user->hasAnyRole([
+        'super_admin',
+        'hr_manager',
+        'hr_staff'
+    ]);
+
+    $employeeId = $user->employee?->id;
+
+    $baseQuery = Contract::query();
+
+    // HR sees everything
+    if ($isHR) {
+
+        $baseQuery = Contract::query();
+
     }
+    // Manager sees contracts for employees in own department
+    
+    // Employee sees only own contracts
+    else {
+
+        $baseQuery = Contract::where(
+            'employee_id',
+            $employeeId
+        );
+    }
+
+    return response()->json([
+
+        'total' => $safe(
+            fn() => (clone $baseQuery)->count()
+        ),
+
+        'active' => $safe(
+            fn() => (clone $baseQuery)
+                ->where('status', 'active')
+                ->count()
+        ),
+
+        'draft' => $safe(
+            fn() => (clone $baseQuery)
+                ->where('status', 'draft')
+                ->count()
+        ),
+
+        'expiring_soon' => $safe(
+            fn() => (clone $baseQuery)
+                ->where('status', 'active')
+                ->whereNotNull('end_date')
+                ->whereBetween('end_date', [
+                    now(),
+                    now()->copy()->addDays(30)
+                ])
+                ->count()
+        ),
+
+        'expired' => $safe(
+            fn() => (clone $baseQuery)
+                ->where('status', 'expired')
+                ->count()
+        ),
+
+        'terminated' => $safe(
+            fn() => (clone $baseQuery)
+                ->where('status', 'terminated')
+                ->count()
+        ),
+    ]);
+}
 
     // ── Create ────────────────────────────────────────────────────────────
 
@@ -185,7 +250,7 @@ class ContractController extends Controller {
         $data = $request->only([
                     'type', 'status', 'start_date', 'end_date',
                     'salary', 'currency', 'position', 'department_id', 'terms',
-        ]));
+        ]);
 
         // Replace the attached document if a new file is provided.
         if ($request->hasFile('document')) {

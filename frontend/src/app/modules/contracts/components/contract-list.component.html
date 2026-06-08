@@ -8,7 +8,7 @@
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn-outline" (click)="clearFilters()"><mat-icon>filter_list_off</mat-icon> Clear</button>
-      <button class="btn-primary" (click)="openForm()"><mat-icon>add</mat-icon> New Contract</button>
+      <button class="btn-primary" *ngIf="isHR" (click)="openForm()"><mat-icon>add</mat-icon> New Contract</button>
     </div>
   </div>
 
