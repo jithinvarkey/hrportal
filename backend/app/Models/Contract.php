@@ -7,6 +7,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property int         $id
@@ -23,66 +24,59 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $terms
  * @property string|null $pdf_path
  */
-class Contract extends Model
-{
+class Contract extends Model {
+
     use SoftDeletes;
 
     protected $table = 'employee_contracts';
-
     protected $fillable = [
         'employee_id', 'reference', 'type', 'status',
         'start_date', 'end_date', 'salary', 'currency',
         'position', 'department_id', 'terms', 'pdf_path',
-        'created_by', 'approved_by', 'approved_at',
+        'created_by', 'approved_by', 'approved_at','renewal_requested',
+'renewal_notified'
     ];
-
     protected $casts = [
-        'start_date'  => 'date',
-        'end_date'    => 'date',
+        'start_date' => 'date',
+        'end_date' => 'date',
         'approved_at' => 'datetime',
-        'salary'      => 'decimal:2',
+        'salary' => 'decimal:2',
     ];
 
     // ── Relationships ──────────────────────────────────────────────────
 
     /** @return BelongsTo<Employee, Contract> */
-    public function employee(): BelongsTo
-    {
+    public function employee(): BelongsTo {
         return $this->belongsTo(Employee::class);
     }
 
     /** @return BelongsTo<Department, Contract> */
-    public function department(): BelongsTo
-    {
+    public function department(): BelongsTo {
         return $this->belongsTo(Department::class);
     }
 
     /** @return BelongsTo<User, Contract> */
-    public function createdBy(): BelongsTo
-    {
+    public function createdBy(): BelongsTo {
         return $this->belongsTo(User::class, 'created_by');
     }
 
     /** @return BelongsTo<User, Contract> */
-    public function approvedBy(): BelongsTo
-    {
+    public function approvedBy(): BelongsTo {
         return $this->belongsTo(User::class, 'approved_by');
     }
 
     // ── Scopes ────────────────────────────────────────────────────────
 
     /** @param \Illuminate\Database\Eloquent\Builder $q */
-    public function scopeActive($q): mixed
-    {
+    public function scopeActive($q): mixed {
         return $q->where('status', 'active');
     }
 
     /** @param \Illuminate\Database\Eloquent\Builder $q */
-    public function scopeExpiringSoon($q, int $days = 30): mixed
-    {
+    public function scopeExpiringSoon($q, int $days = 30): mixed {
         return $q->where('status', 'active')
-                 ->whereNotNull('end_date')
-                 ->whereBetween('end_date', [now(), now()->addDays($days)]);
+                        ->whereNotNull('end_date')
+                        ->whereBetween('end_date', [now(), now()->addDays($days)]);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────
@@ -92,10 +86,9 @@ class Contract extends Model
      *
      * @return string  e.g. CTR-2024-00042
      */
-    public static function generateReference(): string
-    {
-        $year  = now()->year;
-        $last  = static::withTrashed()->whereYear('created_at', $year)->count();
+    public static function generateReference(): string {
+        $year = now()->year;
+        $last = static::withTrashed()->whereYear('created_at', $year)->count();
         return sprintf('CTR-%d-%05d', $year, $last + 1);
     }
 
@@ -104,8 +97,11 @@ class Contract extends Model
      *
      * @return bool
      */
-    public function getIsExpiredAttribute(): bool
-    {
+    public function getIsExpiredAttribute(): bool {
         return $this->end_date && $this->end_date->isPast() && $this->status === 'active';
+    }
+
+    public function renewals(): HasMany {
+        return $this->hasMany(ContractRenewalRequest::class, 'contract_id');
     }
 }

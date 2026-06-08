@@ -8,7 +8,7 @@
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn-outline" (click)="clearFilters()"><mat-icon>filter_list_off</mat-icon> Clear</button>
-      <button class="btn-primary" (click)="openForm()"><mat-icon>add</mat-icon> New Contract</button>
+      <button class="btn-primary" *ngIf="isHR" (click)="openForm()"><mat-icon>add</mat-icon> New Contract</button>
     </div>
   </div>
 
@@ -291,6 +291,20 @@
         formControlName="terms"></textarea>
     </div>
 
+    <!-- Row 7: Document upload -->
+    <div class="field-group">
+      <label class="field-label">Contract Document (PDF, DOC, DOCX — max 10 MB)</label>
+      <input type="file" accept=".pdf,.doc,.docx" (change)="onFileSelected($event)">
+      <div class="field-hint" *ngIf="selectedFile">
+        <mat-icon style="font-size:15px;width:15px;height:15px;vertical-align:middle">description</mat-icon>
+        {{ selectedFile.name }}
+        <button type="button" class="link-btn" (click)="clearSelectedFile()">Remove</button>
+      </div>
+      <div class="field-hint" *ngIf="editId && !selectedFile">
+        Leave empty to keep the current document. Uploading replaces it.
+      </div>
+    </div>
+
     <div class="form-err" *ngIf="formError"><mat-icon>error_outline</mat-icon> {{ formError }}</div>
   </div>
   <div class="modal-footer">
@@ -370,6 +384,28 @@
       <div class="detail-section" *ngIf="c.terms">
         <div class="ds-title">Terms &amp; Notes</div>
         <div class="terms-body">{{ c.terms }}</div>
+      </div>
+
+      <!-- Document -->
+      <div class="detail-section">
+        <div class="ds-title">Contract Document</div>
+        <div *ngIf="c.has_document" class="doc-row">
+          <mat-icon>description</mat-icon>
+          <span>Document attached</span>
+          <button class="btn-outline sm" (click)="downloadDocument(c)">
+            <mat-icon>download</mat-icon> Download
+          </button>
+        </div>
+        <div *ngIf="!c.has_document" class="doc-row muted">
+          <mat-icon>upload_file</mat-icon>
+          <span>No document attached</span>
+          <label class="btn-outline sm upload-label">
+            <mat-icon>{{ uploadingDocId === c.id ? 'hourglass_empty' : 'upload' }}</mat-icon>
+            {{ uploadingDocId === c.id ? 'Uploading…' : 'Upload' }}
+            <input type="file" accept=".pdf,.doc,.docx" hidden
+              (change)="onRowFileSelected($event, c)" [disabled]="uploadingDocId === c.id">
+          </label>
+        </div>
       </div>
 
     </div>

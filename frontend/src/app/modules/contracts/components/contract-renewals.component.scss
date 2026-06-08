@@ -136,3 +136,13 @@
   &.active{color:var(--accent);border-bottom-color:var(--accent);}}
 .tab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;font-size:10px;font-weight:700;background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3);}
 
+
+/* ── Document upload / download ──────────────────────────────────────── */
+.rc-doc{display:flex;align-items:center;gap:8px;margin-top:10px;padding:8px 10px;
+  border:1px solid var(--border);border-radius:8px;background:var(--surface2);font-size:12px;
+  mat-icon{font-size:17px;width:17px;height:17px;&.muted{opacity:.5;}}}
+.rd-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  &.muted{color:var(--text3);}}
+.upload-label{cursor:pointer;display:inline-flex;align-items:center;gap:4px;}
+.link-btn{background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;padding:0 4px;text-decoration:underline;}
+.field-hint{font-size:12px;color:var(--text3);margin-top:6px;display:flex;align-items:center;gap:4px;}

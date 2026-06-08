@@ -4,7 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Models\Contract;
-use App\Models\ContractRenewal;
+use App\Models\ContractRenewalRequest;
 use Carbon\Carbon;
 
 class CreateContractRenewals extends Command
@@ -16,8 +16,8 @@ class CreateContractRenewals extends Command
     {
         // Find all active fixed-term contracts expiring within 60 days
         // that don't already have an open renewal
-        $contracts = Contract::active()
-            ->whereIn('contract_type', ['fixed', 'part_time', 'freelance'])
+        $contracts = Contract::active()->with('employee.manager')
+            ->whereIn('type', ['full_time', 'part_time', 'freelance'])
             ->whereDate('end_date', '>=', now())
             ->whereDate('end_date', '<=', now()->addDays(60))
             ->where('renewal_requested', false)
@@ -36,14 +36,18 @@ class CreateContractRenewals extends Command
                 continue;
             }
 
-            ContractRenewal::create([
+            ContractRenewalRequest::create([
                 'contract_id'         => $contract->id,
-                'status'              => 'pending_manager',
-                'auto_created'        => true,
-                'requested_by'        => null,
+                'status'              => 'pending',
+                'employee_id' => $contract->employee_id,
+                'auto_generated'        => true,                
                 // Proposed: next 1-year cycle from end date
                 'proposed_start_date' => Carbon::parse($contract->end_date)->addDay(),
                 'proposed_end_date'   => Carbon::parse($contract->end_date)->addYear(),
+                'proposed_salary' => $contract->salary,
+                'reference' => ContractRenewalRequest::generateReference(),
+                'manager_id' => $contract->employee?->manager_id,
+                'proposed_type' =>  $contract->type,
             ]);
 
             $contract->update([

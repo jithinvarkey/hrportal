@@ -7,6 +7,7 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { FormControl } from '@angular/forms';
+import { AuthService } from '../../../core/services/auth.service';
 
 export interface Contract {
   id:           number;
@@ -19,6 +20,9 @@ export interface Contract {
   currency:     string;
   position:     string | null;
   terms:        string | null;
+  pdf_path:     string | null;
+  pdf_url:      string | null;
+  has_document: boolean;
   is_expired:   boolean;
   approved_at:  string | null;
   created_at:   string;
@@ -71,6 +75,12 @@ export class ContractListComponent implements OnInit, OnDestroy {
   selectedContract: Contract | null = null;
   showDetail     = false;
 
+  // ── Document upload ───────────────────────────────────────────────────
+  /** File chosen in the contract form, uploaded after the contract is saved. */
+  selectedFile: File | null = null;
+  /** Per-row id currently uploading a document (drives a spinner in the table). */
+  uploadingDocId: number | null = null;
+
   // ── Filters ───────────────────────────────────────────────────────────
   searchControl  = new FormControl('');
   statusFilter   = 'all';
@@ -105,6 +115,8 @@ export class ContractListComponent implements OnInit, OnDestroy {
 
   contractForm!: FormGroup;
 
+  isHR = false;
+
   private readonly api      = '/api/v1/contracts';
   private readonly destroy$ = new Subject<void>();
 
@@ -112,6 +124,7 @@ export class ContractListComponent implements OnInit, OnDestroy {
     private readonly http: HttpClient,
     private readonly fb:   FormBuilder,
     private readonly cdr:  ChangeDetectorRef,
+    private auth: AuthService
   ) {}
 
   ngOnInit(): void {
@@ -132,6 +145,7 @@ export class ContractListComponent implements OnInit, OnDestroy {
   // ── Form ──────────────────────────────────────────────────────────────
 
   private buildForm(): void {
+     this.isHR = this.auth.isHRRole();
     this.contractForm = this.fb.group({
       employee_id:   ['', Validators.required],
       type:          ['full_time', Validators.required],
@@ -149,6 +163,7 @@ export class ContractListComponent implements OnInit, OnDestroy {
   openForm(contract?: Contract): void {
     this.formError = '';
     this.editId    = contract?.id ?? null;
+    this.selectedFile = null;
 
     if (contract) {
       this.contractForm.patchValue({
@@ -174,6 +189,37 @@ export class ContractListComponent implements OnInit, OnDestroy {
 
   closeForm(): void { this.showForm = false; this.cdr.markForCheck(); }
 
+  /**
+   * Validate the selected file: PDF/DOC/DOCX, ≤ 10 MB. Returns an error string
+   * or null when valid.
+   */
+  private validateFile(file: File): string | null {
+    const allowed = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    const okExt = /\.(pdf|doc|docx)$/i.test(file.name);
+    if (!allowed.includes(file.type) && !okExt) return 'Only PDF, DOC, or DOCX files are allowed.';
+    if (file.size > 10 * 1024 * 1024) return 'File must be 10 MB or smaller.';
+    return null;
+  }
+
+  /** Handle file selection in the contract form. */
+  onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file  = input.files?.[0] ?? null;
+    if (file) {
+      const err = this.validateFile(file);
+      if (err) { this.formError = err; input.value = ''; this.cdr.markForCheck(); return; }
+    }
+    this.selectedFile = file;
+    this.cdr.markForCheck();
+  }
+
+  /** Clear the staged file before save. */
+  clearSelectedFile(): void { this.selectedFile = null; this.cdr.markForCheck(); }
+
   saveContract(): void {
     if (this.contractForm.invalid) {
       this.contractForm.markAllAsTouched();
@@ -190,14 +236,14 @@ export class ContractListComponent implements OnInit, OnDestroy {
       : this.http.post<any>(this.api, body);
 
     req.pipe(takeUntil(this.destroy$)).subscribe({
-      next: () => {
-        this.submitting = false;
-        this.showForm   = false;
-        this.successMsg = this.editId ? 'Contract updated.' : 'Contract created.';
-        this.loadContracts();
-        this.loadStats();
-        setTimeout(() => { this.successMsg = ''; this.cdr.markForCheck(); }, 3500);
-        this.cdr.markForCheck();
+      next: (res) => {
+        const contractId = this.editId ?? res?.contract?.id;
+        // If a document was attached, upload it against the saved contract.
+        if (this.selectedFile && contractId) {
+          this.uploadDocumentFor(contractId, this.selectedFile, () => this.finishSave());
+        } else {
+          this.finishSave();
+        }
       },
       error: (err) => {
         this.formError  = err?.error?.message ?? 'Save failed.';
@@ -205,6 +251,76 @@ export class ContractListComponent implements OnInit, OnDestroy {
         this.cdr.markForCheck();
       },
     });
+  }
+
+  /** Common post-save cleanup + refresh. */
+  private finishSave(): void {
+    this.submitting   = false;
+    this.showForm     = false;
+    this.successMsg   = this.editId ? 'Contract updated.' : 'Contract created.';
+    this.selectedFile = null;
+    this.loadContracts();
+    this.loadStats();
+    setTimeout(() => { this.successMsg = ''; this.cdr.markForCheck(); }, 3500);
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * Upload a document to a contract via multipart/form-data.
+   *
+   * @param contractId Target contract id.
+   * @param file       The file to upload.
+   * @param done       Optional success callback.
+   */
+  private uploadDocumentFor(contractId: number, file: File, done?: () => void): void {
+    const fd = new FormData();
+    fd.append('document', file);
+    this.http.post<any>(`${this.api}/${contractId}/document`, fd)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => { if (done) done(); },
+        error: (err) => {
+          this.formError  = err?.error?.message ?? 'Contract saved, but the document upload failed.';
+          this.submitting = false;
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  /** Upload a document directly from the contract list row. */
+  onRowFileSelected(event: Event, contract: Contract): void {
+    const input = event.target as HTMLInputElement;
+    const file  = input.files?.[0];
+    if (!file) return;
+    const err = this.validateFile(file);
+    if (err) { this.errorMsg = err; input.value = ''; this.cdr.markForCheck(); return; }
+
+    this.uploadingDocId = contract.id;
+    this.cdr.markForCheck();
+    const fd = new FormData();
+    fd.append('document', file);
+    this.http.post<any>(`${this.api}/${contract.id}/document`, fd)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.uploadingDocId = null;
+          this.successMsg = 'Document uploaded.';
+          this.loadContracts();
+          setTimeout(() => { this.successMsg = ''; this.cdr.markForCheck(); }, 3000);
+          this.cdr.markForCheck();
+        },
+        error: (e) => {
+          this.uploadingDocId = null;
+          this.errorMsg = e?.error?.message ?? 'Upload failed.';
+          this.cdr.markForCheck();
+        },
+      });
+    input.value = '';
+  }
+
+  /** Open the contract document in a new tab (download). */
+  downloadDocument(contract: Contract): void {
+    window.open(`${this.api}/${contract.id}/document`, '_blank');
   }
 
   // ── Actions ───────────────────────────────────────────────────────────
@@ -378,5 +494,6 @@ export class ContractListComponent implements OnInit, OnDestroy {
       });
   }
 
+  
   ngOnDestroy(): void { this.destroy$.next(); this.destroy$.complete(); }
 }

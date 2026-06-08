@@ -93,6 +93,15 @@
         <label class="field-label">Notes</label>
         <input class="field-input" placeholder="Reason for renewal…" formControlName="notes">
       </div>
+      <div class="field-group" style="grid-column:1/-1">
+        <label class="field-label">Supporting Document (PDF, DOC, DOCX — max 10 MB)</label>
+        <input type="file" accept=".pdf,.doc,.docx" (change)="onFileSelected($event)">
+        <div class="field-hint" *ngIf="selectedFile">
+          <mat-icon style="font-size:15px;width:15px;height:15px;vertical-align:middle">description</mat-icon>
+          {{ selectedFile.name }}
+          <button type="button" class="link-btn" (click)="clearSelectedFile()">Remove</button>
+        </div>
+      </div>
     </div>
     <div class="panel-footer">
       <button class="btn-outline" (click)="showCreateForm=false">Cancel</button>
@@ -203,6 +212,27 @@
             <span class="rt-lbl">Proposed Salary</span>
             <span class="rt-val">{{ formatSalary(r.proposed_salary) }}</span>
           </div>
+        </div>
+
+        <!-- Document -->
+        <div class="rc-doc" (click)="$event.stopPropagation()">
+          <ng-container *ngIf="r.document">
+            <mat-icon>description</mat-icon>
+            <span class="rd-name">{{ r.document.name }}</span>
+            <button class="btn-sm" (click)="downloadDocument(r)">
+              <mat-icon>download</mat-icon> Download
+            </button>
+          </ng-container>
+          <ng-container *ngIf="!r.document">
+            <mat-icon class="muted">upload_file</mat-icon>
+            <span class="rd-name muted">No document</span>
+            <label class="btn-sm upload-label">
+              <mat-icon>{{ uploadingDocId === r.id ? 'hourglass_empty' : 'upload' }}</mat-icon>
+              {{ uploadingDocId === r.id ? 'Uploading…' : 'Upload' }}
+              <input type="file" accept=".pdf,.doc,.docx" hidden
+                (change)="onRowFileSelected($event, r)" [disabled]="uploadingDocId === r.id">
+            </label>
+          </ng-container>
         </div>
 
         <!-- Rejection banner -->
