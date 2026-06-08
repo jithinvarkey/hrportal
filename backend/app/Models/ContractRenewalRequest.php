@@ -34,6 +34,7 @@ class ContractRenewalRequest extends Model
         'contract_id', 'employee_id', 'reference', 'status',
         'proposed_start_date', 'proposed_end_date', 'proposed_salary',
         'proposed_type', 'notes',
+        'document_path', 'document_name', 'document_mime', 'document_size',
         'manager_id', 'manager_approved_by', 'manager_approved_at', 'manager_notes',
         'hr_approved_by',  'hr_approved_at',  'hr_notes',
         'ceo_approved_by', 'ceo_approved_at', 'ceo_notes',

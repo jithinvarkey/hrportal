@@ -313,7 +313,12 @@ Route::prefix('v1')->group(function () {
             Route::delete('/{id}',         [ContractController::class, 'destroy'])->whereNumber('id');
             Route::post('/{id}/approve',   [ContractController::class, 'approve'])->whereNumber('id');
 
-            // ── Renewal requests ────────────────────────────────────────────
+            // Contract document (single attached PDF/DOC/DOCX)
+            Route::post('/{id}/document',     [ContractController::class, 'uploadDocument'])->whereNumber('id');
+            Route::get('/{id}/document',      [ContractController::class, 'downloadDocument'])->whereNumber('id');
+            Route::delete('/{id}/document',   [ContractController::class, 'deleteDocument'])->whereNumber('id');
+
+            // â”€â”€ Renewal requests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Route::prefix('renewals')->group(function () {
                 Route::get('/stats',        [ContractRenewalController::class, 'stats']);
                 Route::get('/',             [ContractRenewalController::class, 'index']);
@@ -321,6 +326,11 @@ Route::prefix('v1')->group(function () {
                 Route::get('/{id}',         [ContractRenewalController::class, 'show'])->whereNumber('id');
                 Route::post('/{id}/approve',[ContractRenewalController::class, 'approve'])->whereNumber('id');
                 Route::post('/{id}/reject', [ContractRenewalController::class, 'reject'])->whereNumber('id');
+
+                // Renewal supporting document
+                Route::post('/{id}/document',   [ContractRenewalController::class, 'uploadDocument'])->whereNumber('id');
+                Route::get('/{id}/document',    [ContractRenewalController::class, 'downloadDocument'])->whereNumber('id');
+                Route::delete('/{id}/document', [ContractRenewalController::class, 'deleteDocument'])->whereNumber('id');
             });
         });
         Route::get('/employees/{empId}/contracts', [ContractController::class, 'forEmployee'])->whereNumber('empId');

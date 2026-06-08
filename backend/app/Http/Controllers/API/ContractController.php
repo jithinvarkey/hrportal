@@ -11,6 +11,8 @@ use App\Models\Employee;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Manages employee contract CRUD operations.
@@ -113,8 +115,15 @@ class ContractController extends Controller {
             'currency' => 'sometimes|string|size:3',
             'position' => 'nullable|string|max:150',
             'department_id' => 'nullable|exists:departments,id',
-            'terms' => 'nullable|string',
+            'terms'         => 'nullable|string',
+            'document'      => 'nullable|file|mimes:pdf,doc,docx|max:10240',
         ]);
+
+        // Store the optional signed/scanned contract document (â‰¤ 10 MB).
+        $pdfPath = null;
+        if ($request->hasFile('document')) {
+            $pdfPath = $request->file('document')->store('contracts/documents', 'public');
+        }
 
         $contract = Contract::create([
                     ...$request->only([
@@ -123,7 +132,8 @@ class ContractController extends Controller {
                     ]),
                     'reference' => Contract::generateReference(),
                     'created_by' => auth()->id(),
-                    'status' => $request->status ?? 'draft',
+            'status'     => $request->status ?? 'draft',
+            'pdf_path'   => $pdfPath,
         ]);
 
         return response()->json([
@@ -168,13 +178,24 @@ class ContractController extends Controller {
             'currency' => 'sometimes|string|size:3',
             'position' => 'nullable|string|max:150',
             'department_id' => 'nullable|exists:departments,id',
-            'terms' => 'nullable|string',
+            'terms'         => 'nullable|string',
+            'document'      => 'nullable|file|mimes:pdf,doc,docx|max:10240',
         ]);
 
-        $contract->update($request->only([
+        $data = $request->only([
                     'type', 'status', 'start_date', 'end_date',
                     'salary', 'currency', 'position', 'department_id', 'terms',
         ]));
+
+        // Replace the attached document if a new file is provided.
+        if ($request->hasFile('document')) {
+            if ($contract->pdf_path) {
+                Storage::disk('public')->delete($contract->pdf_path);
+            }
+            $data['pdf_path'] = $request->file('document')->store('contracts/documents', 'public');
+        }
+
+        $contract->update($data);
 
         return response()->json([
                     'message' => 'Contract updated.',
@@ -224,6 +245,78 @@ class ContractController extends Controller {
     }
 
     // ── Employee contracts ────────────────────────────────────────────────
+
+    /**
+     * Upload (or replace) the signed/scanned document for a contract.
+     * Accepts PDF/DOC/DOCX up to 10 MB and stores it on the public disk.
+     *
+     * @param  Request      $request
+     * @param  int          $id
+     * @return JsonResponse
+     * @throws \Illuminate\Validation\ValidationException
+     */
+    public function uploadDocument(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'document' => 'required|file|mimes:pdf,doc,docx|max:10240',
+        ]);
+
+        $contract = Contract::findOrFail($id);
+
+        // Remove the previous file so we don't orphan storage.
+        if ($contract->pdf_path) {
+            Storage::disk('public')->delete($contract->pdf_path);
+        }
+
+        $path = $request->file('document')->store('contracts/documents', 'public');
+        $contract->update(['pdf_path' => $path]);
+
+        return response()->json([
+            'message'  => 'Contract document uploaded.',
+            'pdf_path' => $path,
+            'pdf_url'  => Storage::disk('public')->url($path),
+            'contract' => new ContractResource($contract->fresh(['employee.department', 'department'])),
+        ], 201);
+    }
+
+    /**
+     * Download the contract document.
+     *
+     * @param  int $id
+     * @return StreamedResponse|JsonResponse
+     */
+    public function downloadDocument(int $id): StreamedResponse|JsonResponse
+    {
+        $contract = Contract::findOrFail($id);
+
+        if (!$contract->pdf_path || !Storage::disk('public')->exists($contract->pdf_path)) {
+            return response()->json(['message' => 'No document attached to this contract.'], 404);
+        }
+
+        $filename = "{$contract->reference}." . pathinfo($contract->pdf_path, PATHINFO_EXTENSION);
+
+        return Storage::disk('public')->download($contract->pdf_path, $filename);
+    }
+
+    /**
+     * Detach and delete the contract document.
+     *
+     * @param  int          $id
+     * @return JsonResponse
+     */
+    public function deleteDocument(int $id): JsonResponse
+    {
+        $contract = Contract::findOrFail($id);
+
+        if ($contract->pdf_path) {
+            Storage::disk('public')->delete($contract->pdf_path);
+            $contract->update(['pdf_path' => null]);
+        }
+
+        return response()->json(['message' => 'Contract document removed.']);
+    }
+
+    // â”€â”€ Employee contracts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /**
      * List all contracts for a specific employee.

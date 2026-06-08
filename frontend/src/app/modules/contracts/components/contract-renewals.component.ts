@@ -23,6 +23,7 @@ export interface RenewalRequest {
   proposed_type:       string | null;
   created_at:          string;
   notified_at:         string | null;
+  document:            { name: string; mime: string; size: number; url: string } | null;
   employee:            { id: number; full_name: string; code: string; department: string | null } | null;
   contract:            { id: number; reference: string; end_date: string | null; type: string; salary: number | null } | null;
   approvals: {
@@ -69,6 +70,12 @@ export class ContractRenewalsComponent implements OnInit, OnDestroy {
 
   contracts: any[] = [];   // for manual creation dropdown
   createForm!: FormGroup;
+
+  // ── Document upload ───────────────────────────────────────────────────
+  /** File staged in the create form, uploaded after the renewal is created. */
+  selectedFile: File | null = null;
+  /** Renewal id currently uploading a document from a row/detail action. */
+  uploadingDocId: number | null = null;
 
   isHR     = false;
   isCEO    = false;
@@ -227,18 +234,50 @@ export class ContractRenewalsComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Validate a chosen file: PDF/DOC/DOCX, ≤ 10 MB.
+   *
+   * @param file The selected file.
+   * @returns An error message, or null when valid.
+   */
+  private validateFile(file: File): string | null {
+    const allowed = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    const okExt = /\.(pdf|doc|docx)$/i.test(file.name);
+    if (!allowed.includes(file.type) && !okExt) return 'Only PDF, DOC, or DOCX files are allowed.';
+    if (file.size > 10 * 1024 * 1024) return 'File must be 10 MB or smaller.';
+    return null;
+  }
+
+  /** Handle file selection in the create form. */
+  onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file  = input.files?.[0] ?? null;
+    if (file) {
+      const err = this.validateFile(file);
+      if (err) { this.errorMsg = err; input.value = ''; this.cdr.markForCheck(); return; }
+    }
+    this.selectedFile = file;
+    this.cdr.markForCheck();
+  }
+
+  /** Clear the staged file. */
+  clearSelectedFile(): void { this.selectedFile = null; this.cdr.markForCheck(); }
+
   createManual(): void {
     if (this.createForm.invalid) { this.createForm.markAllAsTouched(); return; }
     this.submitting = true;
     this.http.post<any>(this.api, this.createForm.value).pipe(takeUntil(this.destroy$)).subscribe({
-      next: () => {
-        this.submitting    = false;
-        this.showCreateForm = false;
-        this.successMsg    = 'Renewal request created.';
-        this.loadRenewals();
-        this.loadStats();
-        setTimeout(() => { this.successMsg = ''; this.cdr.markForCheck(); }, 3500);
-        this.cdr.markForCheck();
+      next: (res) => {
+        const renewalId = res?.renewal?.id;
+        if (this.selectedFile && renewalId) {
+          this.uploadDocumentFor(renewalId, this.selectedFile, () => this.finishCreate());
+        } else {
+          this.finishCreate();
+        }
       },
       error: (err) => {
         this.errorMsg   = err?.error?.message ?? 'Create failed.';
@@ -246,6 +285,80 @@ export class ContractRenewalsComponent implements OnInit, OnDestroy {
         this.cdr.markForCheck();
       },
     });
+  }
+
+  /** Common post-create cleanup + refresh. */
+  private finishCreate(): void {
+    this.submitting     = false;
+    this.showCreateForm = false;
+    this.selectedFile   = null;
+    this.successMsg     = 'Renewal request created.';
+    this.createForm.reset();
+    this.loadRenewals();
+    this.loadStats();
+    setTimeout(() => { this.successMsg = ''; this.cdr.markForCheck(); }, 3500);
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * Upload a document to a renewal request via multipart/form-data.
+   *
+   * @param renewalId Target renewal id.
+   * @param file      File to upload.
+   * @param done      Optional success callback.
+   */
+  private uploadDocumentFor(renewalId: number, file: File, done?: () => void): void {
+    const fd = new FormData();
+    fd.append('document', file);
+    this.http.post<any>(`${this.api}/${renewalId}/document`, fd)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => { if (done) done(); },
+        error: (err) => {
+          this.errorMsg   = err?.error?.message ?? 'Renewal created, but the document upload failed.';
+          this.submitting = false;
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  /** Upload a document to an existing renewal from a row/detail action. */
+  onRowFileSelected(event: Event, renewal: RenewalRequest): void {
+    const input = event.target as HTMLInputElement;
+    const file  = input.files?.[0];
+    if (!file) return;
+    const err = this.validateFile(file);
+    if (err) { this.errorMsg = err; input.value = ''; this.cdr.markForCheck(); return; }
+
+    this.uploadingDocId = renewal.id;
+    this.cdr.markForCheck();
+    const fd = new FormData();
+    fd.append('document', file);
+    this.http.post<any>(`${this.api}/${renewal.id}/document`, fd)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (r) => {
+          this.uploadingDocId = null;
+          this.successMsg = 'Document uploaded.';
+          if (this.showDetail && this.selectedRenewal?.id === renewal.id) {
+            this.selectedRenewal = r.renewal;
+          }
+          this.loadRenewals(this.currentPage);
+          setTimeout(() => { this.successMsg = ''; this.cdr.markForCheck(); }, 3000);
+          this.cdr.markForCheck();
+        },
+        error: (e) => {
+          this.uploadingDocId = null;
+          this.errorMsg = e?.error?.message ?? 'Upload failed.';
+          this.cdr.markForCheck();
+        },
+      });
+    input.value = '';
+  }
+
+  /** Open the renewal document in a new tab (download). */
+  downloadDocument(renewal: RenewalRequest): void {
+    window.open(`${this.api}/${renewal.id}/document`, '_blank');
   }
 
   viewDetail(r: RenewalRequest): void {

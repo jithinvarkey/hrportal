@@ -146,3 +146,13 @@
   &.active{color:var(--accent);border-bottom-color:var(--accent);}}
 .tab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;font-size:10px;font-weight:700;background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3);}
 
+
+/* ── Document upload / download ──────────────────────────────────────── */
+.doc-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);
+  border-radius:8px;background:var(--surface2);font-size:13px;color:var(--text);
+  &.muted{color:var(--text3);}
+  mat-icon{font-size:18px;width:18px;height:18px;}}
+.btn-outline.sm{padding:4px 10px;font-size:12px;margin-left:auto;display:inline-flex;align-items:center;gap:4px;
+  mat-icon{font-size:15px;width:15px;height:15px;}}
+.upload-label{cursor:pointer;}
+.link-btn{background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;padding:0 4px;text-decoration:underline;}

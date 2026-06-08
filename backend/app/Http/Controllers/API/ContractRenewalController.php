@@ -10,6 +10,8 @@ use App\Models\ContractRenewalRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Manages the 3-level contract renewal approval workflow.
@@ -106,10 +108,11 @@ class ContractRenewalController extends Controller {
         $request->validate([
             'contract_id' => 'required|exists:employee_contracts,id',
             'proposed_start_date' => 'required|date',
-            'proposed_end_date' => 'nullable|date|after:proposed_start_date',
-            'proposed_salary' => 'nullable|numeric|min:0',
-            'proposed_type' => 'nullable|in:full_time,part_time,contract,intern,probation,fixed_term,unlimited',
-            'notes' => 'nullable|string|max:1000',
+            'proposed_end_date'   => 'nullable|date|after:proposed_start_date',
+            'proposed_salary'     => 'nullable|numeric|min:0',
+            'proposed_type'       => 'nullable|in:full_time,part_time,contract,intern,probation,fixed_term,unlimited',
+            'notes'               => 'nullable|string|max:1000',
+            'document'            => 'nullable|file|mimes:pdf,doc,docx|max:10240',
         ]);
 
         $contract = Contract::with('employee.manager')->findOrFail($request->contract_id);
@@ -129,13 +132,14 @@ class ContractRenewalController extends Controller {
                     'reference' => ContractRenewalRequest::generateReference(),
                     'status' => 'pending',
                     'proposed_start_date' => $request->proposed_start_date,
-                    'proposed_end_date' => $request->proposed_end_date,
-                    'proposed_salary' => $request->proposed_salary ?? $contract->salary,
-                    'proposed_type' => $request->proposed_type ?? $contract->type,
-                    'manager_id' => $contract->employee?->manager_id,
-                    'auto_generated' => false,
-                    'notified_at' => now(),
-                    'notes' => $request->notes,
+            'proposed_end_date'   => $request->proposed_end_date,
+            'proposed_salary'     => $request->proposed_salary ?? $contract->salary,
+            'proposed_type'       => $request->proposed_type  ?? $contract->type,
+            'manager_id'          => $contract->employee?->manager_id,
+            'auto_generated'      => false,
+            'notified_at'         => now(),
+            'notes'               => $request->notes,
+            ...$docData,
         ]);
 
         return response()->json([
@@ -304,6 +308,84 @@ class ContractRenewalController extends Controller {
     }
 
     /**
+     * Upload (or replace) the supporting document for a renewal request.
+     * Accepts PDF/DOC/DOCX up to 10 MB, stored on the public disk.
+     *
+     * @param  Request      $request
+     * @param  int          $id
+     * @return JsonResponse
+     * @throws \Illuminate\Validation\ValidationException
+     */
+    public function uploadDocument(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'document' => 'required|file|mimes:pdf,doc,docx|max:10240',
+        ]);
+
+        $renewal = ContractRenewalRequest::findOrFail($id);
+
+        if ($renewal->document_path) {
+            Storage::disk('public')->delete($renewal->document_path);
+        }
+
+        $file = $request->file('document');
+        $renewal->update([
+            'document_path' => $file->store('contracts/renewals', 'public'),
+            'document_name' => $file->getClientOriginalName(),
+            'document_mime' => $file->getMimeType(),
+            'document_size' => $file->getSize(),
+        ]);
+
+        return response()->json([
+            'message' => 'Renewal document uploaded.',
+            'renewal' => $this->formatRenewal($renewal->fresh(['employee', 'contract'])),
+        ], 201);
+    }
+
+    /**
+     * Download the renewal request's supporting document.
+     *
+     * @param  int $id
+     * @return StreamedResponse|JsonResponse
+     */
+    public function downloadDocument(int $id): StreamedResponse|JsonResponse
+    {
+        $renewal = ContractRenewalRequest::findOrFail($id);
+
+        if (!$renewal->document_path || !Storage::disk('public')->exists($renewal->document_path)) {
+            return response()->json(['message' => 'No document attached to this renewal request.'], 404);
+        }
+
+        return Storage::disk('public')->download(
+            $renewal->document_path,
+            $renewal->document_name ?: "{$renewal->reference}.pdf"
+        );
+    }
+
+    /**
+     * Detach and delete the renewal request's document.
+     *
+     * @param  int          $id
+     * @return JsonResponse
+     */
+    public function deleteDocument(int $id): JsonResponse
+    {
+        $renewal = ContractRenewalRequest::findOrFail($id);
+
+        if ($renewal->document_path) {
+            Storage::disk('public')->delete($renewal->document_path);
+            $renewal->update([
+                'document_path' => null,
+                'document_name' => null,
+                'document_mime' => null,
+                'document_size' => null,
+            ]);
+        }
+
+        return response()->json(['message' => 'Renewal document removed.']);
+    }
+
+    /**
      * Format a renewal request for the API response.
      *
      * @param  ContractRenewalRequest $r
@@ -319,11 +401,19 @@ class ContractRenewalController extends Controller {
             'auto_generated' => $r->auto_generated,
             'notes' => $r->notes,
             'proposed_start_date' => $r->proposed_start_date?->toDateString(),
-            'proposed_end_date' => $r->proposed_end_date?->toDateString(),
-            'proposed_salary' => $r->proposed_salary,
-            'proposed_type' => $r->proposed_type,
-            'created_at' => $r->created_at?->toDateTimeString(),
-            'notified_at' => $r->notified_at?->toDateTimeString(),
+            'proposed_end_date'   => $r->proposed_end_date?->toDateString(),
+            'proposed_salary'     => $r->proposed_salary,
+            'proposed_type'       => $r->proposed_type,
+            'created_at'          => $r->created_at?->toDateTimeString(),
+            'notified_at'         => $r->notified_at?->toDateTimeString(),
+
+            'document' => $r->document_path ? [
+                'name' => $r->document_name,
+                'mime' => $r->document_mime,
+                'size' => $r->document_size,
+                'url'  => Storage::disk('public')->url($r->document_path),
+            ] : null,
+
             'employee' => $r->employee ? [
         'id' => $r->employee->id,
         'full_name' => $r->employee->full_name,
