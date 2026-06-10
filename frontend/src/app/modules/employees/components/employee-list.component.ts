@@ -15,6 +15,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
 } from '@angular/core';
+import { AuthService } from '../../../core/services/auth.service';
 import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { Store } from '@ngrx/store';
@@ -109,6 +110,7 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
     'avatar', 'employee_code', 'full_name', 'department',
     'employment_type', 'status', 'actions',
   ];
+  isHR = false;
 
   private readonly destroy$ = new Subject<void>();
 
@@ -117,6 +119,7 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
     private readonly router: Router,
     private readonly http:   HttpClient,
     private readonly cdr:    ChangeDetectorRef,
+    private auth: AuthService
   ) {
     this.employees$  = this.store.select((s) => selectAll(s.employees));
     this.loading$    = this.store.select((s) => s.employees.loading);
@@ -128,6 +131,7 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
     this.loadEmployees();
     this.loadStats();
     this.loadDepartments();
+    this.isHR = this.auth.isHRRole();
 
     // Re-fetch on search input after debounce
     this.searchControl.valueChanges.pipe(
