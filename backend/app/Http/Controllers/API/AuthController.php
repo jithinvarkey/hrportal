@@ -39,10 +39,18 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        if ($request->user()) {
 
-        // Period included to match test contract
-        return response()->json(['message' => 'Logged out successfully.']);
+        $token = $request->user()->currentAccessToken();
+
+        if ($token && method_exists($token, 'delete')) {
+            $token->delete();
+        }
+    }
+
+    return response()->json([
+        'message' => 'Logged out successfully.'
+    ]);
     }
 
     public function me(Request $request): JsonResponse

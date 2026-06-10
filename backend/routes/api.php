@@ -11,7 +11,7 @@ use App\Http\Controllers\API\ExcuseLimitController;
 use App\Http\Controllers\API\LoanController;
 use App\Http\Controllers\API\SeparationController;
 use App\Http\Controllers\API\RequestManagementController;
-use App\Http\Controllers\API\AdminController;
+use App\Http\Controllers\API\ProfileController;
 use App\Http\Controllers\API\AttendanceController;
 use App\Http\Controllers\API\ContractController;
 use App\Http\Controllers\API\ContractRenewalController;
@@ -51,6 +51,14 @@ Route::prefix('v1')->group(function () {
             Route::post('logout',   [AuthController::class, 'logout']);
             Route::get('me',        [AuthController::class, 'me']);
             Route::put('password',  [AuthController::class, 'changePassword']);
+        });
+
+        // Profile (authenticated user's own account)
+        Route::prefix('profile')->group(function () {
+            Route::get('/',         [ProfileController::class, 'show']);
+            Route::put('/',         [ProfileController::class, 'update']);
+            Route::post('avatar',   [ProfileController::class, 'uploadAvatar']);
+            Route::put('password',  [ProfileController::class, 'changePassword']);
         });
 
         // Dashboard

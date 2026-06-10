@@ -83,11 +83,16 @@
 
       <!-- User -->
       <div class="user-card">
-        <div class="user-avatar">{{ userInitials }}</div>
-        <div class="user-info">
-          <div class="user-name">{{ user?.name }}</div>
-          <div class="user-role">{{ roleLabel }}</div>
-        </div>
+        <button class="user-trigger" (click)="goToProfile()" matTooltip="View profile">
+          <div class="user-avatar">{{ userInitials }}</div>
+          <div class="user-info">
+            <div class="user-name">{{ user?.name }}</div>
+            <div class="user-role">{{ roleLabel }}</div>
+          </div>
+        </button>
+        <button class="profile-btn" matTooltip="My Profile" (click)="goToProfile()">
+          <mat-icon>account_circle</mat-icon>
+        </button>
         <button class="logout-btn" matTooltip="Logout" (click)="logout()">
           <mat-icon>logout</mat-icon>
         </button>
@@ -99,7 +104,13 @@
       <button class="mini-btn" matTooltip="Change theme" (click)="cycleTheme()">
         <mat-icon>palette</mat-icon>
       </button>
-      <button class="logout-btn-mini" matTooltip="{{ user?.name }}" (click)="logout()">
+      <button class="mini-btn" matTooltip="My Profile" (click)="goToProfile()">
+        <mat-icon>account_circle</mat-icon>
+      </button>
+      <button class="logout-btn-mini" matTooltip="Logout" (click)="logout()">
+        <mat-icon>logout</mat-icon>
+      </button>
+      <button class="profile-avatar-mini" matTooltip="{{ user?.name }} — View profile" (click)="goToProfile()">
         <div class="user-avatar-mini">{{ userInitials }}</div>
       </button>
     </div>

@@ -60,6 +60,7 @@ export class MainLayoutComponent implements OnInit {
 
   setTheme(id: string): void { this.themeService.set(id); }
   cycleTheme(): void         { this.themeService.cycle(); }
+  goToProfile(): void        { this.router.navigate(['/profile']); }
   logout(): void             { this.auth.logout(); this.router.navigate(['/auth/login']); }
   toggleSidebar(): void      { this.sidebarOpen = !this.sidebarOpen; }
 }

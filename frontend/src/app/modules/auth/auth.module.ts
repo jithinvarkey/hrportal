@@ -4,16 +4,20 @@ import { SharedModule } from '../../shared/shared.module';
 import { StoreModule } from '@ngrx/store';
 import { EffectsModule } from '@ngrx/effects';
 import { LoginComponent } from './components/login.component';
+import { ForgotPasswordComponent } from './components/forgot-password.component';
+import { ResetPasswordComponent } from './components/reset-password.component';
 import { authReducer } from './store/auth.reducer';
 import { AuthEffects } from './store/auth.effects';
 
 const routes: Routes = [
   { path: 'login', component: LoginComponent },
+  { path: 'forgot-password', component: ForgotPasswordComponent },
+  { path: 'reset-password', component: ResetPasswordComponent },
   { path: '', redirectTo: 'login', pathMatch: 'full' }
 ];
 
 @NgModule({
-  declarations: [LoginComponent],
+  declarations: [LoginComponent, ForgotPasswordComponent, ResetPasswordComponent],
   imports: [
     SharedModule,
     RouterModule.forChild(routes),

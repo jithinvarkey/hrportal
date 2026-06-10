@@ -200,4 +200,16 @@ export class ProfileComponent implements OnInit {
       },
     });
   }
+
+  formatEmploymentType(type: string): string {
+
+  const map: any = {
+    full_time: 'Full Time',
+    part_time: 'Part Time',
+    contract: 'Contract',
+    intern: 'Intern'
+  };
+
+  return map[type] || type;
+}
 }
