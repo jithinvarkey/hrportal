@@ -112,18 +112,75 @@ class EmployeeController extends Controller {
     // ── Stats ─────────────────────────────────────────────────────────────
 
     public function stats(): JsonResponse {
+
+        $user = auth()->user();
+
+        $userRoles = rescue(fn() => DB::table('model_has_roles')
+                        ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+                        ->where('model_has_roles.model_id', $user->id)
+                        ->pluck('roles.name')
+                        ->toArray(), [], false);
+
+        $isHRAdmin = (bool) array_intersect($userRoles, [
+                    'super_admin',
+                    'hr_manager',
+                    'hr_staff'
+        ]);
+
+        $isMgr = in_array('department_manager', $userRoles);
+
+        $baseQuery = DB::table('employees')
+                ->whereNull('deleted_at');
+
+        if (!$isHRAdmin) {
+
+            if ($isMgr && $user->employee) {
+
+                // Manager: employees in same department except himself
+                $baseQuery->where('department_id', $user->employee->department_id)
+                        ->where('id', '!=', $user->employee->id);
+            } elseif ($user->employee) {
+
+                // Normal employee: only himself
+                $baseQuery->where('id', $user->employee->id);
+            }
+        }
+
         $safe = fn(callable $fn) => rescue($fn, 0, false);
+
         $month = now()->month;
         $year = now()->year;
 
         return response()->json([
-                    'total' => $safe(fn() => DB::table('employees')->whereNull('deleted_at')->count()),
-                    'active' => $safe(fn() => DB::table('employees')->whereNull('deleted_at')->where('status', 'active')->count()),
-                    'probation' => $safe(fn() => DB::table('employees')->whereNull('deleted_at')->where('status', 'probation')->count()),
-                    'on_leave' => $safe(fn() => DB::table('employees')->whereNull('deleted_at')->where('status', 'on_leave')->count()),
-                    'terminated' => $safe(fn() => DB::table('employees')->whereNull('deleted_at')->where('status', 'terminated')->count()),
-                    'new_this_month' => $safe(fn() => DB::table('employees')->whereNull('deleted_at')
-                                    ->whereMonth('hire_date', $month)->whereYear('hire_date', $year)->count()),
+                    'total' => $safe(
+                            fn() => (clone $baseQuery)->count()
+                    ),
+                    'active' => $safe(
+                            fn() => (clone $baseQuery)
+                                    ->where('status', 'active')
+                                    ->count()
+                    ),
+                    'probation' => $safe(
+                            fn() => (clone $baseQuery)
+                                    ->where('status', 'probation')
+                                    ->count()
+                    ),
+                    'on_leave' => $safe(
+                            fn() => (clone $baseQuery)
+                                    ->where('status', 'on_leave')
+                                    ->count()
+                    ),
+                    'terminated' => $safe(
+                            fn() => (clone $baseQuery)
+                                    ->where('status', 'terminated')
+                                    ->count()
+                    ),
+                    'new_this_month' => $safe(
+                            fn() => (clone $baseQuery)
+                                    ->whereMonth('hire_date', $month)
+                                    ->whereYear('hire_date', $year)
+                                    ->count()
+                    ),
         ]);
     }
 
@@ -178,7 +235,7 @@ class EmployeeController extends Controller {
                         'probation_period', 'years_of_experience', 'dob',
                         'nationality', 'gender', 'marital_status',
                         'housing_allowance', 'transport_allowance', 'mobile_allowance',
-                        'food_allowance', 'other_allowances','mode_of_employment'
+                        'food_allowance', 'other_allowances', 'mode_of_employment'
                     ]);
 
                     $employee = Employee::create(array_merge($employeeData, [
@@ -238,7 +295,7 @@ class EmployeeController extends Controller {
             'nationality', 'gender', 'marital_status',
             'housing_allowance', 'transport_allowance', 'mobile_allowance',
             'food_allowance', 'other_allowances', 'bank_name', 'bank_account',
-            'national_id', 'iqama_number', 'iqama_expiry','mode_of_employment'
+            'national_id', 'iqama_number', 'iqama_expiry', 'mode_of_employment'
         ];
 
         $employee->update($request->only($allowed));

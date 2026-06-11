@@ -11,6 +11,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Http\JsonResponse;
 
 class RequestManagementController extends Controller {
 
@@ -54,22 +55,91 @@ class RequestManagementController extends Controller {
     // ══════════════════════════════════════════════════════════════════════
     // STATS
     // ══════════════════════════════════════════════════════════════════════
-    public function stats() {
+
+    public function stats(): JsonResponse {
+        $user = auth()->user();
+
+        $userRoles = rescue(fn() => DB::table('model_has_roles')
+                        ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+                        ->where('model_has_roles.model_id', $user->id)
+                        ->pluck('roles.name')
+                        ->toArray(), [], false);
+
+        $isHRAdmin = (bool) array_intersect($userRoles, [
+                    'super_admin',
+                    'hr_manager',
+                    'hr_staff'
+        ]);
+
+        $isMgr = in_array('department_manager', $userRoles);
+
+        $baseQuery = EmployeeRequest::query();
+
+        if (!$isHRAdmin && $user->employee) {
+
+            if ($isMgr) {
+
+                $deptId = $user->employee->department_id;
+
+                $baseQuery->where(function ($q) use ($deptId, $user) {
+
+                    // Employees in my department
+                    $q->whereHas('employee', function ($eq) use ($deptId) {
+                                $eq->where('department_id', $deptId);
+                            })
+
+                            // Assigned to me
+                            ->orWhere('assigned_to', $user->id);
+                });
+            } else {
+
+                // Own requests + requests assigned to me
+                $baseQuery->where(function ($q) use ($user) {
+
+                    $q->where('employee_id', $user->employee->id)
+                            ->orWhere('assigned_to', $user->id);
+                });
+            }
+        }
+
         $safe = fn($fn) => rescue($fn, 0, false);
-        $byCategory = rescue(function () {
-            return DB::table('employee_requests')
+
+        $byCategory = rescue(function () use ($baseQuery) {
+
+            return (clone $baseQuery)
                     ->join('request_types', 'request_types.id', '=', 'employee_requests.request_type_id')
                     ->whereNotIn('employee_requests.status', ['cancelled'])
                     ->selectRaw('request_types.category, count(*) as total')
                     ->groupBy('request_types.category')
                     ->pluck('total', 'category');
-        }, [], false);
+        }, collect(), false);
 
         return response()->json([
-                    'pending' => $safe(fn() => EmployeeRequest::whereIn('status', ['pending', 'pending_manager'])->count()),
-                    'in_progress' => $safe(fn() => EmployeeRequest::where('status', 'in_progress')->count()),
-                    'completed' => $safe(fn() => EmployeeRequest::where('status', 'completed')->count()),
-                    'overdue' => $safe(fn() => EmployeeRequest::where('is_overdue', true)->whereNotIn('status', ['completed', 'rejected', 'cancelled'])->count()),
+                    'pending' => $safe(
+                            fn() => (clone $baseQuery)
+                                    ->whereIn('status', ['pending', 'pending_manager'])
+                                    ->count()
+                    ),
+                    'in_progress' => $safe(
+                            fn() => (clone $baseQuery)
+                                    ->where('status', 'in_progress')
+                                    ->count()
+                    ),
+                    'completed' => $safe(
+                            fn() => (clone $baseQuery)
+                                    ->where('status', 'completed')
+                                    ->count()
+                    ),
+                    'overdue' => $safe(
+                            fn() => (clone $baseQuery)
+                                    ->where('is_overdue', true)
+                                    ->whereNotIn('status', [
+                                        'completed',
+                                        'rejected',
+                                        'cancelled'
+                                    ])
+                                    ->count()
+                    ),
                     'by_category' => $byCategory,
         ]);
     }
