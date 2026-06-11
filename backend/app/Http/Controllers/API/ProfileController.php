@@ -64,6 +64,9 @@ class ProfileController extends Controller
                 'avatar_url'              => $employee->avatar_url,
                 'bank_name'               => $employee->bank_name,
                 'national_id'             => $employee->national_id,
+                'address'                 => $employee->address,
+                'city'                    => $employee->city,
+                'country'                 => $employee->country,
             ] : null,
         ]);
     }
