@@ -46,29 +46,57 @@ export class EmployeeFormComponent implements OnInit {
       this.loadingData = true;
       this.http.get<any>(`/api/v1/employees/${this.employeeId}`).subscribe({
         next: r => {
-          this.loadingData = false;
           const e = r.employee || r;
-          this.form.patchValue({
-            prefix: e.prefix, first_name: e.first_name, last_name: e.last_name,
-            arabic_name: e.arabic_name, email: e.email, phone: e.phone,
-            work_phone: e.work_phone, extension: e.extension,
-            dob: e.dob, gender: e.gender, marital_status: e.marital_status,
-            nationality: e.nationality, national_id: e.national_id,
-            address: e.address, city: e.city, country: e.country,
-            department_id: e.department_id, designation_id: e.designation_id,
-            manager_id: e.manager_id, employment_type: e.employment_type,
-            mode_of_employment: e.mode_of_employment, role: e.role,
-            status: e.status, hire_date: e.hire_date,
-            confirmation_date: e.confirmation_date, termination_date: e.termination_date,
-            probation_period: e.probation_period, years_of_experience: e.years_of_experience,
-            salary: e.salary, housing_allowance: e.housing_allowance ?? null, transport_allowance: e.transport_allowance ?? null, other_allowances: e.other_allowances ?? 0, mobile_allowance: e.mobile_allowance ?? 0, food_allowance: e.food_allowance ?? 0, bank_name: e.bank_name, bank_account: e.bank_account,
-            emergency_contact_name: e.emergency_contact_name,
-            emergency_contact_phone: e.emergency_contact_phone,
-            notes: e.notes,
-          });
-          if (e.department_id) this.loadDesignations(e.department_id);
+
+          // Designations are department-scoped and loaded async. Load them
+          // FIRST so the saved designation's <option> exists before we patch
+          // the value — otherwise the select silently renders empty.
+          console.log(e);
+          const applyPatch = () => {
+            this.form.patchValue({
+              prefix: e.prefix, first_name: e.first_name, last_name: e.last_name,
+              arabic_name: e.arabic_name, email: e.email, phone: e.phone,
+              work_phone: e.work_phone, extension: e.extension,
+              // Dates: backend casts to 'date' → ISO timestamps. <input type="date">
+              // only accepts YYYY-MM-DD, so strip the time portion.
+              dob: this.toDateInput(e.dob),
+              gender: e.gender, marital_status: e.marital_status,
+              nationality: e.nationality, national_id: e.national_id,
+              address: e.address, city: e.city, country: e.country,
+              // IDs: option [value] renders as a string but the form value is a
+              // number; coerce so Angular's strict-equality match selects it.
+              department_id: this.toId(e.department_id),
+              designation_id: this.toId(e.designation_id),
+              manager_id: this.toId(e.manager_id),
+              employment_type: e.employment_type,
+              mode_of_employment: e.mode_of_employment, role: e.role,
+              status: e.status,
+              hire_date: this.toDateInput(e.hire_date),
+              confirmation_date: this.toDateInput(e.confirmation_date),
+              termination_date: this.toDateInput(e.termination_date),
+              probation_period: e.probation_period, years_of_experience: e.years_of_experience,
+              salary: e.salary,
+              housing_allowance: e.housing_allowance ?? null,
+              transport_allowance: e.transport_allowance ?? null,
+              other_allowances: e.other_allowances ?? 0,
+              mobile_allowance: e.mobile_allowance ?? 0,
+              food_allowance: e.food_allowance ?? 0,
+              bank_name: e.bank_name, bank_account: e.bank_account,
+              emergency_contact_name: e.emergency_contact_name,
+              emergency_contact_phone: e.emergency_contact_phone,
+              emergency_contact_relation: e.emergency_contact_relation,
+              notes: e.notes,
+            });
+            this.loadingData = false;
+          };
+
+          if (e.department_id) {
+            this.loadDesignations(e.department_id, applyPatch);
+          } else {
+            applyPatch();
+          }
         },
-        error: () => { this.loadingData = false; }
+        error: () => { this.loadingData = false; this.errorMsg = 'Failed to load employee data.'; }
       });
     }
   }
@@ -127,16 +155,67 @@ export class EmployeeFormComponent implements OnInit {
     this.http.get<any>('/api/v1/employees?status=active&per_page=500').subscribe(r => this.managers = r?.data || []);
   }
 
-  onDeptChange(deptId: any) {
-    // Called from (ngModelChange) or (change) — accepts the value directly
-    const id = typeof deptId === 'object' ? deptId?.target?.value : deptId;
+  /**
+   * React to a department change. With [ngValue] the form control already holds
+   * the new (typed) value when (change) fires, so read it from the control
+   * rather than the DOM event target (which would be a string).
+   */
+  onDeptChange() {
+    const id = this.form.get('department_id')?.value;
     this.form.patchValue({ designation_id: '' });
     if (id) this.loadDesignations(id);
     else this.designations = [];
   }
 
-  loadDesignations(deptId: any) {
-    this.http.get<any>(`/api/v1/designations?department_id=${deptId}`).subscribe(r => this.designations = r?.data || r || []);
+  /**
+   * Load department-scoped designations. An optional callback runs after the
+   * list is populated, letting the edit flow patch the saved designation_id
+   * only once its <option> exists in the DOM.
+   *
+   * @param deptId Department id to scope designations to.
+   * @param done   Optional callback fired after the list is set (success or error).
+   */
+  loadDesignations(deptId: any, done?: () => void) {
+    this.http.get<any>(`/api/v1/designations?department_id=${deptId}`).subscribe({
+      next: r => { this.designations = r?.data || r || []; if (done) done(); },
+      error: () => { this.designations = []; if (done) done(); },
+    });
+  }
+
+  /**
+   * Normalize a backend date value into the YYYY-MM-DD string required by
+   * <input type="date">. Handles ISO timestamps, date-only strings, and null.
+   *
+   * @param value Raw date value from the API (e.g. "2024-03-15T00:00:00.000000Z").
+   * @returns A YYYY-MM-DD string, or '' when the value is empty/invalid.
+   */
+  toDateInput(value: any): string {
+    if (!value) return '';
+    // Already date-only — return the first 10 chars verbatim (no TZ shift).
+    if (typeof value === 'string') {
+      const m = value.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (m) return m[1];
+    }
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return '';
+    // Build from local parts to avoid an off-by-one day from UTC conversion.
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  /**
+   * Coerce a foreign-key id to a number so it strict-equals the numeric option
+   * values bound via [value]="d.id". Empty/null becomes '' (the placeholder).
+   *
+   * @param value Raw id from the API.
+   * @returns A number, or '' when absent.
+   */
+  toId(value: any): number | '' {
+    if (value === null || value === undefined || value === '') return '';
+    const n = Number(value);
+    return isNaN(n) ? '' : n;
   }
 
   submit() {

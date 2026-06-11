@@ -90,10 +90,15 @@
             <div class="info-row"><span class="info-label">Employee Code</span><span class="info-val">{{ employee.employee_code || '—' }}</span></div>
             <div class="info-row"><span class="info-label">Department</span><span class="info-val">{{ employee.department || '—' }}</span></div>
             <div class="info-row"><span class="info-label">Designation</span><span class="info-val">{{ employee.designation || '—' }}</span></div>
-            <div class="info-row"><span class="info-label">Employment Type</span><span class="info-val">{{ employee.employment_type || '—' }}</span></div>
-            <div class="info-row"><span class="info-label">Status</span>
-              <span class="status-badge" [attr.data-status]="employee.status">{{ employee.status || '—' }}</span>
-            </div>
+            <div class="info-row"><span class="info-label">Employment Type</span><span class="info-val"> {{ formatEmploymentType(employee.employment_type)|| '_' }} </span></div>
+            <div class="info-row">
+  <span class="info-label">Status</span>
+
+  <span class="status-badge"
+        [ngClass]="employee.status">
+    {{ employee.status | titlecase }}
+  </span>
+</div>
             <div class="info-row"><span class="info-label">Hire Date</span><span class="info-val">{{ (employee.hire_date | date:'dd MMM yyyy') || '—' }}</span></div>
           </div>
         </div>

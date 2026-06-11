@@ -69,3 +69,36 @@
   margin-top: 24px;
   color: #aaa;
 }
+
+/* ── Forgot / Reset password states ──────────────────────────────────── */
+.success-panel {
+  text-align: center;
+  padding: 8px 4px 4px;
+
+  .success-icon {
+    font-size: 56px;
+    width: 56px;
+    height: 56px;
+    color: #2e7d32;
+    margin-bottom: 12px;
+  }
+
+  p {
+    color: #555;
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0 0 20px;
+  }
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #2E75B6;
+  font-size: 14px;
+  text-decoration: none;
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+  &:hover { text-decoration: underline; }
+}

@@ -45,20 +45,33 @@ export class AuthService {
   }
 
 
-  logout() {
+  logout(): void {
 
-    const token = localStorage.getItem(this.tokenKey);
+  const token = localStorage.getItem(this.tokenKey);
 
-    this.http.post(`${this.apiUrl}/auth/logout`,
-      {},
-      {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+  this.http.post(
+    `${this.apiUrl}/auth/logout`,
+    {},
+    {
+      headers: {
+        Authorization: `Bearer ${token}`
       }
-    );
+    }
+  ).subscribe({
+    next: () => {
+      localStorage.removeItem(this.tokenKey);
+      localStorage.removeItem(this.userKey);
+      //this.router.navigate(['/login']);
+    },
+    error: () => {
+      // Even if API fails, clear local session
+      localStorage.removeItem(this.tokenKey);
+      localStorage.removeItem(this.userKey);
+      //this.router.navigate(['/login']);
+    }
+  });
 
-  }
+}
 
   refreshUser(): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/auth/me`).pipe(

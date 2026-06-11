@@ -79,6 +79,7 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
   ];
 
   years = Array.from({ length: 3 }, (_, i) => new Date().getFullYear() - i);
+  isHR = false;
 
   private readonly destroy$ = new Subject<void>();
 
@@ -92,7 +93,7 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
     this.employeeId = id;
-
+    this.isHR = this.auth.isHRRole();
     this.http.get<any>(`/api/v1/employees/${id}`)
       .pipe(takeUntil(this.destroy$))
       .subscribe({

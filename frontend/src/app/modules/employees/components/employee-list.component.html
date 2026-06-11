@@ -8,7 +8,7 @@
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn-outline" (click)="clearFilters()"><mat-icon>filter_list_off</mat-icon> Clear</button>
-      <button class="btn-primary" (click)="addEmployee()"><mat-icon>person_add_alt_1</mat-icon> Add Employee</button>
+      <button class="btn-primary" *ngIf="isHR"  (click)="addEmployee()"><mat-icon>person_add_alt_1</mat-icon> Add Employee</button>
     </div>
   </div>
 
@@ -142,23 +142,23 @@
             <button class="row-btn" (click)="viewEmployee(e.id)" matTooltip="View Profile">
               <mat-icon>visibility</mat-icon>
             </button>
-            <button class="row-btn" (click)="editEmployee(e.id)" matTooltip="Edit">
+            <button class="row-btn" *ngIf="isHR" (click)="editEmployee(e.id)" matTooltip="Edit">
               <mat-icon>edit</mat-icon>
             </button>
             <!-- Quick status toggle: inactive ↔ active, terminated stays as-is -->
             <button class="row-btn"
-                    *ngIf="e.status === 'active' || e.status === 'probation' || e.status === 'on_leave'"
+                    *ngIf="isHR && (e.status === 'active' || e.status === 'probation' || e.status === 'on_leave')"
                     matTooltip="Set Inactive"
-                    (click)="quickStatus(e, 'inactive', $event)">
+                    (click)="quickStatus(e, 'inactive', $event)" >
               <mat-icon>pause_circle_outline</mat-icon>
             </button>
             <button class="row-btn success"
-                    *ngIf="e.status === 'inactive'"
+                    *ngIf="isHR && e.status === 'inactive'"
                     matTooltip="Set Active"
                     (click)="quickStatus(e, 'active', $event)">
               <mat-icon>play_circle_outline</mat-icon>
             </button>
-            <button class="row-btn danger" (click)="terminate(e.id)" matTooltip="Terminate" *ngIf="e.status !== 'terminated'">
+            <button class="row-btn danger" (click)="terminate(e.id)" matTooltip="Terminate" *ngIf="isHR && e.status !== 'terminated'">
               <mat-icon>person_remove</mat-icon>
             </button>
           </div>

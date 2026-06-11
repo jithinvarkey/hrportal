@@ -69,6 +69,8 @@ return [
     | ahead and set this to a sensible default for you out of the box.
     |
     */
+    
+    'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost:4200')),
 
     'timezone' => env('APP_TIMEZONE', 'Asia/Riyadh'),
 
