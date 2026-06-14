@@ -36,6 +36,7 @@ export class AttendanceDashboardComponent implements OnInit, AfterViewInit, OnDe
   private readonly api      = '/api/v1/attendance';
   private readonly destroy$ = new Subject<void>();
   private charts: any[]     = [];
+  isHR = false;
 
   constructor(
     private readonly http: HttpClient,
@@ -44,7 +45,8 @@ export class AttendanceDashboardComponent implements OnInit, AfterViewInit, OnDe
   ) {}
 
   ngOnInit(): void {
-    this.isAdmin = this.auth.isManagerRole();
+    this.isHR = this.auth.isHRRole();
+    this.isAdmin = this.auth.isAdminRole();
     this.loadDashboard();
 
     interval(1000).pipe(takeUntil(this.destroy$)).subscribe(() => {

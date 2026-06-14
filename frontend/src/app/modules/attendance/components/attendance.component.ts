@@ -54,6 +54,7 @@ export class AttendanceComponent implements OnInit, OnDestroy {
 
   // ── Views ─────────────────────────────────────────────────────────────
   isHR             = false;
+  isAdmin   = false;
   activeTab: 'log' | 'manual' | 'settings' = 'log';
   showSettings     = false;
   showManualEntry  = false;
@@ -115,9 +116,9 @@ const roleValues = toArr(user?.roles);
 const permValues = toArr(user?.permissions);
 const rawUser = JSON.stringify(user ?? {});
 const isManager = ['department_manager'].some((r:string) => roleValues.includes(r) || rawUser.includes(r));
-this.isHR = ['super_admin','hr_manager','hr_staff'].some((r:string) => roleValues.includes(r) || rawUser.includes(r))
-         || ['manage_attendance','view_attendance'].some((p:string) => permValues.includes(p))
-         || isManager;
+this.isHR = this.auth.isHRRole();
+
+this.isAdmin = this.auth.isAdminRole();
 
     this.filterForm = this.fb.group({
       date_from:     [this.firstOfMonth()],

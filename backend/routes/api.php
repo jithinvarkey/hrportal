@@ -12,6 +12,7 @@ use App\Http\Controllers\API\LoanController;
 use App\Http\Controllers\API\SeparationController;
 use App\Http\Controllers\API\RequestManagementController;
 use App\Http\Controllers\API\ProfileController;
+use App\Http\Controllers\API\BioTimeController;
 use App\Http\Controllers\API\AttendanceController;
 use App\Http\Controllers\API\ContractController;
 use App\Http\Controllers\API\ContractRenewalController;
@@ -162,6 +163,24 @@ Route::prefix('v1')->group(function () {
             Route::put('/{id}',              [AttendanceController::class, 'update'])->whereNumber('id');
             Route::get('/settings',          [AttendanceController::class, 'getSettings']);
             Route::post('/settings',         [AttendanceController::class, 'saveSettings']);
+        });
+
+        // BioTime / ZKTeco biometric devices
+        Route::prefix('biotime')->group(function () {
+            Route::post('/sync-all',                   [BioTimeController::class, 'syncAll']);
+
+            Route::prefix('devices')->group(function () {
+                Route::get('/',                        [BioTimeController::class, 'index']);
+                Route::post('/',                       [BioTimeController::class, 'store']);
+                Route::put('/{id}',                    [BioTimeController::class, 'update'])->whereNumber('id');
+                Route::delete('/{id}',                 [BioTimeController::class, 'destroy'])->whereNumber('id');
+                Route::post('/{id}/test',              [BioTimeController::class, 'testConnection'])->whereNumber('id');
+                Route::post('/{id}/sync',              [BioTimeController::class, 'sync'])->whereNumber('id');
+                Route::get('/{id}/employees',          [BioTimeController::class, 'employees'])->whereNumber('id');
+                Route::get('/{id}/unmatched',          [BioTimeController::class, 'unmatched'])->whereNumber('id');
+                Route::get('/{id}/logs',               [BioTimeController::class, 'logs'])->whereNumber('id');
+                Route::get('/{id}/stats',              [BioTimeController::class, 'stats'])->whereNumber('id');
+            });
         });
 
         // Recruitment
