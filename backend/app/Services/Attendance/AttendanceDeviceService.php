@@ -139,8 +139,8 @@ class AttendanceDeviceService
                         'check_in'       => $checkIn,
                         'check_out'      => $checkOut ?? $existing->check_out,
                         'status'         => $status,
-                        'source'         => 'device',
-                        'duration_label' => $durationLabel ?? $existing->duration_label,
+                        'source'         => 'api',
+                        'total_minutes' => $duration ?? $existing->total_minutes,
                         'notes'          => 'Synced from ' . $device->name,
                     ]);
                     $updated++;
@@ -152,8 +152,8 @@ class AttendanceDeviceService
                     'check_in'       => $checkIn,
                     'check_out'      => $checkOut,
                     'status'         => $status,
-                    'source'         => 'device',
-                    'duration_label' => $durationLabel,
+                    'source'         => 'api',
+                    'total_minutes' => $duration,
                     'notes'          => 'Synced from ' . $device->name,
                 ]);
                 $created++;

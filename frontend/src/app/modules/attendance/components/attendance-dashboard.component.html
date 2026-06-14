@@ -22,7 +22,7 @@
 
 
 <!-- ── HR Quick Actions ─────────────────────────────────────────────── -->
-<div class="hr-actions-bar" *ngIf="isAdmin">
+<div class="hr-actions-bar" >
   <a class="hr-action-btn" routerLink="/attendance/log">
     <mat-icon>list_alt</mat-icon>
     <div>
@@ -31,7 +31,7 @@
     </div>
     <mat-icon class="ha-arrow">arrow_forward</mat-icon>
   </a>
-  <a class="hr-action-btn" routerLink="/attendance/log" [queryParams]="{tab:'manual'}">
+  <a class="hr-action-btn" *ngIf="isHR || isAdmin" routerLink="/attendance/log" [queryParams]="{tab:'manual'}">
     <mat-icon>edit_calendar</mat-icon>
     <div>
       <div class="ha-title">Manual Entry</div>
@@ -39,7 +39,7 @@
     </div>
     <mat-icon class="ha-arrow">arrow_forward</mat-icon>
   </a>
-  <a class="hr-action-btn" routerLink="/attendance/biotime">
+  <a class="hr-action-btn"  *ngIf="isHR || isAdmin" routerLink="/attendance/biotime">
     <mat-icon>fingerprint</mat-icon>
     <div>
       <div class="ha-title">BioTime Sync</div>
@@ -97,7 +97,7 @@
         </div>
       </div>
     </div>
-    <div class="checkin-right">
+    <div class="checkin-right" *ngIf="isHR || isAdmin">
       <button class="btn-ci" [disabled]="!canCheckIn || checkingIn" (click)="checkIn()">
         <mat-icon>login</mat-icon> {{ checkingIn ? 'Recording…' : 'Check In' }}
       </button>
