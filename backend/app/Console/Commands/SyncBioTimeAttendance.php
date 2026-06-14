@@ -16,6 +16,7 @@ class SyncBioTimeAttendance extends Command
         $days   = (int) $this->option('days');
         $devId  = $this->option('device');
         $since  = now()->subDays($days)->startOfDay();
+        $untill = now()->subDays($days)->endOfDay();
 
         $query  = AttendanceDevice::where('is_active', true)->where('brand', 'zkteco');
         if ($devId) $query->where('id', $devId);
@@ -31,7 +32,7 @@ class SyncBioTimeAttendance extends Command
 
         foreach ($devices as $device) {
             $this->line("  → {$device->name} ({$device->ip_address})");
-            $result = $biotime->fullSync($device, $since);
+            $result = $biotime->fullSync($device, $since,$untill);
 
             if (!empty($result['errors'])) {
                 $this->error("    ✗ " . implode('; ', $result['errors']));
