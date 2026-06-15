@@ -14,6 +14,7 @@ return [
     */
 
     'default' => env('MAIL_MAILER', 'smtp'),
+    'test_email' => env('MAIL_TEST_EMAIL'),
 
     /*
     |--------------------------------------------------------------------------
