@@ -238,7 +238,7 @@ class LeaveController extends Controller {
          */
       
         
-        //$this->service->notifyEmployee($leaveRequest, 'submitted');
+        $this->service->notifyEmployee($leaveRequest, 'submitted');
 
         // ── Auto-create linked HR requests for annual leave requirements ──
         if ($leaveType->is_annual ?? false) {
