@@ -51,7 +51,6 @@ export class EmployeeFormComponent implements OnInit {
           // Designations are department-scoped and loaded async. Load them
           // FIRST so the saved designation's <option> exists before we patch
           // the value — otherwise the select silently renders empty.
-          console.log(e);
           const applyPatch = () => {
             this.form.patchValue({
               prefix: e.prefix, first_name: e.first_name, last_name: e.last_name,
@@ -152,7 +151,19 @@ export class EmployeeFormComponent implements OnInit {
 
   loadLookups() {
     this.http.get<any>('/api/v1/departments').subscribe(r => this.departments = r?.data || r || []);
-    this.http.get<any>('/api/v1/employees?status=active&per_page=500').subscribe(r => this.managers = r?.data || []);
+
+    this.http
+  .get<any>('/api/v1/employees?status=active&per_page=500')
+  .subscribe(r => {
+
+    const employees = r?.data || [];
+
+    this.managers = employees.filter((e: any) =>
+      ['management', 'executive']
+        .includes(e.designation?.level)
+    );
+
+  });
   }
 
   /**
