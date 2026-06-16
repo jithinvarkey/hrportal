@@ -21,6 +21,7 @@ use App\Http\Controllers\API\OnboardingController;
 use App\Http\Controllers\API\PerformanceController;
 use App\Http\Controllers\API\OrgChartController;
 use App\Http\Controllers\API\DashboardController;
+use App\Http\Controllers\API\AdminController;
 
 /*
 |--------------------------------------------------------------------------
@@ -126,6 +127,8 @@ Route::prefix('v1')->group(function () {
             Route::post('/accrue',   [LeaveController::class, 'runAccrual']);   // manual trigger
             Route::get('/types',                   [LeaveController::class, 'types']);
             Route::post('/types',                  [LeaveController::class, 'storeType']);
+            Route::get('/types/{id}/visibility',   [LeaveController::class, 'typeVisibility']);
+            Route::post('/types/{id}/visibility',  [LeaveController::class, 'saveTypeVisibility']);
             Route::put('/types/{id}',              [LeaveController::class, 'updateType']);
             Route::get('/requests',                [LeaveController::class, 'index']);
             Route::post('/requests',               [LeaveController::class, 'store']);

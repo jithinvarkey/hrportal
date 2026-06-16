@@ -19,6 +19,7 @@ class LeaveService {
 
     private const WORKING_DAYS = [0, 1, 2, 3, 4]; // Sun–Thu
     const BUSINESS_EXCUSE_CODE = 'BE';
+    const PERSONAL_EXCUSE_CODE = 'PE';
     const WORK_START = '08:00';
     const WORK_END = '16:00';
     const DEFAULT_MONTHLY_CAP_HOURS = 12.0;
@@ -74,9 +75,10 @@ class LeaveService {
         return ['is_limited' => true, 'limit_hours' => $row->monthly_hours_limit ?? self::DEFAULT_MONTHLY_CAP_HOURS];
     }
 
-    // ── Validate Business Excuse ──────────────────────────────────────────
-    public function validateBusinessExcuse(
+    // ── Validate hourly excuses ───────────────────────────────────────────
+    public function validateHourlyExcuse(
             Employee $employee,
+            LeaveType $leaveType,
             string $date,
             string $startTime,
             string $endTime,
@@ -85,10 +87,10 @@ class LeaveService {
     ): ?string {
         $dow = Carbon::parse($date)->dayOfWeek;
         if (!in_array($dow, self::WORKING_DAYS)) {
-            return 'Business excuses can only be submitted for working days (Sun–Thu).';
+            return "{$leaveType->name} can only be submitted for working days (Sun-Thu).";
         }
         if ($startTime < self::WORK_START || $endTime > self::WORK_END) {
-            return 'Times must be within working hours (08:00 – 16:00).';
+            return 'Times must be within working hours (08:00 - 16:00).';
         }
         if ($startTime >= $endTime) {
             return 'End time must be after start time.';
@@ -98,21 +100,20 @@ class LeaveService {
         }
 
         // Overlap check
-        $leaveType = LeaveType::where('code', self::BUSINESS_EXCUSE_CODE)->first();
         $overlap = LeaveRequest::where('employee_id', $employee->id)
-                ->where('leave_type_id', $leaveType?->id)
+                ->where('leave_type_id', $leaveType->id)
                 ->whereIn('status', ['pending', 'approved'])
                 ->where('start_date', $date)
                 ->when($excludeRequestId, fn($q) => $q->where('id', '!=', $excludeRequestId))
                 ->exists();
 
         if ($overlap) {
-            return 'You already have a business excuse on this date.';
+            return "You already have a {$leaveType->name} request on this date.";
         }
 
         // Resolve department limit from DB
         $deptId = $employee->department_id;
-        $limitConf = $this->getDepartmentLimit($deptId, $leaveType?->id ?? 0);
+        $limitConf = $this->getDepartmentLimit($deptId, $leaveType->id);
 
         if (!$limitConf['is_limited']) {
             return null; // unlimited
@@ -125,7 +126,7 @@ class LeaveService {
         $monthEnd = Carbon::parse($date)->endOfMonth()->toDateString();
 
         $usedThisMonth = LeaveRequest::where('employee_id', $employee->id)
-                ->where('leave_type_id', $leaveType?->id)
+                ->where('leave_type_id', $leaveType->id)
                 ->whereIn('status', ['pending', 'approved'])
                 ->whereBetween('start_date', [$monthStart, $monthEnd])
                 ->when($excludeRequestId, fn($q) => $q->where('id', '!=', $excludeRequestId))
@@ -143,12 +144,30 @@ class LeaveService {
         return null;
     }
 
+    public function validateBusinessExcuse(
+            Employee $employee,
+            string $date,
+            string $startTime,
+            string $endTime,
+            float $hours,
+            ?int $excludeRequestId = null
+    ): ?string {
+        $leaveType = LeaveType::where('code', self::BUSINESS_EXCUSE_CODE)->first();
+        if (!$leaveType) {
+            return 'Business Excuse leave type is not configured.';
+        }
+
+        return $this->validateHourlyExcuse($employee, $leaveType, $date, $startTime, $endTime, $hours, $excludeRequestId);
+    }
+
     // ── Monthly usage summary ─────────────────────────────────────────────
-    public function monthlyExcuseUsage(int $empId, int $year, int $month): array {
+    public function monthlyExcuseUsage(int $empId, int $year, int $month, ?int $leaveTypeId = null): array {
         $monthStart = Carbon::create($year, $month, 1)->startOfMonth()->toDateString();
         $monthEnd = Carbon::create($year, $month, 1)->endOfMonth()->toDateString();
 
-        $leaveType = LeaveType::where('code', self::BUSINESS_EXCUSE_CODE)->first();
+        $leaveType = $leaveTypeId
+                ? LeaveType::where('is_hourly', true)->find($leaveTypeId)
+                : LeaveType::where('code', self::BUSINESS_EXCUSE_CODE)->first();
 
         $used = LeaveRequest::where('employee_id', $empId)
                 ->where('leave_type_id', $leaveType?->id)
@@ -170,6 +189,7 @@ class LeaveService {
             'is_unlimited' => $isUnlimited,
             'month' => Carbon::create($year, $month)->format('F Y'),
             'department' => $employee?->department?->name,
+            'leave_type' => $leaveType?->name,
         ];
     }
 

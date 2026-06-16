@@ -13,6 +13,7 @@ export class AdminComponent implements OnInit {
   activeTab = 'overview';
   loading   = false;
   submitting = false;
+  adminError = '';
 
   // ── Data ─────────────────────────────────────────────────────────────
   overview: any    = {};
@@ -102,15 +103,13 @@ export class AdminComponent implements OnInit {
   constructor(private http: HttpClient, public auth: AuthService) {}
 
   ngOnInit() {
-    this.loadOverview();
-    this.loadRoles();
-    this.loadPermissions();
-    this.loadEmployees();
+    this.refreshAdminData();
   }
 
   loadOverview() {
     this.http.get<any>('/api/v1/admin/overview').subscribe({
       next: r => {
+        this.adminError = '';
         this.overview = {
           attention: [],         // ensure *ngFor never sees undefined
           users_by_role: [],
@@ -119,6 +118,7 @@ export class AdminComponent implements OnInit {
         };
       },
       error: err => {
+        this.adminError = this.adminErrorMessage(err, 'overview');
         console.error('[Admin] overview failed:', err?.status, err?.error?.message ?? err?.message);
       },
     });
@@ -130,28 +130,36 @@ export class AdminComponent implements OnInit {
     if (this.filterRole)   params.role   = this.filterRole;
     if (this.filterSearch) params.search = this.filterSearch;
     this.http.get<any>('/api/v1/admin/users', { params }).subscribe({
-      next: r => { this.users = r?.data || []; this.pagination = r; this.loading = false; },
-      error: () => this.loading = false
+      next: r => { this.adminError = ''; this.users = r?.data || []; this.pagination = r; this.loading = false; },
+      error: err => { this.adminError = this.adminErrorMessage(err, 'users'); this.loading = false; }
     });
   }
 
   loadRoles() {
     this.http.get<any>('/api/v1/admin/roles').subscribe({
       next: r => {
+        this.adminError = '';
         this.roles = r?.roles || [];
         console.log('[Admin] roles loaded:', this.roles.length, this.roles);
       },
-      error: err => console.error('[Admin] roles error:', err?.status, err?.error),
+      error: err => {
+        this.adminError = this.adminErrorMessage(err, 'roles');
+        console.error('[Admin] roles error:', err?.status, err?.error);
+      },
     });
   }
 
   loadPermissions() {
     this.http.get<any>('/api/v1/admin/permissions').subscribe({
       next: r => {
+        this.adminError = '';
         this.permissions = r?.permissions || {};
         console.log('[Admin] permissions loaded:', Object.keys(this.permissions));
       },
-      error: err => console.error('[Admin] permissions error:', err?.status, err?.error),
+      error: err => {
+        this.adminError = this.adminErrorMessage(err, 'permissions');
+        console.error('[Admin] permissions error:', err?.status, err?.error);
+      },
     });
   }
 
@@ -161,11 +169,20 @@ export class AdminComponent implements OnInit {
 
   switchTab(id: string) {
     this.activeTab = id;
-    if (id === 'users')        this.loadUsers();
-    if (id === 'overview')     this.loadOverview();
-    if (id === 'roles')        this.loadRoles();
+    if (id === 'overview')     { this.loadOverview(); this.loadRoles(); }
+    if (id === 'users')        { this.loadUsers(); this.loadRoles(); }
+    if (id === 'roles')        { this.loadRoles(); this.loadPermissions(); }
+    if (id === 'permissions')  { this.loadPermissions(); this.loadRoles(); this.loadOverview(); }
     if (id === 'departments')  this.loadDepartments();
     if (id === 'designations') { this.loadDesignations(); this.loadDepartments(); }
+  }
+
+  refreshAdminData() {
+    this.loadOverview();
+    this.loadRoles();
+    this.loadPermissions();
+    this.loadUsers();
+    this.loadEmployees();
   }
 
   // ── User CRUD ──────────────────────────────────────────────────────
@@ -429,6 +446,13 @@ export class AdminComponent implements OnInit {
       if (Array.isArray(first) && first.length) return first[0] as string;
     }
     return err?.error?.message || '';
+  }
+
+  private adminErrorMessage(err: any, section: string): string {
+    if (err?.status === 401) return 'Admin data could not load because your session is not authenticated. Please log in again.';
+    if (err?.status === 403) return 'Admin data could not load because this user does not have admin permission.';
+    const detail = err?.error?.message || err?.message || 'Please check the API server and try again.';
+    return `Failed to load admin ${section}: ${detail}`;
   }
 
   unlinkEmployee(userId: number) {

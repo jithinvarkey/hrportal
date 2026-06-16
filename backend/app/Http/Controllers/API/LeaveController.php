@@ -40,8 +40,113 @@ class LeaveController extends Controller {
         return count(array_intersect($this->userRoles(), $roles)) > 0;
     }
 
+    private function visibleLeaveTypeIdsForDepartment(?int $departmentId): ?array {
+        if (!$departmentId) {
+            return [];
+        }
+
+        $configuredTypeIds = DB::table('leave_type_department_visibility')
+                ->distinct()
+                ->pluck('leave_type_id')
+                ->toArray();
+
+        if (empty($configuredTypeIds)) {
+            return null;
+        }
+
+        $visibleConfiguredIds = DB::table('leave_type_department_visibility')
+                ->where('department_id', $departmentId)
+                ->where('is_visible', true)
+                ->pluck('leave_type_id')
+                ->toArray();
+
+        return array_values(array_unique(array_merge(
+            LeaveType::whereNotIn('id', $configuredTypeIds)->pluck('id')->toArray(),
+            $visibleConfiguredIds
+        )));
+    }
+
+    private function leaveTypeVisibleForEmployee(LeaveType $leaveType, $employee): bool {
+        if (!$employee?->department_id) {
+            return false;
+        }
+
+        $hasVisibilityConfig = DB::table('leave_type_department_visibility')
+                ->where('leave_type_id', $leaveType->id)
+                ->exists();
+
+        if (!$hasVisibilityConfig) {
+            return true;
+        }
+
+        return DB::table('leave_type_department_visibility')
+                ->where('leave_type_id', $leaveType->id)
+                ->where('department_id', $employee->department_id)
+                ->where('is_visible', true)
+                ->exists();
+    }
+
+    private function isOwnLeaveRequest(LeaveRequest $leave, $user): bool {
+        if ($user->employee && (int) $leave->employee_id === (int) $user->employee->id) {
+            return true;
+        }
+
+        $leave->loadMissing('employee');
+        return $leave->employee && (int) $leave->employee->user_id === (int) $user->id;
+    }
+
+    private function leaveRequestScope($user, bool $isHRAdmin, bool $isMgr) {
+        $query = LeaveRequest::query();
+
+        if ($isHRAdmin) {
+            return $query;
+        }
+
+        if ($isMgr && $user->employee) {
+            $teamIds = $user->employee->subordinates()->pluck('id');
+            $teamIds->push($user->employee->id);
+            return $query->whereIn('employee_id', $teamIds);
+        }
+
+        if ($user->employee) {
+            return $query->where('employee_id', $user->employee->id);
+        }
+
+        return $query->whereRaw('1 = 0');
+    }
+
+    private function actionableLeaveRequestScope($user, bool $isHRAdmin, bool $isMgr) {
+        $query = LeaveRequest::query();
+
+        if ($isHRAdmin) {
+            $query->whereIn('status', ['pending', 'manager_approved']);
+        } elseif ($isMgr && $user->employee) {
+            $query->where('status', 'pending')
+                    ->whereIn('employee_id', $user->employee->subordinates()->pluck('id'));
+        } else {
+            return $query->whereRaw('1 = 0');
+        }
+
+        if ($user->employee) {
+            $query->where('employee_id', '!=', $user->employee->id);
+        }
+
+        return $query->whereDoesntHave('employee', fn($eq) => $eq->where('user_id', $user->id));
+    }
+
     public function types() {
-        return response()->json(['types' => LeaveType::where('is_active', true)->get()]);
+        $user = auth()->user();
+        $isHRAdmin = rescue(fn() => $this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff']), false, false);
+
+        $query = LeaveType::where('is_active', true)
+                ->when(!$isHRAdmin, function ($q) use ($user) {
+                    $visibleIds = $this->visibleLeaveTypeIdsForDepartment($user->employee?->department_id);
+                    if (is_array($visibleIds)) {
+                        $q->whereIn('id', $visibleIds);
+                    }
+                });
+
+        return response()->json(['types' => $query->orderBy('name')->get()]);
     }
 
     public function storeType(Request $request) {
@@ -54,6 +159,9 @@ class LeaveController extends Controller {
             'requires_document' => 'boolean',
             'is_active' => 'boolean',
             'skip_manager_approval' => 'boolean',
+            'is_hourly' => 'boolean',
+            'monthly_hours_limit' => 'nullable|numeric|min:0.5|max:200',
+            'description' => 'nullable|string',
         ]);
         return response()->json(['type' => LeaveType::create($request->all())], 201);
     }
@@ -68,9 +176,64 @@ class LeaveController extends Controller {
             'requires_document' => 'boolean',
             'is_active' => 'boolean',
             'skip_manager_approval' => 'boolean', // sick leave policy
+            'is_hourly' => 'boolean',
+            'monthly_hours_limit' => 'nullable|numeric|min:0.5|max:200',
+            'description' => 'nullable|string',
         ]);
         $type->update($request->all());
         return response()->json(['type' => $type->fresh()]);
+    }
+
+    public function typeVisibility($id) {
+        $type = LeaveType::findOrFail($id);
+        $departments = \App\Models\Department::where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'code']);
+
+        $configured = DB::table('leave_type_department_visibility')
+                ->where('leave_type_id', $type->id)
+                ->get()
+                ->keyBy('department_id');
+
+        $visibility = $departments->map(function ($department) use ($configured, $type) {
+            $row = $configured->get($department->id);
+
+            return [
+                'department_id' => $department->id,
+                'department_name' => $department->name,
+                'department_code' => $department->code,
+                'leave_type_id' => $type->id,
+                'visibility_id' => $row?->id,
+                'is_visible' => $row ? (bool) $row->is_visible : true,
+            ];
+        });
+
+        return response()->json(['visibility' => $visibility]);
+    }
+
+    public function saveTypeVisibility(Request $request, $id) {
+        $type = LeaveType::findOrFail($id);
+        $request->validate([
+            'visibility' => 'required|array',
+            'visibility.*.department_id' => 'required|exists:departments,id',
+            'visibility.*.is_visible' => 'required|boolean',
+        ]);
+
+        foreach ($request->visibility as $row) {
+            DB::table('leave_type_department_visibility')->updateOrInsert(
+                    [
+                        'leave_type_id' => $type->id,
+                        'department_id' => $row['department_id'],
+                    ],
+                    [
+                        'is_visible' => (bool) $row['is_visible'],
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]
+            );
+        }
+
+        return response()->json(['message' => 'Department visibility saved successfully.']);
     }
 
     public function index(Request $request) {
@@ -89,7 +252,10 @@ class LeaveController extends Controller {
                 ->when(!$isHRAdmin, function ($q) use ($user, $isMgr) {
                     if ($isMgr && $user->employee) {
                         $teamIds = $user->employee->subordinates()->pluck('id');
-                        $q->whereIn('employee_id', $teamIds->push($user->employee->id));
+                        if (!request()->needs_action) {
+                            $teamIds->push($user->employee->id);
+                        }
+                        $q->whereIn('employee_id', $teamIds);
                     } elseif ($user->employee) {
                         $q->where('employee_id', $user->employee->id);
                     }
@@ -97,15 +263,30 @@ class LeaveController extends Controller {
                 ->when($request->needs_action, fn($q) => $q->whereIn('status',
                                 $isHRAdmin ? ['pending', 'manager_approved'] : ['pending']
                         ))
+                ->when($request->needs_action && $user->employee, fn($q) => $q->where('employee_id', '!=', $user->employee->id))
+                ->when($request->needs_action, fn($q) => $q->whereDoesntHave('employee', fn($eq) => $eq->where('user_id', $user->id)))
                 ->when(!$request->needs_action && $request->status, fn($q) => $q->where('status', $request->status))
                 ->when($request->employee_id, fn($q) => $q->where('employee_id', $request->employee_id))
                 ->orderBy('created_at', 'desc');
 
-        return response()->json($query->paginate((int) ($request->per_page ?? 15)));
+        $paginated = $query->paginate((int) ($request->per_page ?? 15));
+        $paginated->getCollection()->transform(function ($leave) use ($user) {
+            $isOwn = $this->isOwnLeaveRequest($leave, $user);
+            $leave->setAttribute('can_approve', !$isOwn);
+            $leave->setAttribute('can_reject', !$isOwn);
+            return $leave;
+        });
+
+        return response()->json($paginated);
     }
 
     public function store(Request $request) {
         $leaveType = LeaveType::findOrFail($request->leave_type_id);
+        $employee = auth()->user()->employee;
+
+        if (!$this->leaveTypeVisibleForEmployee($leaveType, $employee)) {
+            return response()->json(['message' => "{$leaveType->name} is not available for your department."], 403);
+        }
 
         // ── Business Excuse (hourly) ──────────────────────────────────────
         if ($leaveType->is_hourly) {
@@ -117,15 +298,17 @@ class LeaveController extends Controller {
                 'reason' => 'required|string|min:5',
             ]);
 
-            $employee = auth()->user()->employee->load('department');
+            $employee = $employee->load('department');
             $hours = $this->service->calculateExcuseHours(
                     $request->start_date,
                     $request->start_time,
                     $request->end_time
             );
 
-            $error = $this->service->validateBusinessExcuse(
-                    $employee, $request->start_date,
+            $error = $this->service->validateHourlyExcuse(
+                    $employee,
+                    $leaveType,
+                    $request->start_date,
                     $request->start_time, $request->end_time, $hours
             );
 
@@ -156,7 +339,7 @@ class LeaveController extends Controller {
             ]);
 
             $this->service->notifyManager($leaveRequest, 'submitted');
-            return response()->json(['message' => "Business excuse of {$hours}h submitted", 'request' => $leaveRequest->load('leaveType')], 201);
+            return response()->json(['message' => "{$leaveType->name} of {$hours}h submitted", 'request' => $leaveRequest->load('leaveType')], 201);
         }
 
         // ── Standard (daily) leave ────────────────────────────────────────
@@ -314,14 +497,26 @@ class LeaveController extends Controller {
     }
 
     public function approve(Request $request, $id) {
-        $leave = LeaveRequest::with('leaveType')->findOrFail($id);
+        $leave = LeaveRequest::with(['leaveType', 'employee'])->findOrFail($id);
         $user = auth()->user();
+
+        if ($this->isOwnLeaveRequest($leave, $user)) {
+            return response()->json(['message' => 'You cannot approve your own leave request.'], 403);
+        }
 
         // ── Stage 1: Manager approval ──────────────────────────────────
         if ($leave->status === 'pending') {
             // Only managers / HR / super_admin can approve at this stage
             if (!$this->hasAnyRoleDB(['department_manager', 'hr_manager', 'hr_staff', 'super_admin'])) {
                 return response()->json(['message' => 'Only a manager can approve at this stage.'], 403);
+            }
+
+            if (
+                $this->hasAnyRoleDB(['department_manager']) &&
+                !$this->hasAnyRoleDB(['hr_manager', 'hr_staff', 'super_admin']) &&
+                (!$user->employee || (int) $leave->employee?->manager_id !== (int) $user->employee->id)
+            ) {
+                return response()->json(['message' => 'Only the employee direct manager can approve this leave request.'], 403);
             }
 
             $leave->update([
@@ -382,8 +577,12 @@ class LeaveController extends Controller {
 
     public function reject(Request $request, $id) {
         $request->validate(['reason' => 'required|string']);
-        $leave = LeaveRequest::with('leaveType')->findOrFail($id);
+        $leave = LeaveRequest::with(['leaveType', 'employee'])->findOrFail($id);
         $user = auth()->user();
+
+        if ($this->isOwnLeaveRequest($leave, $user)) {
+            return response()->json(['message' => 'You cannot reject your own leave request.'], 403);
+        }
 
         // Track which stage the rejection occurred at
         $stage = match ($leave->status) {
@@ -392,9 +591,23 @@ class LeaveController extends Controller {
             default => 'unknown',
         };
         if ($leave->status === 'pending') {
+            if (!$this->hasAnyRoleDB(['department_manager', 'hr_manager', 'hr_staff', 'super_admin'])) {
+                return response()->json(['message' => 'Only a manager can reject at this stage.'], 403);
+            }
+
+            if (
+                $this->hasAnyRoleDB(['department_manager']) &&
+                !$this->hasAnyRoleDB(['hr_manager', 'hr_staff', 'super_admin']) &&
+                (!$user->employee || (int) $leave->employee?->manager_id !== (int) $user->employee->id)
+            ) {
+                return response()->json(['message' => 'Only the employee direct manager can reject this leave request.'], 403);
+            }
 
             $action = 'manager_rejected';
         } elseif ($leave->status === 'manager_approved') {
+            if (!$this->hasAnyRoleDB(['hr_manager', 'hr_staff', 'super_admin'])) {
+                return response()->json(['message' => 'Only HR can reject at this stage.'], 403);
+            }
 
             $action = 'hr_rejected';
         } else {
@@ -444,12 +657,36 @@ class LeaveController extends Controller {
     }
 
     public function calendar(Request $request) {
-        $approved = LeaveRequest::with(['employee', 'leaveType'])
+        $user = auth()->user();
+        $employee = $user->employee;
+        $isHRAdmin = $this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff']);
+
+        if (!$isHRAdmin && (!$employee || !$employee->department_id)) {
+            return response()->json([
+                'leaves' => [],
+                'department' => null,
+                'scope' => 'department',
+            ]);
+        }
+
+        $approved = LeaveRequest::with(['employee.department', 'leaveType'])
                 ->where('status', 'approved')
                 ->when($request->month, fn($q) => $q->whereMonth('start_date', $request->month))
                 ->when($request->year, fn($q) => $q->whereYear('start_date', $request->year))
+                ->when(!$isHRAdmin, fn($q) =>
+                    $q->whereHas('employee', fn($eq) => $eq->where('department_id', $employee->department_id))
+                )
+                ->when($isHRAdmin && $request->department_id, fn($q) =>
+                    $q->whereHas('employee', fn($eq) => $eq->where('department_id', $request->department_id))
+                )
+                ->orderBy('start_date')
                 ->get();
-        return response()->json(['leaves' => $approved]);
+
+        return response()->json([
+            'leaves' => $approved,
+            'department' => $employee?->department,
+            'scope' => $isHRAdmin && !$request->department_id ? 'all' : 'department',
+        ]);
     }
 
     public function update(Request $request, $id) {
@@ -475,23 +712,32 @@ class LeaveController extends Controller {
 
     public function stats() {
         $user = auth()->user();
-        $isAdmin = rescue(fn() => $this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff']), true, false);
+        $userRoles = rescue(fn() => $this->userRoles(), [], false);
+        $isAdmin = (bool) array_intersect($userRoles, ['super_admin', 'hr_manager', 'hr_staff']);
+        $isMgr = in_array('department_manager', $userRoles);
         $today = now()->toDateString();
 
-        $baseQ = LeaveRequest::query();
-        if (!$isAdmin && $user->employee) {
-            $baseQ->where('employee_id', $user->employee->id);
-        }
+        $baseQ = $this->leaveRequestScope($user, $isAdmin, $isMgr);
+        $needsActionCount = $this->actionableLeaveRequestScope($user, $isAdmin, $isMgr)->count();
+        $awaitingManagerCount = (clone $baseQ)->where('status', 'pending')->count();
+        $awaitingHrCount = (clone $baseQ)->where('status', 'manager_approved')->count();
+        $pendingCount = $awaitingManagerCount + $awaitingHrCount;
+        $approvedCount = (clone $baseQ)->where('status', 'approved')->count();
+        $rejectedCount = (clone $baseQ)->where('status', 'rejected')->count();
 
-        $pendingCount = (clone $baseQ)->whereIn('status', ['pending', 'manager_approved'])->count();
         $approvedMonth = (clone $baseQ)->where('status', 'approved')
                         ->whereMonth('start_date', now()->month)->whereYear('start_date', now()->year)->count();
-        $onLeaveToday = LeaveRequest::where('status', 'approved')
+        $onLeaveToday = (clone $baseQ)->where('status', 'approved')
                         ->where('start_date', '<=', $today)->where('end_date', '>=', $today)->count();
         $cancelledCount = (clone $baseQ)->where('status', 'cancelled')->count();
 
         return response()->json([
                     'pending_count' => $pendingCount,
+                    'needs_action_count' => $needsActionCount,
+                    'awaiting_manager_count' => $awaitingManagerCount,
+                    'awaiting_hr_count' => $awaitingHrCount,
+                    'approved_count' => $approvedCount,
+                    'rejected_count' => $rejectedCount,
                     'approved_month' => $approvedMonth,
                     'on_leave_today' => $onLeaveToday,
                     'cancelled_count' => $cancelledCount,
@@ -542,11 +788,12 @@ class LeaveController extends Controller {
         $empId = $request->employee_id ?? $user->employee?->id;
         $year = $request->year ?? now()->year;
         $month = $request->month ?? now()->month;
+        $leaveTypeId = $request->leave_type_id ? (int) $request->leave_type_id : null;
 
         if (!$empId)
             return response()->json(['message' => 'Employee not found'], 404);
 
-        return response()->json($this->service->monthlyExcuseUsage($empId, $year, $month));
+        return response()->json($this->service->monthlyExcuseUsage($empId, $year, $month, $leaveTypeId));
     }
 
     
