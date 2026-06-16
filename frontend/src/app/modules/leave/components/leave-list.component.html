@@ -67,8 +67,8 @@
         <button *ngFor="let t of statusTabs" class="stab" [class.active]="activeStatus===t.id"
           (click)="switchStatus(t.id)">
           {{ t.label }}
-          <span class="stab-badge" *ngIf="t.id === 'needs_action' && stats.pending_count > 0">
-            {{ stats.pending_count }}
+          <span class="stab-badge" *ngIf="statusCount(t.id) > 0">
+            {{ statusCount(t.id) }}
           </span>
         </button>
       </div>
@@ -227,9 +227,21 @@
       <button class="row-btn" (click)="prevMonth()"><mat-icon>chevron_left</mat-icon></button>
       <h2 class="cal-month-title">{{ calMonthLabel }}</h2>
       <button class="row-btn" (click)="nextMonth()"><mat-icon>chevron_right</mat-icon></button>
-      <button class="btn-outline" style="margin-left:auto;font-size:12px" (click)="showHolidayForm=true">
+      <button class="btn-outline"   *ngIf="isHR" style="margin-left:auto;font-size:12px" (click)="showHolidayForm=true">
         <mat-icon>add</mat-icon> Add Holiday
       </button>
+    </div>
+
+    <div class="calendar-summary">
+      <div>
+        <div class="calendar-summary-title">{{ calendarScopeLabel }}</div>
+        <div class="calendar-summary-sub">Only fully approved leave requests are shown.</div>
+      </div>
+      <div class="calendar-summary-count">
+        <mat-spinner *ngIf="loadingCalendar" diameter="18"></mat-spinner>
+        <span *ngIf="!loadingCalendar">{{ approvedCalendarCount }}</span>
+        <small>approved</small>
+      </div>
     </div>
 
     <!-- Calendar grid -->
@@ -243,7 +255,9 @@
           [class.today]="cell.isToday"
           [class.weekend]="cell.isWeekend"
           [class.has-holiday]="cell.holiday"
-          [class.has-leaves]="cell.leaves?.length > 0">
+          [class.has-leaves]="cell.leaves?.length > 0"
+          [class.selected]="selectedCalendarCell?.dateStr === cell.dateStr"
+          (click)="selectCalendarDay(cell)">
 
           <div class="cal-date" [class.today-num]="cell.isToday">{{ cell.d }}</div>
 
@@ -255,13 +269,57 @@
             <div *ngFor="let l of cell.leaves.slice(0,2)" class="cal-leave-chip"
               [style.background]="leaveTypeColor(l.leave_type?.name)+'33'"
               [style.color]="leaveTypeColor(l.leave_type?.name)"
+              [matTooltip]="(l.employee?.first_name || '') + ' ' + (l.employee?.last_name || '') + ' - ' + (l.leave_type?.name || 'Leave')"
               (click)="viewRequest(l); $event.stopPropagation()">
-              {{ l.employee?.first_name }}
+              {{ l.employee?.first_name }} {{ l.employee?.last_name?.charAt(0) }}.
             </div>
-            <div class="cal-more" *ngIf="cell.leaves.length > 2">+{{ cell.leaves.length - 2 }}</div>
+            <button type="button" class="cal-more" *ngIf="cell.leaves.length > 2"
+              (click)="selectCalendarDay(cell); $event.stopPropagation()">
+              +{{ cell.leaves.length - 2 }} more
+            </button>
           </div>
         </div>
       </ng-container>
+    </div>
+
+    <div class="data-card calendar-day-panel" *ngIf="selectedCalendarLeaves.length">
+      <div class="card-hdr">
+        <span class="card-title">
+          <mat-icon>event_available</mat-icon>
+          Approved leaves on {{ selectedCalendarCell?.dateStr | date:'EEE, dd MMM yyyy' }}
+        </span>
+        <span class="status-badge badge-green">{{ selectedCalendarLeaves.length }} approved</span>
+      </div>
+      <div class="calendar-day-list">
+        <button type="button" class="calendar-day-row" *ngFor="let l of selectedCalendarLeaves" (click)="viewRequest(l)">
+          <div class="emp-cell">
+            <div class="emp-avatar" [style.background]="avatarColor(l.employee?.first_name)">
+              {{ (l.employee?.first_name||'?')[0] }}{{ (l.employee?.last_name||'')[0] }}
+            </div>
+            <div>
+              <div class="name-main">{{ l.employee?.first_name }} {{ l.employee?.last_name }}</div>
+              <div class="name-sub">{{ l.employee?.department?.name || calendarMeta?.department?.name || '-' }}</div>
+            </div>
+          </div>
+          <span class="type-pill"
+            [style.background]="leaveTypeColor(l.leave_type?.name)+'22'"
+            [style.color]="leaveTypeColor(l.leave_type?.name)">
+            {{ l.leave_type?.name || 'Leave' }}
+          </span>
+          <div class="date-range">
+            <span>{{ l.start_date | date:'dd MMM' }}</span>
+            <mat-icon class="arrow-ico">arrow_forward</mat-icon>
+            <span>{{ l.end_date | date:'dd MMM yyyy' }}</span>
+          </div>
+          <span class="days-badge" *ngIf="!l.leave_type?.is_hourly">{{ l.total_days }} d</span>
+          <span class="hours-badge" *ngIf="l.leave_type?.is_hourly"><mat-icon>timer</mat-icon>{{ l.total_hours }}h</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="empty-state calendar-empty" *ngIf="!loadingCalendar && !approvedCalendarCount">
+      <mat-icon>event_available</mat-icon>
+      <span>No approved leave in this calendar scope for {{ calMonthLabel }}.</span>
     </div>
 
     <!-- Holidays list -->
@@ -415,6 +473,9 @@
             <div class="row-actions">
               <button class="row-btn" matTooltip="Edit Type" (click)="openTypeForm(t)">
                 <mat-icon>edit</mat-icon>
+              </button>
+              <button class="row-btn" matTooltip="Configure Department Visibility" (click)="openVisibilityPanel(t)">
+                <mat-icon style="color:var(--success)">visibility</mat-icon>
               </button>
               <button class="row-btn limits-btn" *ngIf="t.is_hourly"
                 matTooltip="Configure Department Limits" (click)="openLimitsPanel(t)">
@@ -572,10 +633,10 @@
 
     <div class="drawer-footer">
       <button class="btn-outline" (click)="showDetail=false">Close</button>
-      <button class="row-btn" matTooltip="Approve" *ngIf="selectedRequest.status==='pending'" (click)="approve(selectedRequest)">
+      <button class="row-btn" [matTooltip]="approveLabel(selectedRequest)" *ngIf="canApprove(selectedRequest)" (click)="approve(selectedRequest)">
         <mat-icon style="color:var(--success);font-size:22px">check_circle</mat-icon>
       </button>
-      <button class="btn-outline" style="color:var(--danger)" *ngIf="selectedRequest.status==='pending'" (click)="openReject(selectedRequest)">
+      <button class="btn-outline" style="color:var(--danger)" *ngIf="canReject(selectedRequest)" (click)="openReject(selectedRequest)">
         <mat-icon>cancel</mat-icon> Reject
       </button>
       <button class="btn-outline" style="color:var(--text3)"  *ngIf="canCancel(selectedRequest)"  (click)="cancel(selectedRequest)">
@@ -604,20 +665,20 @@
         </option>
       </select>
       <!-- Daily balance hint -->
-      <div class="balance-hint" *ngIf="selectedTypeBalance() && !isBusinessExcuse">
+      <div class="balance-hint" *ngIf="selectedTypeBalance() && !isHourlyExcuse">
         <mat-icon>account_balance_wallet</mat-icon>
         Available: <strong>{{ selectedTypeBalance().remaining_days }}</strong> of {{ selectedTypeBalance().allocated_days }} days
       </div>
     </div>
 
-    <!-- ── BUSINESS EXCUSE FIELDS ────────────────────────────────────────── -->
-    <ng-container *ngIf="isBusinessExcuse">
+    <!-- ── HOURLY EXCUSE FIELDS ──────────────────────────────────────────── -->
+    <ng-container *ngIf="isHourlyExcuse">
 
       <!-- Monthly usage banner -->
       <div class="excuse-usage-card" *ngIf="excuseUsage">
         <div class="eu-header">
           <mat-icon>timer</mat-icon>
-          <span>Business Excuse Usage — {{ excuseUsage.month }}</span>
+          <span>{{ excuseUsage.leave_type || selectedType?.name }} Usage — {{ excuseUsage.month }}</span>
         </div>
         <div class="eu-body">
           <div class="eu-stat">
@@ -628,17 +689,17 @@
             <div class="eu-divider"></div>
             <div class="eu-stat">
               <span class="eu-val" style="color:var(--success)">{{ excuseUsage.remaining_hours }}h</span>
-              <span class="eu-lbl">Remaining of 12h</span>
+              <span class="eu-lbl">Remaining of {{ excuseUsage.limit_hours }}h</span>
             </div>
             <div class="eu-divider"></div>
             <div class="eu-stat">
-              <span class="eu-val">12h</span>
+              <span class="eu-val">{{ excuseUsage.limit_hours }}h</span>
               <span class="eu-lbl">Monthly limit</span>
             </div>
             <!-- Progress bar -->
             <div class="eu-bar-wrap">
               <div class="eu-bar-fill"
-                [style.width.%]="(excuseUsage.used_hours / 12) * 100"
+                [style.width.%]="excuseUsagePercent()"
                 [style.background]="excuseUsage.remaining_hours <= 2 ? 'var(--danger)' : 'var(--accent)'">
               </div>
             </div>
@@ -647,7 +708,7 @@
             <div class="eu-divider"></div>
             <div class="eu-stat">
               <span class="eu-val" style="color:var(--accent)">∞</span>
-              <span class="eu-lbl">No monthly limit (Sales)</span>
+              <span class="eu-lbl">No monthly limit</span>
             </div>
           </ng-container>
         </div>
@@ -691,7 +752,7 @@
     </ng-container>
 
     <!-- ── STANDARD LEAVE FIELDS ─────────────────────────────────────────── -->
-    <ng-container *ngIf="!isBusinessExcuse">
+    <ng-container *ngIf="!isHourlyExcuse">
 
       <!-- Half-day toggle -->
       <div class="half-day-row">
@@ -740,7 +801,7 @@
 
 
     <!-- Annual Leave — Exit Re-entry & Ticket (only for annual leave type) -->
-    <div class="annual-options" *ngIf="isAnnualLeave && !isBusinessExcuse && !form.is_half_day">
+    <div class="annual-options" *ngIf="isAnnualLeave && !isHourlyExcuse && !form.is_half_day">
       <div class="ao-header">
         <mat-icon>flight_takeoff</mat-icon>
         Annual Leave Requirements
@@ -800,9 +861,9 @@
     <div class="field-group">
       <label class="field-label">Reason <span class="req">*</span></label>
       <textarea class="field-textarea" rows="3" [(ngModel)]="form.reason"
-        [placeholder]="isBusinessExcuse ? 'Brief description of business purpose…' : 'Provide a reason (min 10 characters)…'">
+        [placeholder]="isHourlyExcuse ? 'Brief description of the excuse...' : 'Provide a reason (min 10 characters)...'">
       </textarea>
-      <div class="char-count" [class.warn]="form.reason.length > 0 && form.reason.length < (isBusinessExcuse ? 5 : 10)">
+      <div class="char-count" [class.warn]="form.reason.length > 0 && form.reason.length < (isHourlyExcuse ? 5 : 10)">
         {{ form.reason.length }} chars
       </div>
     </div>
@@ -967,6 +1028,86 @@
   </div>
 </div>
 
+<!-- DEPARTMENT VISIBILITY PANEL -->
+<div class="drawer-backdrop" *ngIf="showVisibilityPanel" (click)="showVisibilityPanel=false"></div>
+<div class="detail-drawer limits-drawer" [class.open]="showVisibilityPanel">
+  <div class="drawer-hdr">
+    <div class="drawer-hdr-left">
+      <div class="stat-icon" style="background:rgba(16,185,129,.12);width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <mat-icon style="color:var(--success)">visibility</mat-icon>
+      </div>
+      <div>
+        <div class="drawer-name">Department Visibility</div>
+        <div class="drawer-sub" *ngIf="visibilityLeaveType">
+          {{ visibilityLeaveType.name }} &nbsp;·&nbsp; Choose departments that can apply
+        </div>
+      </div>
+    </div>
+    <button class="row-btn" (click)="showVisibilityPanel=false"><mat-icon>close</mat-icon></button>
+  </div>
+
+  <div class="drawer-body">
+    <div *ngIf="visibilityLoading" style="display:flex;justify-content:center;padding:32px">
+      <mat-spinner diameter="28"></mat-spinner>
+    </div>
+
+    <ng-container *ngIf="!visibilityLoading">
+      <div class="limits-help">
+        <mat-icon>info_outline</mat-icon>
+        <span>Departments set to <strong>Visible</strong> can choose this leave type while applying.
+          Departments set to <strong>Hidden</strong> will not see it in the apply form.</span>
+      </div>
+
+      <div class="limit-rows">
+        <div class="limit-row" *ngFor="let row of deptVisibility">
+          <div class="limit-dept">
+            <div class="code-chip">{{ row.department_code }}</div>
+            <div>
+              <div class="name-main">{{ row.department_name }}</div>
+              <div class="name-sub" *ngIf="row.is_visible" style="color:var(--success)">Visible during leave apply</div>
+              <div class="name-sub" *ngIf="!row.is_visible" style="color:var(--danger)">Hidden during leave apply</div>
+            </div>
+          </div>
+
+          <div class="limit-controls">
+            <div class="limit-toggle visibility-toggle" [class.is-limited]="row.is_visible" (click)="toggleDeptVisibility(row)">
+              <div class="toggle-knob"></div>
+              <span class="toggle-label">{{ row.is_visible ? 'Visible' : 'Hidden' }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="limits-summary">
+        <div class="ls-item">
+          <span class="ls-val" style="color:var(--success)">{{ visibleDepartmentCount() }}</span>
+          <span class="ls-lbl">Departments visible</span>
+        </div>
+        <div class="ls-sep"></div>
+        <div class="ls-item">
+          <span class="ls-val" style="color:var(--danger)">{{ hiddenDepartmentCount() }}</span>
+          <span class="ls-lbl">Departments hidden</span>
+        </div>
+      </div>
+
+      <div class="form-err" *ngIf="visibilityError">
+        <mat-icon>error_outline</mat-icon> {{ visibilityError }}
+      </div>
+    </ng-container>
+  </div>
+
+  <div class="drawer-footer">
+    <button class="btn-outline" (click)="showVisibilityPanel=false">Close</button>
+    <div *ngIf="visibilityDirty" class="dirty-badge">
+      <mat-icon>edit</mat-icon> Unsaved changes
+    </div>
+    <button class="btn-primary" (click)="saveVisibility()" [disabled]="visibilitySaving || !visibilityDirty">
+      <mat-icon>{{ visibilitySaving ? 'hourglass_empty' : 'save' }}</mat-icon>
+      {{ visibilitySaving ? 'Saving...' : 'Save Visibility' }}
+    </button>
+  </div>
+</div>
+
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- DEPARTMENT LIMITS PANEL (slide-in drawer)                               -->
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
@@ -1001,7 +1142,7 @@
       <div class="limits-help">
         <mat-icon>info_outline</mat-icon>
         <span>Toggle a department to <strong>Limited</strong> and set its monthly cap.
-          Set to <strong>Unlimited</strong> to remove any cap (e.g. Sales team).</span>
+          Set to <strong>Unlimited</strong> to make that department an exception.</span>
       </div>
 
       <!-- Department rows -->

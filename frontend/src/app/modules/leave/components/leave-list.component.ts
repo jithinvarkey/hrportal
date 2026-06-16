@@ -23,6 +23,7 @@ export class LeaveListComponent implements OnInit {
   allBalances: any[] = [];
   stats: any = {};
   calendarEvents: any[] = [];
+  calendarMeta: any = { department: null, scope: 'department' };
   holidays: any[] = [];
   pagination: any = null;
   balancePagination: any = null;
@@ -33,6 +34,7 @@ export class LeaveListComponent implements OnInit {
   showDetail = false;
   showTypeForm = false;
   showHolidayForm = false;
+  showVisibilityPanel = false;
 
   selectedRequest: any = null;
   rejectTarget: any = null;
@@ -48,6 +50,8 @@ export class LeaveListComponent implements OnInit {
   calYear = new Date().getFullYear();
   calMonth = new Date().getMonth(); // 0-based
   calDays: any[] = [];
+  loadingCalendar = false;
+  selectedCalendarCell: any = null;
 
   // Leave type form
   typeForm: any = { name: '', code: '', days_allowed: 0, is_paid: true, carry_forward: false, max_carry_forward: 0, requires_document: false, description: '' };
@@ -74,16 +78,26 @@ export class LeaveListComponent implements OnInit {
   limitsError = '';
   limitsDirty = false;
 
+  // Department visibility panel
+  visibilityLeaveType: any = null;
+  deptVisibility: any[] = [];
+  visibilityLoading = false;
+  visibilitySaving = false;
+  visibilityError = '';
+  visibilityDirty = false;
+
   // Stat cards
   statItems: any[] = [];
-  excuseUsage: any = null;   // monthly business excuse usage
+  excuseUsage: any = null;   // monthly hourly excuse usage
   loadingUsage = false;
 
   // Table columns
   displayedColumns = ['employee', 'type', 'dates', 'days', 'reason', 'status', 'actions'];
   isHR = false;
   isMgr = false;
+  userId = '';
   employeeId = '';
+  currentUserName = '';
   balanceColumns = ['employee', 'leave_type', 'allocated', 'used', 'pending', 'remaining', 'bar'];
   typeColumns = ['name', 'code', 'days', 'paid', 'carry', 'actions'];
 
@@ -118,7 +132,10 @@ export class LeaveListComponent implements OnInit {
     // Role detection
     this.isHR = this.auth.isHRRole();
     this.isMgr = this.auth.isManagerRole();
-    this.employeeId = this.auth.getUser()?.employee?.id ?? null;
+    const user = this.auth.getUser();
+    this.userId = user?.id ?? '';
+    this.employeeId = user?.employee?.id ?? user?.employee_id ?? null;
+    this.currentUserName = (user?.employee?.full_name || user?.name || '').trim().toLowerCase();
 
     this.http.get<any>('/api/v1/leave/stats').subscribe({
       next: r => {
@@ -153,6 +170,18 @@ export class LeaveListComponent implements OnInit {
   }
 
   switchStatus(id: string) { this.activeStatus = id; this.currentPage = 1; this.load(); }
+
+  statusCount(statusId: string): number {
+    const counts: Record<string, number> = {
+      needs_action: this.stats?.needs_action_count || 0,
+      pending: this.stats?.awaiting_manager_count || 0,
+      manager_approved: this.stats?.awaiting_hr_count || 0,
+      approved: this.stats?.approved_count || 0,
+      rejected: this.stats?.rejected_count || 0,
+      cancelled: this.stats?.cancelled_count || 0,
+    };
+    return counts[statusId] || 0;
+  }
 
   viewRequest(r: any) { this.selectedRequest = r; this.showDetail = true; }
 
@@ -189,7 +218,7 @@ export class LeaveListComponent implements OnInit {
   }
 
   submitRequest() {
-    const isExcuse = this.isBusinessExcuse;
+    const isExcuse = this.isHourlyExcuse;
     if (!this.form.leave_type_id || !this.form.start_date || !this.form.reason) {
       this.formError = 'All fields are required.'; return;
     }
@@ -284,9 +313,20 @@ export class LeaveListComponent implements OnInit {
 
   // ── Calendar ──────────────────────────────────────────────────────────────
   loadCalendar() {
-    const month = String(this.calMonth + 1).padStart(2, '0');
+    this.loadingCalendar = true;
+    this.selectedCalendarCell = null;
     this.http.get<any>('/api/v1/leave/calendar', { params: { month: this.calMonth + 1, year: this.calYear } }).subscribe({
-      next: r => { this.calendarEvents = r?.leaves || []; this.buildCalendar(); }
+      next: r => {
+        this.calendarEvents = r?.leaves || [];
+        this.calendarMeta = { department: r?.department || null, scope: r?.scope || 'department' };
+        this.loadingCalendar = false;
+        this.buildCalendar();
+      },
+      error: () => {
+        this.calendarEvents = [];
+        this.loadingCalendar = false;
+        this.buildCalendar();
+      }
     });
     this.http.get<any>('/api/v1/leave/holidays', { params: { year: this.calYear } }).subscribe({
       next: r => { this.holidays = r?.holidays || []; this.buildCalendar(); }
@@ -316,6 +356,7 @@ export class LeaveListComponent implements OnInit {
 
   prevMonth() { if (this.calMonth === 0) { this.calMonth = 11; this.calYear--; } else this.calMonth--; this.loadCalendar(); }
   nextMonth() { if (this.calMonth === 11) { this.calMonth = 0; this.calYear++; } else this.calMonth++; this.loadCalendar(); }
+  selectCalendarDay(cell: any) { if (cell?.leaves?.length) this.selectedCalendarCell = cell; }
 
   // ── Tab switch ────────────────────────────────────────────────────────────
   switchTab(id: string) {
@@ -346,8 +387,12 @@ export class LeaveListComponent implements OnInit {
     return this.leaveTypes.find(t => t.id == this.form.leave_type_id) || null;
   }
 
-  get isBusinessExcuse(): boolean {
+  get isHourlyExcuse(): boolean {
     return this.selectedType?.is_hourly === true;
+  }
+
+  get isBusinessExcuse(): boolean {
+    return this.isHourlyExcuse;
   }
 
   get isAnnualLeave(): boolean {
@@ -389,7 +434,7 @@ export class LeaveListComponent implements OnInit {
   }
 
   onLeaveTypeChange() {
-    if (this.isBusinessExcuse) {
+    if (this.isHourlyExcuse) {
       this.loadExcuseUsage();
     } else {
       this.excuseUsage = null;
@@ -403,7 +448,7 @@ export class LeaveListComponent implements OnInit {
     this.loadingUsage = true;
     const now = new Date();
     this.http.get<any>('/api/v1/leave/excuse-usage', {
-      params: { employee_id: empId, year: now.getFullYear(), month: now.getMonth() + 1 }
+      params: { employee_id: empId, leave_type_id: this.form.leave_type_id, year: now.getFullYear(), month: now.getMonth() + 1 }
     }).subscribe({
       next: r => { this.excuseUsage = r; this.loadingUsage = false; },
       error: () => this.loadingUsage = false
@@ -423,6 +468,11 @@ export class LeaveListComponent implements OnInit {
       cur.setDate(cur.getDate() + 1);
     }
     return count;
+  }
+
+  excuseUsagePercent(): number {
+    if (!this.excuseUsage || this.excuseUsage.is_unlimited || !this.excuseUsage.limit_hours) return 0;
+    return Math.min(100, (this.excuseUsage.used_hours / this.excuseUsage.limit_hours) * 100);
   }
 
   balancePct(b: any): number {
@@ -452,13 +502,43 @@ export class LeaveListComponent implements OnInit {
 
   get calWeekDays() { return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; }
 
+  get calendarScopeLabel(): string {
+    if (this.calendarMeta?.scope === 'all') return 'All approved employee leaves';
+    return this.calendarMeta?.department?.name
+      ? `${this.calendarMeta.department.name} approved leaves`
+      : 'Department approved leaves';
+  }
+
+  get approvedCalendarCount(): number {
+    return this.calendarEvents.length;
+  }
+
+  get selectedCalendarLeaves(): any[] {
+    return this.selectedCalendarCell?.leaves || [];
+  }
+
   canApprove(r: any): boolean {
+    if (r?.can_approve === false) return false;
+    if (this.isOwnRequest(r)) return false;
+    if (r.status === 'pending' && this.isMgr && !this.isHR) {
+      return !!this.employeeId && String(r?.employee?.manager_id) === String(this.employeeId);
+    }
     if (r.status === 'pending') return this.isMgr;
     if (r.status === 'manager_approved') return this.isHR;
     return false;
   }
 
-  canReject(r: any): boolean { return this.canApprove(r); }
+  canReject(r: any): boolean {
+    if (r?.can_reject === false) return false;
+    return this.canApprove(r);
+  }
+
+  isOwnRequest(r: any): boolean {
+    const requestEmployeeName = `${r?.employee?.first_name || ''} ${r?.employee?.last_name || ''}`.trim().toLowerCase();
+    return String(r?.employee_id) === String(this.employeeId)
+      || String(r?.employee?.user_id) === String(this.userId)
+      || (!!requestEmployeeName && requestEmployeeName === this.currentUserName);
+  }
 
   canCancel(r: any): boolean {
 
@@ -583,6 +663,61 @@ export class LeaveListComponent implements OnInit {
       error: err => {
         this.limitsSaving = false;
         this.limitsError = err?.error?.message || 'Save failed.';
+      }
+    });
+  }
+
+  // ── Department Visibility Panel ───────────────────────────────────────
+  openVisibilityPanel(t: any) {
+    this.visibilityLeaveType = t;
+    this.showVisibilityPanel = true;
+    this.visibilityError = '';
+    this.visibilityDirty = false;
+    this.loadDeptVisibility(t.id);
+  }
+
+  loadDeptVisibility(leaveTypeId: number) {
+    this.visibilityLoading = true;
+    this.http.get<any>(`/api/v1/leave/types/${leaveTypeId}/visibility`).subscribe({
+      next: r => {
+        this.deptVisibility = r?.visibility || [];
+        this.visibilityLoading = false;
+      },
+      error: () => this.visibilityLoading = false
+    });
+  }
+
+  toggleDeptVisibility(row: any) {
+    row.is_visible = !row.is_visible;
+    this.visibilityDirty = true;
+  }
+
+  visibleDepartmentCount(): number {
+    return this.deptVisibility.filter(r => r.is_visible).length;
+  }
+
+  hiddenDepartmentCount(): number {
+    return this.deptVisibility.length - this.visibleDepartmentCount();
+  }
+
+  saveVisibility() {
+    this.visibilitySaving = true;
+    this.visibilityError = '';
+    this.http.post(`/api/v1/leave/types/${this.visibilityLeaveType.id}/visibility`, {
+      visibility: this.deptVisibility.map(r => ({
+        department_id: r.department_id,
+        is_visible: r.is_visible,
+      }))
+    }).subscribe({
+      next: () => {
+        this.visibilitySaving = false;
+        this.visibilityDirty = false;
+        this.visibilityError = '';
+        this.loadTypes();
+      },
+      error: err => {
+        this.visibilitySaving = false;
+        this.visibilityError = err?.error?.message || 'Save failed.';
       }
     });
   }

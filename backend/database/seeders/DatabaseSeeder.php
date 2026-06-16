@@ -192,6 +192,13 @@ class DatabaseSeeder extends Seeder {
                 'description' => 'Hourly excuse for business purposes. Sales team: unlimited. Others: 12h/month max.',
                 'is_active' => true,
             ],
+            [
+                'name' => 'Personal Excuse', 'code' => 'PE', 'days_allowed' => 0,
+                'is_paid' => true, 'carry_forward' => false, 'max_carry_forward' => 0,
+                'is_hourly' => true, 'monthly_hours_limit' => 12.0,
+                'description' => 'Hourly personal excuse with department-wise monthly limits. Default cap: 12h/month per employee.',
+                'is_active' => true,
+            ],
             ['name' => 'Maternity Leave', 'code' => 'ML',  'days_allowed' => 90, 'is_paid' => true,  'carry_forward' => false, 'max_carry_forward' => 0],
             ['name' => 'Paternity Leave', 'code' => 'PL',  'days_allowed' => 5,  'is_paid' => true,  'carry_forward' => false, 'max_carry_forward' => 0],
             ['name' => 'Unpaid Leave',    'code' => 'UL',  'days_allowed' => 30, 'is_paid' => false, 'carry_forward' => false, 'max_carry_forward' => 0],

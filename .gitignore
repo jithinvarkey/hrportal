@@ -6,3 +6,5 @@ backend/.env.example
 /frontend/.angular/cache
 /backend/nbproject/private/
 /backend/nbproject
+frontend/codex-ng-serve.out.log
+/backend/bootstrap/cache
