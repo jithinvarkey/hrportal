@@ -373,6 +373,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/{id}/manager-approve',        [RequestManagementController::class, 'managerApprove'])->whereNumber('id');
             Route::post('/{id}/assign',                 [RequestManagementController::class, 'assign'])->whereNumber('id');
             Route::post('/{id}/complete',               [RequestManagementController::class, 'complete'])->whereNumber('id');
+            Route::get('/{id}/completion-file',         [RequestManagementController::class, 'downloadCompletionFile'])->whereNumber('id');
             Route::post('/{id}/reject',                 [RequestManagementController::class, 'reject'])->whereNumber('id');
             Route::post('/{id}/cancel',                 [RequestManagementController::class, 'cancel'])->whereNumber('id');
             Route::post('/{id}/comments',               [RequestManagementController::class, 'addComment'])->whereNumber('id');

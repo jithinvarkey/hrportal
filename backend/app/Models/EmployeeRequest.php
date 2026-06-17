@@ -1,9 +1,11 @@
 <?php
 namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class EmployeeRequest extends Model {
     protected $table = 'employee_requests';
+    protected $appends = ['has_completion_file'];
     protected $fillable = [
         'reference','employee_id','request_type_id','status','details','hr_notes',
         'rejection_reason','required_by','copies_needed','attachment_path',
@@ -23,4 +25,9 @@ class EmployeeRequest extends Model {
     public function completedBy()     { return $this->belongsTo(User::class,'completed_by'); }
     public function rejectedBy()      { return $this->belongsTo(User::class,'rejected_by'); }
     public function comments()        { return $this->hasMany(RequestComment::class,'request_id')->orderBy('created_at'); }
+
+    public function getHasCompletionFileAttribute(): bool
+    {
+        return (bool) $this->completion_file && Storage::disk('public')->exists($this->completion_file);
+    }
 }

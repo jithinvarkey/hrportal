@@ -3,15 +3,19 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Mail\RequestStatusMail;
 use App\Models\RequestType;
 use App\Models\EmployeeRequest;
 use App\Models\RequestComment;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Http\JsonResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class RequestManagementController extends Controller {
 
@@ -353,6 +357,11 @@ class RequestManagementController extends Controller {
             'manager_approved_at' => now(),
             'manager_notes' => $request->notes,
         ]);
+        $this->sendStatusUpdateEmails(
+            $req->fresh(['employee', 'requestType', 'assignedTo']),
+            'pending',
+            'The manager approved the request and it has been forwarded for processing.'
+        );
         return response()->json(['message' => 'Approved — forwarded to HR.', 'request' => $req->fresh()]);
     }
 
@@ -388,6 +397,12 @@ class RequestManagementController extends Controller {
             'comment' => 'Request assigned to ' . $label . ' and is now in progress.',
             'is_internal' => true,
         ]);
+
+        $this->sendStatusUpdateEmails(
+            $req->fresh(['employee', 'requestType', 'assignedTo']),
+            'in_progress',
+            'The request has been assigned to ' . ($assignee?->name ?: 'the handling team') . '.'
+        );
 
         return response()->json(['message' => 'Request assigned.', 'request' => $req->fresh(['assignedTo'])]);
     }
@@ -437,7 +452,31 @@ class RequestManagementController extends Controller {
             ]);
         }
 
+        $this->sendStatusUpdateEmails(
+            $req->fresh(['employee', 'requestType', 'assignedTo']),
+            'completed',
+            $request->completion_notes
+        );
+
         return response()->json(['message' => 'Request marked as completed.']);
+    }
+
+    public function downloadCompletionFile($id): StreamedResponse|JsonResponse
+    {
+        $req = EmployeeRequest::with(['employee', 'requestType'])->findOrFail($id);
+
+        if (!$this->canAccessRequestFile($req)) {
+            return response()->json(['message' => 'You are not allowed to download this file.'], 403);
+        }
+
+        if (!$req->completion_file || !Storage::disk('public')->exists($req->completion_file)) {
+            return response()->json(['message' => 'Completion file not found.'], 404);
+        }
+
+        $extension = pathinfo($req->completion_file, PATHINFO_EXTENSION);
+        $filename = $req->reference . '-completion' . ($extension ? '.' . $extension : '');
+
+        return Storage::disk('public')->download($req->completion_file, $filename);
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -456,6 +495,11 @@ class RequestManagementController extends Controller {
             'rejected_by' => auth()->id(),
             'rejected_at' => now(),
         ]);
+        $this->sendStatusUpdateEmails(
+            $req->fresh(['employee', 'requestType', 'assignedTo']),
+            'rejected',
+            $request->reason
+        );
         return response()->json(['message' => 'Request rejected.']);
     }
 
@@ -468,7 +512,98 @@ class RequestManagementController extends Controller {
             return response()->json(['message' => 'Request cannot be cancelled at this stage.'], 422);
         }
         $req->update(['status' => 'cancelled']);
+        $this->sendStatusUpdateEmails(
+            $req->fresh(['employee', 'requestType', 'assignedTo']),
+            'cancelled',
+            'The request was cancelled by the requester.'
+        );
         return response()->json(['message' => 'Request cancelled.']);
+    }
+
+    private function sendStatusUpdateEmails(EmployeeRequest $req, string $status, ?string $note = null): void
+    {
+        $req->loadMissing(['employee', 'requestType', 'assignedTo']);
+
+        $recipients = collect();
+        if ($req->employee?->email) {
+            $recipients->push([
+                'email' => $req->employee->email,
+                'name' => trim($req->employee->first_name . ' ' . $req->employee->last_name) ?: 'Employee',
+            ]);
+        }
+
+        if ($req->assignedTo?->email) {
+            $recipients->push([
+                'email' => $req->assignedTo->email,
+                'name' => $req->assignedTo->name ?: 'Team member',
+            ]);
+        }
+
+        if ($status === 'pending' && $req->requestType?->handling_department_id) {
+            User::whereHas('employee', function ($q) use ($req) {
+                $q->where('department_id', $req->requestType->handling_department_id)
+                    ->where('status', 'active');
+            })
+                ->whereNotNull('email')
+                ->where('email', '<>', '')
+                ->get(['id', 'name', 'email'])
+                ->each(fn($user) => $recipients->push([
+                    'email' => $user->email,
+                    'name' => $user->name ?: 'Team member',
+                ]));
+        }
+
+        $recipients
+            ->filter(fn($recipient) => !empty($recipient['email']))
+            ->unique('email')
+            ->values()
+            ->each(function ($recipient) use ($req, $status, $note) {
+                try {
+                    Mail::to($recipient['email'])->queue(new RequestStatusMail(
+                        $req,
+                        $status,
+                        $recipient['name'],
+                        $note
+                    ));
+                } catch (\Throwable $e) {
+                    Log::warning('Request status email failed', [
+                        'request_id' => $req->id,
+                        'reference' => $req->reference,
+                        'status' => $status,
+                        'email' => $recipient['email'],
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            });
+    }
+
+    private function canAccessRequestFile(EmployeeRequest $req): bool
+    {
+        $user = auth()->user();
+        $roles = rescue(fn() => DB::table('model_has_roles')
+            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('model_has_roles.model_id', $user->id)
+            ->pluck('roles.name')
+            ->toArray(), [], false);
+
+        if ((bool) array_intersect($roles, ['super_admin', 'hr_manager', 'hr_staff'])) {
+            return true;
+        }
+
+        if ($user->employee && (int) $req->employee_id === (int) $user->employee->id) {
+            return true;
+        }
+
+        if ($req->assigned_to && (int) $req->assigned_to === (int) $user->id) {
+            return true;
+        }
+
+        if (in_array('department_manager', $roles, true) && $user->employee) {
+            return (int) $req->employee?->department_id === (int) $user->employee->department_id
+                || (int) $req->requestType?->handling_department_id === (int) $user->employee->department_id;
+        }
+
+        return false;
     }
 
     // ══════════════════════════════════════════════════════════════════════
