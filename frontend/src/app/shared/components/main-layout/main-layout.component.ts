@@ -1,4 +1,5 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { AuthService, NavItem } from '../../../core/services/auth.service';
 import { ThemeService, THEMES } from '../../../core/services/theme.service';
@@ -11,12 +12,18 @@ export interface NavGroup { label: string; items: NavItem[]; }
   templateUrl: './main-layout.component.html',
   styleUrls: ['./main-layout.component.scss'],
 })
-export class MainLayoutComponent implements OnInit {
+export class MainLayoutComponent implements OnInit, OnDestroy {
   sidebarOpen = true;
   navGroups:  NavGroup[] = [];
   user:       any = null;
   portalType  = 'employee';
   readonly themes = THEMES;
+
+  // Notifications (bell)
+  notifications: any[] = [];
+  unreadCount = 0;
+  showNotifications = false;
+  private pollHandle: any = null;
 
   portalLabels: Record<string, { label: string; icon: string; color: string }> = {
     admin:    { label: 'Admin Portal',    icon: 'shield',             color: '#ef4444' },
@@ -26,12 +33,47 @@ export class MainLayoutComponent implements OnInit {
     employee: { label: 'Employee Portal', icon: 'person',             color: '#3b82f6' },
   };
 
-  constructor(public auth: AuthService, public themeService: ThemeService, private router: Router) {}
+  constructor(public auth: AuthService, public themeService: ThemeService, private router: Router, private http: HttpClient) {}
 
   ngOnInit(): void {
     this.user       = this.auth.getUser();
     this.portalType = this.auth.getPortalType();
     this.navGroups  = this.buildNavGroups(this.auth.getVisibleNavItems());
+    this.loadNotifications();
+    // Poll every 60s for new notifications.
+    this.pollHandle = setInterval(() => this.loadNotifications(), 60000);
+  }
+
+  ngOnDestroy(): void {
+    if (this.pollHandle) clearInterval(this.pollHandle);
+  }
+
+  loadNotifications(): void {
+    this.http.get<any>('/api/v1/notifications', { params: { limit: 20 } }).subscribe({
+      next: r => { this.notifications = r?.notifications || []; this.unreadCount = r?.unread_count || 0; },
+      error: () => {},
+    });
+  }
+
+  toggleNotifications(): void {
+    this.showNotifications = !this.showNotifications;
+  }
+
+  openNotification(n: any): void {
+    if (!n.read_at) {
+      this.http.post(`/api/v1/notifications/${n.id}/read`, {}).subscribe({ next: () => {}, error: () => {} });
+      n.read_at = new Date().toISOString();
+      this.unreadCount = Math.max(0, this.unreadCount - 1);
+    }
+    this.showNotifications = false;
+    if (n.link) this.router.navigateByUrl(n.link);
+  }
+
+  markAllNotificationsRead(): void {
+    this.http.post('/api/v1/notifications/read-all', {}).subscribe({
+      next: () => { this.notifications.forEach(n => n.read_at = n.read_at || new Date().toISOString()); this.unreadCount = 0; },
+      error: () => {},
+    });
   }
 
   private buildNavGroups(items: NavItem[]): NavGroup[] {

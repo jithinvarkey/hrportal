@@ -59,6 +59,14 @@ const routes: Routes = [
         loadChildren: () => import('./modules/requests/requests.module').then(m => m.RequestsModule)
       },
       {
+        path: 'announcements',
+        loadChildren: () => import('./modules/announcements/announcements.module').then(m => m.AnnouncementsModule)
+      },
+      {
+        path: 'policies',
+        loadChildren: () => import('./modules/policies/policies.module').then(m => m.PoliciesModule)
+      },
+      {
         path: 'separations',
         loadChildren: () => import('./modules/separations/separations.module').then(m => m.SeparationsModule)
       },

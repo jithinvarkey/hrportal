@@ -207,6 +207,15 @@ export class AuthService {
 
       // ── Administration ────────────────────────────────────────────────
       {
+        group: 'Communications',
+        path: '/announcements', label: 'Announcements', icon: 'campaign',
+        roles: []
+      },
+      {
+        path: '/policies', label: 'Policies', icon: 'policy',
+        roles: []
+      },
+      {
         group: 'Administration',
         path: '/admin', label: 'Admin', icon: 'admin_panel_settings',
         perms: ['admin.manage_users', 'admin.manage_roles']
