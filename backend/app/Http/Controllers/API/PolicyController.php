@@ -59,12 +59,17 @@ class PolicyController extends Controller
             return true;
         }
 
-        if (($policy->audience_type ?? 'all') !== 'departments') {
+        $audienceType = $policy->audience_type ?: 'all';
+        if ($audienceType === 'all') {
             return true;
         }
 
-        $departmentId = auth()->user()->employee?->department_id;
-        return $departmentId && in_array((int) $departmentId, array_map('intval', $policy->target_department_ids ?? []), true);
+        if ($audienceType === 'departments') {
+            $departmentId = auth()->user()->employee?->department_id;
+            return $departmentId && in_array((int) $departmentId, array_map('intval', $policy->target_department_ids ?? []), true);
+        }
+
+        return false;
     }
 
     private function applyPolicyAudience($query, Request $request)
@@ -84,7 +89,10 @@ class PolicyController extends Controller
             if ($departmentId) {
                 $w->orWhere(function ($d) use ($departmentId) {
                     $d->where('audience_type', 'departments')
-                        ->whereJsonContains('target_department_ids', $departmentId);
+                        ->where(function ($dd) use ($departmentId) {
+                            $dd->whereJsonContains('target_department_ids', (int) $departmentId)
+                                ->orWhereJsonContains('target_department_ids', (string) $departmentId);
+                        });
                 });
             }
         });
@@ -169,9 +177,16 @@ class PolicyController extends Controller
             ->when($request->category_id, fn($q) => $q->where('category_id', $request->category_id))
             ->when($request->search, fn($q) => $q->where('title', 'like', "%{$request->search}%"));
 
-        $this->applyPolicyAudience($query, $request);
+        if ($this->isManager()) {
+            $this->applyPolicyAudience($query, $request);
+        }
 
         $policies = $query->orderBy('title')->get();
+        if (!$this->isManager()) {
+            $policies = $policies
+                ->filter(fn($policy) => $this->policyVisibleToCurrentUser($policy))
+                ->values();
+        }
 
         // Annotate with the current employee's acknowledgement of the CURRENT
         // version (a prior-version ack no longer counts).

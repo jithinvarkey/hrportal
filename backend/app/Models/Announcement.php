@@ -90,12 +90,16 @@ class Announcement extends Model
         $deptId = $employee?->department_id;
 
         return $q->where(function ($w) use ($deptId, $roleNames) {
-            $w->where('audience_type', 'all');
+            $w->where('audience_type', 'all')
+              ->orWhereNull('audience_type');
 
             if ($deptId) {
                 $w->orWhere(function ($d) use ($deptId) {
                     $d->where('audience_type', 'departments')
-                      ->whereJsonContains('target_department_ids', $deptId);
+                      ->where(function ($dd) use ($deptId) {
+                          $dd->whereJsonContains('target_department_ids', (int) $deptId)
+                             ->orWhereJsonContains('target_department_ids', (string) $deptId);
+                      });
                 });
             }
 

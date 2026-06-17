@@ -9,8 +9,10 @@ use App\Models\Announcement;
 use App\Models\AnnouncementCategory;
 use App\Models\AnnouncementReaction;
 use App\Models\AnnouncementRead;
+use App\Models\Employee;
 use App\Services\Communications\NotificationService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -113,10 +115,12 @@ class AnnouncementController extends Controller
         $manager = $this->isManager();
         $empId   = $this->employeeId();
         $employee = auth()->user()->employee;
+        $roles = $this->userRoles();
+        $perPage = (int) ($request->per_page ?? 15);
 
         $query = Announcement::with(['category', 'creator:id,name'])
             ->withCount(['reads', 'reactions'])
-            ->when(!$manager, fn($q) => $q->visible()->forAudience($employee, $this->userRoles()))
+            ->when(!$manager, fn($q) => $q->visible())
             ->when($request->category_id, fn($q) => $q->where('category_id', $request->category_id))
             ->when($request->search, fn($q) => $q->where(function ($w) use ($request) {
                 $w->where('title', 'like', "%{$request->search}%")
@@ -126,7 +130,21 @@ class AnnouncementController extends Controller
             ->orderByDesc('published_at')
             ->orderByDesc('created_at');
 
-        $page = $query->paginate((int) ($request->per_page ?? 15));
+        if ($manager) {
+            $page = $query->paginate($perPage);
+        } else {
+            $items = $query->get()
+                ->filter(fn($announcement) => $this->announcementVisibleToEmployee($announcement, $employee, $roles))
+                ->values();
+            $currentPage = LengthAwarePaginator::resolveCurrentPage();
+            $page = new LengthAwarePaginator(
+                $items->slice(($currentPage - 1) * $perPage, $perPage)->values(),
+                $items->count(),
+                $perPage,
+                $currentPage,
+                ['path' => $request->url(), 'query' => $request->query()]
+            );
+        }
 
         // Annotate each item with the current employee's read state.
         $readIds = $empId
@@ -149,7 +167,10 @@ class AnnouncementController extends Controller
             ->withCount(['reads', 'reactions'])
             ->findOrFail($id);
 
-        if (!$this->isManager() && !$this->isVisible($announcement)) {
+        if (!$this->isManager() && (
+            !$this->isVisible($announcement)
+            || !$this->announcementVisibleToEmployee($announcement, auth()->user()->employee, $this->userRoles())
+        )) {
             return response()->json(['message' => 'Not found.'], 404);
         }
 
@@ -436,6 +457,27 @@ class AnnouncementController extends Controller
     {
         return $a->is_published
             && (!$a->expires_at || $a->expires_at->gte(now()->startOfDay()));
+    }
+
+    private function announcementVisibleToEmployee(Announcement $announcement, ?Employee $employee, array $roleNames): bool
+    {
+        $audienceType = $announcement->audience_type ?: 'all';
+        if ($audienceType === 'all') {
+            return true;
+        }
+
+        if ($audienceType === 'departments') {
+            $departmentId = $employee?->department_id;
+            $targetDepartmentIds = array_map('intval', $announcement->target_department_ids ?? []);
+            return $departmentId && in_array((int) $departmentId, $targetDepartmentIds, true);
+        }
+
+        if ($audienceType === 'roles') {
+            $targetRoles = array_map('strval', $announcement->target_roles ?? []);
+            return count(array_intersect(array_map('strval', $roleNames), $targetRoles)) > 0;
+        }
+
+        return false;
     }
 
     private function uniqueSlug(string $name): string
