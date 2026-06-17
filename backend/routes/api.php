@@ -13,6 +13,9 @@ use App\Http\Controllers\API\SeparationController;
 use App\Http\Controllers\API\RequestManagementController;
 use App\Http\Controllers\API\ProfileController;
 use App\Http\Controllers\API\BioTimeController;
+use App\Http\Controllers\API\AnnouncementController;
+use App\Http\Controllers\API\PolicyController;
+use App\Http\Controllers\API\NotificationController;
 use App\Http\Controllers\API\AttendanceController;
 use App\Http\Controllers\API\ContractController;
 use App\Http\Controllers\API\ContractRenewalController;
@@ -61,6 +64,50 @@ Route::prefix('v1')->group(function () {
             Route::put('/',         [ProfileController::class, 'update']);
             Route::post('avatar',   [ProfileController::class, 'uploadAvatar']);
             Route::put('password',  [ProfileController::class, 'changePassword']);
+        });
+
+        // Announcements (HR/Admin manage; everyone reads)
+        Route::prefix('announcements')->group(function () {
+            Route::get('/categories',          [AnnouncementController::class, 'categories']);
+            Route::post('/categories',         [AnnouncementController::class, 'storeCategory']);
+            Route::put('/categories/{id}',     [AnnouncementController::class, 'updateCategory'])->whereNumber('id');
+            Route::delete('/categories/{id}',  [AnnouncementController::class, 'deleteCategory'])->whereNumber('id');
+
+            Route::get('/',                    [AnnouncementController::class, 'index']);
+            Route::post('/',                   [AnnouncementController::class, 'store']);
+            Route::get('/{id}',                [AnnouncementController::class, 'show'])->whereNumber('id');
+            Route::put('/{id}',                [AnnouncementController::class, 'update'])->whereNumber('id');
+            Route::delete('/{id}',             [AnnouncementController::class, 'destroy'])->whereNumber('id');
+            Route::get('/{id}/attachment',     [AnnouncementController::class, 'downloadAttachment'])->whereNumber('id');
+            Route::post('/{id}/read',          [AnnouncementController::class, 'markRead'])->whereNumber('id');
+            Route::post('/{id}/react',         [AnnouncementController::class, 'react'])->whereNumber('id');
+            Route::get('/{id}/stats',          [AnnouncementController::class, 'readStats'])->whereNumber('id');
+        });
+
+        // In-app notifications (bell)
+        Route::prefix('notifications')->group(function () {
+            Route::get('/',            [NotificationController::class, 'index']);
+            Route::post('/read-all',   [NotificationController::class, 'markAllRead']);
+            Route::post('/{id}/read',  [NotificationController::class, 'markRead'])->whereNumber('id');
+        });
+
+        // HR Policies (HR/Admin manage; everyone views & acknowledges)
+        Route::prefix('policies')->group(function () {
+            Route::get('/categories',          [PolicyController::class, 'categories']);
+            Route::post('/categories',         [PolicyController::class, 'storeCategory']);
+            Route::put('/categories/{id}',     [PolicyController::class, 'updateCategory'])->whereNumber('id');
+            Route::delete('/categories/{id}',  [PolicyController::class, 'deleteCategory'])->whereNumber('id');
+
+            Route::get('/',                    [PolicyController::class, 'index']);
+            Route::post('/',                   [PolicyController::class, 'store']);
+            Route::get('/{id}',                [PolicyController::class, 'show'])->whereNumber('id');
+            Route::put('/{id}',                [PolicyController::class, 'update'])->whereNumber('id');
+            Route::delete('/{id}',             [PolicyController::class, 'destroy'])->whereNumber('id');
+            Route::get('/{id}/attachment',     [PolicyController::class, 'downloadAttachment'])->whereNumber('id');
+            Route::post('/{id}/acknowledge',   [PolicyController::class, 'acknowledge'])->whereNumber('id');
+            Route::get('/{id}/acknowledgements',[PolicyController::class, 'acknowledgements'])->whereNumber('id');
+            Route::get('/{id}/acknowledgements/export',[PolicyController::class, 'exportAcknowledgements'])->whereNumber('id');
+            Route::post('/{id}/remind',        [PolicyController::class, 'remindPending'])->whereNumber('id');
         });
 
         // Dashboard
