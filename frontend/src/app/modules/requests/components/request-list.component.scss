@@ -569,6 +569,15 @@
 .dw-btn-danger { color:var(--danger)!important; border-color:rgba(239,68,68,.3)!important;
   &:hover{background:rgba(239,68,68,.08)!important;} }
 
+.completion-download {
+  margin-top:8px;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  min-height:32px;
+  mat-icon { font-size:16px!important;width:16px!important;height:16px!important; }
+}
+
 /* ── Assign modal enhancements ───────────────────────────────── */
 .assign-notice {
   display:flex;align-items:flex-start;gap:8px;

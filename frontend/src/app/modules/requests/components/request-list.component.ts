@@ -392,6 +392,34 @@ export class RequestListComponent implements OnInit, OnDestroy {
     });
   }
 
+  downloadCompletionFile(req: any): void {
+    if (!req?.id) return;
+
+    this.http.get(`/api/v1/requests/${req.id}/completion-file`, {
+      observe: 'response',
+      responseType: 'blob',
+    }).subscribe({
+      next: (response) => {
+        const blob = response.body;
+        if (!blob) return;
+
+        const disposition = response.headers.get('content-disposition') || '';
+        const match = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(disposition);
+        const filename = match
+          ? decodeURIComponent(match[1].replace(/"/g, ''))
+          : `${req.reference || 'request'}-completion`;
+
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (e: any) => alert('Could not download file: ' + (e?.error?.message || 'Server error.')),
+    });
+  }
+
   // ── Reject ──────────────────────────────────────────────────────────────
 
   openReject(req: any): void {

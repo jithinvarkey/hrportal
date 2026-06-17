@@ -367,6 +367,11 @@
         <div>
           <strong>Completed {{ selectedReq.completed_at | date:'dd MMM yyyy' }}</strong>
           <p *ngIf="selectedReq.completion_notes">{{ selectedReq.completion_notes }}</p>
+          <button class="btn-outline completion-download"
+                  *ngIf="selectedReq.has_completion_file"
+                  (click)="downloadCompletionFile(selectedReq)">
+            <mat-icon>download</mat-icon> Download completed file
+          </button>
         </div>
       </div>
 

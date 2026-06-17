@@ -8,3 +8,4 @@ backend/.env.example
 /backend/nbproject
 frontend/codex-ng-serve.out.log
 /backend/bootstrap/cache
+/backend/public/storage
