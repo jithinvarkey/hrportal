@@ -427,6 +427,27 @@
         </div>
       </div>
 
+      <div class="activity-timeline" *ngIf="selectedLoan.activities?.length">
+        <div class="activity-title">
+          <mat-icon>history</mat-icon>
+          Activity Log
+        </div>
+        <div class="activity-row" *ngFor="let a of selectedLoan.activities">
+          <div class="activity-dot">
+            <mat-icon>{{ activityIcon(a.event) }}</mat-icon>
+          </div>
+          <div class="activity-copy">
+            <div class="activity-main">{{ a.description }}</div>
+            <div class="activity-meta">
+              <span>{{ a.causer_name }}</span>
+              <span *ngIf="activityStatus(a)">{{ activityStatus(a) }}</span>
+              <span>{{ a.created_at | date:'dd MMM yyyy, h:mm a' }}</span>
+            </div>
+            <div class="activity-note" *ngIf="a.notes">{{ a.notes }}</div>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <div class="drawer-footer">

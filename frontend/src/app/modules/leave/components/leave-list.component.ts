@@ -183,7 +183,14 @@ export class LeaveListComponent implements OnInit {
     return counts[statusId] || 0;
   }
 
-  viewRequest(r: any) { this.selectedRequest = r; this.showDetail = true; }
+  viewRequest(r: any) {
+    this.selectedRequest = r;
+    this.showDetail = true;
+    this.http.get<any>(`/api/v1/leave/requests/${r.id}`).subscribe({
+      next: res => this.selectedRequest = res?.request || r,
+      error: () => this.selectedRequest = r
+    });
+  }
 
   approve(r: any) {
     if (!confirm(`Approve ${r.total_days} day(s) leave for ${r.employee?.first_name}?`)) return;
@@ -592,6 +599,38 @@ export class LeaveListComponent implements OnInit {
       cancelled: 'block',
     };
     return m[s] ?? 'help';
+  }
+
+  activityIcon(event: string): string {
+    const m: Record<string, string> = {
+      submitted: 'send',
+      updated: 'edit',
+      manager_approved: 'supervisor_account',
+      hr_approved: 'admin_panel_settings',
+      manager_rejected: 'cancel',
+      hr_rejected: 'cancel',
+      cancelled: 'block',
+    };
+    return m[event] ?? 'history';
+  }
+
+  activityStatus(a: any): string {
+    if (a.from_status && a.to_status) {
+      return `${this.statusText(a.from_status)} -> ${this.statusText(a.to_status)}`;
+    }
+    if (a.to_status) return this.statusText(a.to_status);
+    return '';
+  }
+
+  statusText(status: string): string {
+    const m: Record<string, string> = {
+      pending: 'Awaiting Manager',
+      manager_approved: 'Awaiting HR',
+      approved: 'Approved',
+      rejected: 'Rejected',
+      cancelled: 'Cancelled',
+    };
+    return m[status] ?? status;
   }
 
   avatarColor(name: string): string {

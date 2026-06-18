@@ -9,6 +9,7 @@ use App\Models\Loan;
 use App\Models\LoanInstallment;
 use App\Models\LoanType;
 use App\Services\LoanService;
+use App\Services\RequestActivityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,8 +27,17 @@ class LoanController extends Controller {
     /**
      * @param  LoanService $service  Injected by the service container
      */
-    public function __construct(protected LoanService $service) {
+    protected $service;
+    protected $activityService;
+
+    public function __construct(LoanService $service, RequestActivityService $activityService) {
+        $this->service = $service;
+        $this->activityService = $activityService;
         
+    }
+
+    private function logLoanActivity(Loan $loan, string $event, string $description, array $properties = []): void {
+        $this->activityService->record($loan, 'loan_request', $event, $description, $properties);
     }
 
     // ── Role helper ───────────────────────────────────────────────────────
@@ -226,6 +236,13 @@ class LoanController extends Controller {
                     'status' => 'pending_manager',
         ]);
 
+        $this->logLoanActivity($loan, 'submitted', 'Loan request submitted.', [
+            'to_status' => $loan->status,
+            'requested_amount' => $loan->requested_amount,
+            'installments' => $loan->installments,
+            'notes' => $request->purpose,
+        ]);
+
         return response()->json(['message' => 'Loan request submitted.', 'loan' => $loan->load('loanType')], 201);
     }
 
@@ -247,6 +264,7 @@ class LoanController extends Controller {
         $data = $loan->toArray();
         $data['installment_schedule'] = $data['installments'];
         $data['installments'] = $loan->getRawOriginal('installments');
+        $data['activities'] = $this->activityService->timeline($loan);
 
         return response()->json(['loan' => $data]);
     }
@@ -269,18 +287,28 @@ class LoanController extends Controller {
 
         switch ($loan->status) {
             case 'pending_manager':
+                $oldStatus = $loan->status;
                 $loan->update([
                     'status' => 'pending_hr',
                     'manager_approved_by' => $user->id,
                     'manager_approved_at' => now(),
                 ]);
+                $this->logLoanActivity($loan, 'manager_approved', 'Loan request approved by manager.', [
+                    'from_status' => $oldStatus,
+                    'to_status' => 'pending_hr',
+                ]);
                 break;
 
             case 'pending_hr':
+                $oldStatus = $loan->status;
                 $loan->update([
                     'status' => 'pending_finance',
                     'hr_approved_by' => $user->id,
                     'hr_approved_at' => now(),
+                ]);
+                $this->logLoanActivity($loan, 'hr_approved', 'Loan request approved by HR.', [
+                    'from_status' => $oldStatus,
+                    'to_status' => 'pending_finance',
                 ]);
                 break;
 
@@ -294,6 +322,7 @@ class LoanController extends Controller {
                 $approvedAmt = $request->approved_amount ?? $loan->requested_amount;
                 $monthly = $this->service->calculateMonthlyInstallment((float) $approvedAmt, (int) $loan->installments,  (float) ($loan->loanType->interest_rate ?? 0)  );
 
+                $oldStatus = $loan->status;
                 $loan->update([
                     'status' => 'approved',
                     'finance_approved_by' => $user->id,
@@ -307,6 +336,12 @@ class LoanController extends Controller {
 
                 $loan->refresh();
                 $this->service->generateInstallments($loan);
+                $this->logLoanActivity($loan, 'finance_approved', 'Loan request approved by finance and schedule generated.', [
+                    'from_status' => $oldStatus,
+                    'to_status' => 'approved',
+                    'approved_amount' => $approvedAmt,
+                    'monthly_installment' => $monthly,
+                ]);
                 break;
 
             default:
@@ -340,12 +375,20 @@ class LoanController extends Controller {
             return response()->json(['message' => 'Loan cannot be rejected at this stage.'], 422);
         }
 
+        $oldStatus = $loan->status;
         $loan->update([
             'status' => 'rejected',
             'rejection_reason' => $request->reason,
             'rejected_by' => auth()->id(),
             'rejected_at' => now(),
             'rejected_stage' => $stage,
+        ]);
+
+        $this->logLoanActivity($loan, 'rejected', "Loan request rejected at {$stage} stage.", [
+            'from_status' => $oldStatus,
+            'to_status' => 'rejected',
+            'reason' => $request->reason,
+            'stage' => $stage,
         ]);
 
         return response()->json(['message' => 'Loan rejected.']);
@@ -366,7 +409,12 @@ class LoanController extends Controller {
             return response()->json(['message' => 'Loan cannot be cancelled at this stage.'], 422);
         }
 
+        $oldStatus = $loan->status;
         $loan->update(['status' => 'cancelled']);
+        $this->logLoanActivity($loan, 'cancelled', 'Loan request cancelled.', [
+            'from_status' => $oldStatus,
+            'to_status' => 'cancelled',
+        ]);
 
         return response()->json(['message' => 'Loan request cancelled.']);
     }
@@ -387,9 +435,16 @@ class LoanController extends Controller {
             return response()->json(['message' => 'Loan must be approved before disbursement.'], 422);
         }
 
+        $oldStatus = $loan->status;
         $loan->update([
             'status' => 'disbursed',
             'disbursed_date' => $request->disbursed_date ?? now()->toDateString(),
+        ]);
+
+        $this->logLoanActivity($loan, 'disbursed', 'Loan marked as disbursed.', [
+            'from_status' => $oldStatus,
+            'to_status' => 'disbursed',
+            'disbursed_date' => $loan->disbursed_date ? $loan->disbursed_date->toDateString() : null,
         ]);
 
         return response()->json(['message' => 'Loan marked as disbursed.']);
@@ -413,6 +468,12 @@ class LoanController extends Controller {
         }
 
         $this->service->payInstallment($inst, $request->paid_date, $request->notes);
+        $this->logLoanActivity($inst->loan()->first(), 'installment_paid', "Installment #{$inst->installment_no} marked as paid.", [
+            'installment_id' => $inst->id,
+            'installment_no' => $inst->installment_no,
+            'amount' => $inst->amount,
+            'notes' => $request->notes,
+        ]);
 
         return response()->json(['message' => 'Installment marked as paid.']);
     }
@@ -433,6 +494,12 @@ class LoanController extends Controller {
         }
 
         $this->service->skipInstallment($inst, $request->notes);
+        $this->logLoanActivity($inst->loan()->first(), 'installment_skipped', "Installment #{$inst->installment_no} skipped and rescheduled.", [
+            'installment_id' => $inst->id,
+            'installment_no' => $inst->installment_no,
+            'amount' => $inst->amount,
+            'notes' => $request->notes,
+        ]);
 
         return response()->json(['message' => 'Installment skipped — rescheduled to end of loan.']);
     }
