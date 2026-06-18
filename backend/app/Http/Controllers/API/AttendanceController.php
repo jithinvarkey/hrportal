@@ -102,6 +102,7 @@ class AttendanceController extends Controller
 
     public function report(Request $request): JsonResponse
     {
+        $perPage = min(max((int) $request->input('per_page', 25), 10), 100);
         $user  = auth()->user();
         $roles = rescue(fn() => \DB::table('model_has_roles')
             ->join('roles','roles.id','=','model_has_roles.role_id')
@@ -137,7 +138,8 @@ class AttendanceController extends Controller
             ->when($request->status,    fn ($q) => $q->where('status', $request->status))
             ->when($request->employee_id, fn ($q) => $q->where('employee_id', $request->employee_id))
             ->orderBy('date', 'desc')
-            ->paginate(50);
+            ->orderBy('id', 'desc')
+            ->paginate($perPage);
 
         return response()->json($data);
     }

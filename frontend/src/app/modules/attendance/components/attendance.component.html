@@ -142,7 +142,7 @@
       <div class="card-hdr">
         <span class="card-title">
           <mat-icon>table_chart</mat-icon> Records
-          <span class="record-ct" *ngIf="!reportLoading">{{ reportRows.length }}</span>
+          <span class="record-ct" *ngIf="!reportLoading">{{ reportPagination?.total || 0 }}</span>
         </span>
       </div>
       <div class="table-wrap">
@@ -212,6 +212,34 @@
             </tr>
           </tbody>
         </table>
+      </div>
+      <div class="pagination-bar" *ngIf="!reportLoading && reportPagination?.total">
+        <div class="pagination-summary">
+          Showing {{ reportPagination.from }}–{{ reportPagination.to }} of {{ reportPagination.total }}
+        </div>
+        <div class="pagination-controls">
+          <label class="page-size-label">
+            Rows
+            <select class="page-size-select" [(ngModel)]="reportPerPage" (change)="changeReportPageSize()">
+              <option [ngValue]="10">10</option>
+              <option [ngValue]="25">25</option>
+              <option [ngValue]="50">50</option>
+              <option [ngValue]="100">100</option>
+            </select>
+          </label>
+          <button class="page-nav" matTooltip="Previous page"
+            [disabled]="reportPage<=1" (click)="changeReportPage(reportPage-1)">
+            <mat-icon>chevron_left</mat-icon>
+          </button>
+          <button class="page-number" *ngFor="let page of reportPages"
+            [class.active]="page===reportPage" (click)="changeReportPage(page)">
+            {{ page }}
+          </button>
+          <button class="page-nav" matTooltip="Next page"
+            [disabled]="reportPage>=reportPagination.last_page" (click)="changeReportPage(reportPage+1)">
+            <mat-icon>chevron_right</mat-icon>
+          </button>
+        </div>
       </div>
     </div>
 

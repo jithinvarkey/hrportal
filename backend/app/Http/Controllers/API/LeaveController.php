@@ -276,7 +276,8 @@ class LeaveController extends Controller {
                 ->when($request->employee_id, fn($q) => $q->where('employee_id', $request->employee_id))
                 ->orderBy('created_at', 'desc');
 
-        $paginated = $query->paginate((int) ($request->per_page ?? 15));
+        $perPage = min(max((int) $request->input('per_page', 10), 10), 100);
+        $paginated = $query->orderByDesc('id')->paginate($perPage);
         $paginated->getCollection()->transform(function ($leave) use ($user) {
             $isOwn = $this->isOwnLeaveRequest($leave, $user);
             $leave->setAttribute('can_approve', !$isOwn);

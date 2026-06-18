@@ -9,6 +9,7 @@ use App\Models\Loan;
 use App\Models\LoanInstallment;
 use App\Models\LoanType;
 use App\Services\LoanService;
+use App\Services\LoanApprovalService;
 use App\Services\RequestActivityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -29,10 +30,12 @@ class LoanController extends Controller {
      */
     protected $service;
     protected $activityService;
+    protected $approvalService;
 
-    public function __construct(LoanService $service, RequestActivityService $activityService) {
+    public function __construct(LoanService $service, RequestActivityService $activityService, LoanApprovalService $approvalService) {
         $this->service = $service;
         $this->activityService = $activityService;
+        $this->approvalService = $approvalService;
         
     }
 
@@ -66,6 +69,34 @@ class LoanController extends Controller {
      */
     private function hasAnyRoleDB(array $roles): bool {
         return (bool) array_intersect($this->userRoles(), $roles);
+    }
+
+    private function approvalLevels(): int {
+        return $this->approvalService->levels();
+    }
+
+    private function canApproveStage(string $status): bool {
+        if ($this->hasAnyRoleDB(['super_admin'])) {
+            return true;
+        }
+
+        if ($status === 'pending_manager') {
+            if ($this->approvalLevels() === 2) {
+                return $this->hasAnyRoleDB(['hr_manager']);
+            }
+
+            return $this->hasAnyRoleDB(['department_manager']);
+        }
+
+        if ($status === 'pending_hr') {
+            return $this->hasAnyRoleDB(['hr_manager']);
+        }
+
+        if ($status === 'pending_finance') {
+            return $this->hasAnyRoleDB(['finance_manager']);
+        }
+
+        return false;
     }
 
     // ── Loan Types ────────────────────────────────────────────────────────
@@ -138,7 +169,9 @@ class LoanController extends Controller {
      * @return JsonResponse
      */
     public function stats(): JsonResponse {
-        return response()->json($this->service->stats());
+        return response()->json(array_merge($this->service->stats(), [
+            'approval_levels' => $this->approvalLevels(),
+        ]));
     }
 
     // ── List Loans ────────────────────────────────────────────────────────
@@ -153,6 +186,7 @@ class LoanController extends Controller {
      * @return JsonResponse
      */
     public function index(Request $request): JsonResponse {
+        $perPage = min(max((int) $request->input('per_page', 10), 10), 100);
         $user = auth()->user();
         // FIX: Use raw DB query instead of Spatie hasRole() to avoid guard mismatch
         $isAdmin = $this->hasAnyRoleDB(['super_admin', 'hr_manager', 'finance_manager']);
@@ -176,9 +210,10 @@ class LoanController extends Controller {
                                 ->orWhere('employee_code', 'like', "%{$request->search}%")
                         )
                 )
-                ->orderBy('created_at', 'desc');
+                ->orderBy('created_at', 'desc')
+                ->orderBy('id', 'desc');
 
-        return response()->json($query->paginate(15));
+        return response()->json($query->paginate($perPage));
     }
 
     // ── Create Loan Request ───────────────────────────────────────────────
@@ -233,7 +268,7 @@ class LoanController extends Controller {
                     'monthly_installment' => $monthly,
                     'purpose' => $request->purpose,
                     'notes' => $request->notes,
-                    'status' => 'pending_manager',
+                    'status' => $this->approvalLevels() === 3 ? 'pending_manager' : 'pending_hr',
         ]);
 
         $this->logLoanActivity($loan, 'submitted', 'Loan request submitted.', [
@@ -265,6 +300,7 @@ class LoanController extends Controller {
         $data['installment_schedule'] = $data['installments'];
         $data['installments'] = $loan->getRawOriginal('installments');
         $data['activities'] = $this->activityService->timeline($loan);
+        $data['approval_levels'] = $this->approvalLevels();
 
         return response()->json(['loan' => $data]);
     }
@@ -285,9 +321,28 @@ class LoanController extends Controller {
         $loan = Loan::findOrFail($id);
         $user = auth()->user();
 
+        if (!$this->canApproveStage($loan->status)) {
+            return response()->json(['message' => 'You are not authorized to approve this loan at its current stage.'], 403);
+        }
+
         switch ($loan->status) {
             case 'pending_manager':
                 $oldStatus = $loan->status;
+
+                if ($this->approvalLevels() === 2) {
+                    $loan->update([
+                        'status' => 'pending_finance',
+                        'hr_approved_by' => $user->id,
+                        'hr_approved_at' => now(),
+                    ]);
+                    $this->logLoanActivity($loan, 'hr_approved', 'Loan request approved by HR; manager approval was skipped by configuration.', [
+                        'from_status' => $oldStatus,
+                        'to_status' => 'pending_finance',
+                        'approval_levels' => 2,
+                    ]);
+                    break;
+                }
+
                 $loan->update([
                     'status' => 'pending_hr',
                     'manager_approved_by' => $user->id,
@@ -373,6 +428,10 @@ class LoanController extends Controller {
 
         if (!$stage) {
             return response()->json(['message' => 'Loan cannot be rejected at this stage.'], 422);
+        }
+
+        if (!$this->canApproveStage($loan->status)) {
+            return response()->json(['message' => 'You are not authorized to reject this loan at its current stage.'], 403);
         }
 
         $oldStatus = $loan->status;

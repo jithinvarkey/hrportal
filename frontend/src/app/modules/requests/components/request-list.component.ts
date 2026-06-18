@@ -30,6 +30,7 @@ export class RequestListComponent implements OnInit, OnDestroy {
   statItems: any[] = [];
   pagination: any = null;
   currentPage = 1;
+  pageSize = 10;
 
   // ── Filters ──────────────────────────────────────────────────────────────
   filterSearch = '';
@@ -189,7 +190,7 @@ export class RequestListComponent implements OnInit, OnDestroy {
   load(page = 1): void {
     this.loading = true;
     this.currentPage = page;
-    const params: any = { per_page: 15, page };
+    const params: any = { per_page: this.pageSize, page };
     if (this.activeTab === 'mine') params.scope = 'mine';
     if (this.activeStatus) params.status = this.activeStatus;
     if (this.filterCategory) params.category = this.filterCategory;
@@ -222,7 +223,9 @@ export class RequestListComponent implements OnInit, OnDestroy {
     if (id !== 'types') this.load();
   }
 
-  switchStatus(id: string): void { this.activeStatus = id; this.load(); }
+  switchStatus(id: string): void { this.activeStatus = id; this.load(1); }
+
+  changePageSize(): void { this.load(1); }
 
   // ── Detail view ─────────────────────────────────────────────────────────
 
@@ -543,7 +546,10 @@ export class RequestListComponent implements OnInit, OnDestroy {
 
   get pages(): number[] {
     if (!this.pagination?.last_page) return [];
-    return Array.from({ length: Math.min(this.pagination.last_page, 8) }, (_, i) => i + 1);
+    const lastPage = this.pagination.last_page;
+    const start = Math.max(1, Math.min(this.currentPage - 2, lastPage - 4));
+    const end = Math.min(lastPage, start + 4);
+    return Array.from({ length: Math.max(0, end - start + 1) }, (_, i) => start + i);
   }
 
   get columns(): string[] {

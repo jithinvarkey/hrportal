@@ -129,7 +129,7 @@
 
 /* ── Pagination ────────────────────────────────────────────────────────── */
 .pagination {
-  display: flex; align-items: center; gap: 4px;
+  display: flex; align-items: center; gap: 4px; min-height: 52px;
   padding: 12px 16px; border-top: 1px solid var(--border); flex-wrap: wrap;
 }
 .page-btn {
@@ -141,7 +141,10 @@
   &:disabled { opacity: .4; cursor: default; }
   mat-icon { font-size: 16px !important; width: 16px !important; height: 16px !important; }
 }
-.page-info { font-size: 11px; color: var(--text3); margin-left: 8px; }
+.page-info { font-size: 11px; color: var(--text3); margin-right: auto; }
+.page-size-wrap { display:flex;align-items:center;gap:6px;margin-right:8px;font-size:11px;color:var(--text3); }
+.page-size-select { height:30px;padding:0 22px 0 8px;border:1px solid var(--border2);border-radius:7px;
+  background:var(--surface2);color:var(--text2);font-size:11px;outline:none; }
 
 /* ── Calendar ──────────────────────────────────────────────────────────── */
 .calendar-header {

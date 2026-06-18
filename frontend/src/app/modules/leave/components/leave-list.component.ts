@@ -45,6 +45,7 @@ export class LeaveListComponent implements OnInit {
   filterType = '';
   filterDept = '';
   currentPage = 1;
+  pageSize = 10;
 
   // Calendar
   calYear = new Date().getFullYear();
@@ -154,7 +155,7 @@ export class LeaveListComponent implements OnInit {
   load(page = 1) {
     this.loading = true;
     this.currentPage = page;
-    const params: any = { per_page: 15, page };
+    const params: any = { per_page: this.pageSize, page };
     if (this.activeStatus === 'needs_action') {
       params.needs_action = '1';
     } else if (this.activeStatus) {
@@ -170,6 +171,8 @@ export class LeaveListComponent implements OnInit {
   }
 
   switchStatus(id: string) { this.activeStatus = id; this.currentPage = 1; this.load(); }
+
+  changePageSize() { this.load(1); }
 
   statusCount(statusId: string): number {
     const counts: Record<string, number> = {
@@ -500,7 +503,10 @@ export class LeaveListComponent implements OnInit {
 
   get pages(): number[] {
     if (!this.pagination?.last_page) return [];
-    return Array.from({ length: Math.min(this.pagination.last_page, 8) }, (_, i) => i + 1);
+    const lastPage = this.pagination.last_page;
+    const start = Math.max(1, Math.min(this.currentPage - 2, lastPage - 4));
+    const end = Math.min(lastPage, start + 4);
+    return Array.from({ length: Math.max(0, end - start + 1) }, (_, i) => start + i);
   }
 
   get calMonthLabel(): string {

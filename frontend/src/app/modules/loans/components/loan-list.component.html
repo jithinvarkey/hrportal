@@ -177,11 +177,17 @@
           </td>
         </tr>
       </table>
-      <div class="pagination" *ngIf="pagination?.last_page > 1">
+      <div class="pagination" *ngIf="pagination?.total">
+        <span class="page-info">{{ pagination?.from }}–{{ pagination?.to }} of {{ pagination?.total }}</span>
+        <label class="page-size-wrap">Rows
+          <select class="page-size-select" [(ngModel)]="pageSize" (change)="changePageSize()">
+            <option [ngValue]="10">10</option><option [ngValue]="25">25</option>
+            <option [ngValue]="50">50</option><option [ngValue]="100">100</option>
+          </select>
+        </label>
         <button class="page-btn" [disabled]="currentPage===1" (click)="load(currentPage-1)"><mat-icon>chevron_left</mat-icon></button>
         <button *ngFor="let p of pages" class="page-btn" [class.active]="p===currentPage" (click)="load(p)">{{ p }}</button>
         <button class="page-btn" [disabled]="currentPage===pagination?.last_page" (click)="load(currentPage+1)"><mat-icon>chevron_right</mat-icon></button>
-        <span class="page-info">{{ pagination?.from }}–{{ pagination?.to }} of {{ pagination?.total }}</span>
       </div>
     </div>
   </ng-container>
@@ -242,8 +248,8 @@
             <div class="ms-dot done"><mat-icon>check</mat-icon></div>
             <div class="ms-label">Submitted</div>
           </div>
-          <div class="ms-line" [class.done]="l.status==='pending_hr'||l.status==='pending_finance'"></div>
-          <div class="ms-step" [class.done]="l.status==='pending_hr'||l.status==='pending_finance'" [class.active]="l.status==='pending_manager'">
+          <div class="ms-line" *ngIf="approvalLevels===3" [class.done]="l.status==='pending_hr'||l.status==='pending_finance'"></div>
+          <div class="ms-step" *ngIf="approvalLevels===3" [class.done]="l.status==='pending_hr'||l.status==='pending_finance'" [class.active]="l.status==='pending_manager'">
             <div class="ms-dot" [class.done]="l.status==='pending_hr'||l.status==='pending_finance'" [class.active]="l.status==='pending_manager'">
               <mat-icon *ngIf="l.status==='pending_hr'||l.status==='pending_finance'">check</mat-icon>
               <span *ngIf="l.status==='pending_manager'">2</span>
@@ -254,13 +260,13 @@
           <div class="ms-step" [class.done]="l.status==='pending_finance'" [class.active]="l.status==='pending_hr'">
             <div class="ms-dot" [class.done]="l.status==='pending_finance'" [class.active]="l.status==='pending_hr'">
               <mat-icon *ngIf="l.status==='pending_finance'">check</mat-icon>
-              <span *ngIf="l.status!=='pending_finance'">3</span>
+              <span *ngIf="l.status!=='pending_finance'">{{ approvalLevels===3 ? 3 : 2 }}</span>
             </div>
             <div class="ms-label">HR</div>
           </div>
           <div class="ms-line"></div>
           <div class="ms-step" [class.active]="l.status==='pending_finance'">
-            <div class="ms-dot" [class.active]="l.status==='pending_finance'">4</div>
+            <div class="ms-dot" [class.active]="l.status==='pending_finance'">{{ approvalLevels===3 ? 4 : 3 }}</div>
             <div class="ms-label">Finance</div>
           </div>
         </div>

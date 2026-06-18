@@ -88,14 +88,17 @@
 .badge-teal{background:rgba(14,165,233,.12);color:#0ea5e9;}
 
 /* ── Pagination ─────────────────────────────────────────────────────────── */
-.pagination{display:flex;align-items:center;gap:4px;padding:12px 16px;border-top:1px solid var(--border);flex-wrap:wrap;}
+.pagination{display:flex;align-items:center;gap:4px;min-height:52px;padding:12px 16px;border-top:1px solid var(--border);flex-wrap:wrap;}
 .page-btn{width:30px;height:30px;border-radius:7px;border:1px solid var(--border2);background:var(--surface2);
   color:var(--text2);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;
   &.active{background:var(--accent);color:#fff;border-color:var(--accent);}
   &:disabled{opacity:.4;cursor:default;}
   mat-icon{font-size:16px!important;width:16px!important;height:16px!important;}
 }
-.page-info{font-size:11px;color:var(--text3);margin-left:8px;}
+.page-info{font-size:11px;color:var(--text3);margin-right:auto;}
+.page-size-wrap{display:flex;align-items:center;gap:6px;margin-right:8px;font-size:11px;color:var(--text3);}
+.page-size-select{height:30px;padding:0 22px 0 8px;border:1px solid var(--border2);border-radius:7px;
+  background:var(--surface2);color:var(--text2);font-size:11px;outline:none;}
 
 /* ── My Loans cards ─────────────────────────────────────────────────────── */
 .my-loans-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}

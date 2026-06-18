@@ -388,6 +388,54 @@
     </div>
   </ng-container>
 
+  <ng-container *ngIf="activeTab==='settings'">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Workflow Settings</h2>
+        <p class="section-sub">System-wide approval routing for new requests.</p>
+      </div>
+    </div>
+
+    <div class="settings-panel">
+      <div class="settings-heading">
+        <div class="settings-icon"><mat-icon>account_balance</mat-icon></div>
+        <div>
+          <div class="settings-title">Loan Approval Levels</div>
+          <div class="settings-sub">Choose the approval path used when an employee submits a new loan request.</div>
+        </div>
+      </div>
+
+      <div class="approval-options" *ngIf="!settingsLoading; else settingsLoader">
+        <button type="button" class="approval-option"
+          [class.selected]="loanSettings.approval_levels===2"
+          (click)="loanSettings.approval_levels=2; settingsMessage=''">
+          <span class="option-check"><mat-icon>{{ loanSettings.approval_levels===2 ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon></span>
+          <span><strong>2 Levels</strong><small>HR Manager → Finance Manager</small></span>
+        </button>
+        <button type="button" class="approval-option"
+          [class.selected]="loanSettings.approval_levels===3"
+          (click)="loanSettings.approval_levels=3; settingsMessage=''">
+          <span class="option-check"><mat-icon>{{ loanSettings.approval_levels===3 ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon></span>
+          <span><strong>3 Levels</strong><small>Direct Manager → HR Manager → Finance Manager</small></span>
+        </button>
+      </div>
+
+      <ng-template #settingsLoader>
+        <div class="settings-loader"><mat-spinner diameter="26"></mat-spinner></div>
+      </ng-template>
+
+      <div class="settings-feedback success" *ngIf="settingsMessage"><mat-icon>check_circle</mat-icon>{{ settingsMessage }}</div>
+      <div class="settings-feedback error" *ngIf="settingsError"><mat-icon>error_outline</mat-icon>{{ settingsError }}</div>
+
+      <div class="settings-actions">
+        <button class="btn-primary" (click)="saveLoanSettings()" [disabled]="settingsSaving || settingsLoading">
+          <mat-icon>{{ settingsSaving ? 'hourglass_empty' : 'save' }}</mat-icon>
+          {{ settingsSaving ? 'Saving...' : 'Save Changes' }}
+        </button>
+      </div>
+    </div>
+  </ng-container>
+
 </div>
 
 <!-- ── User Detail Drawer ────────────────────────────────────────────────── -->

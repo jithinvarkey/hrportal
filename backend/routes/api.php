@@ -416,6 +416,8 @@ Route::prefix('v1')->group(function () {
         Route::prefix('admin')->group(function () {
             Route::get('/overview',                         [AdminController::class, 'overview']);
             Route::get('/permissions',                      [AdminController::class, 'permissions']);
+            Route::get('/settings/loans',                   [AdminController::class, 'loanSettings']);
+            Route::put('/settings/loans',                   [AdminController::class, 'updateLoanSettings']);
 
             Route::prefix('users')->group(function () {
                 Route::get('/',         [AdminController::class, 'users']);

@@ -54,7 +54,14 @@ export class AdminComponent implements OnInit {
     { id:'permissions',  label:'Permissions',  icon:'lock'               },
     { id:'departments',  label:'Departments',  icon:'corporate_fare'     },
     { id:'designations', label:'Designations', icon:'badge'              },
+    { id:'settings',     label:'Settings',     icon:'settings'           },
   ];
+
+  loanSettings = { approval_levels: 2 };
+  settingsLoading = false;
+  settingsSaving = false;
+  settingsMessage = '';
+  settingsError = '';
 
   // ── Departments ───────────────────────────────────────────────────────
   departments: any[]   = [];
@@ -175,6 +182,39 @@ export class AdminComponent implements OnInit {
     if (id === 'permissions')  { this.loadPermissions(); this.loadRoles(); this.loadOverview(); }
     if (id === 'departments')  this.loadDepartments();
     if (id === 'designations') { this.loadDesignations(); this.loadDepartments(); }
+    if (id === 'settings')     this.loadLoanSettings();
+  }
+
+  loadLoanSettings() {
+    this.settingsLoading = true;
+    this.settingsError = '';
+    this.http.get<any>('/api/v1/admin/settings/loans').subscribe({
+      next: r => {
+        this.loanSettings.approval_levels = r?.settings?.approval_levels === 3 ? 3 : 2;
+        this.settingsLoading = false;
+      },
+      error: err => {
+        this.settingsError = this.firstError(err) || 'Failed to load loan settings.';
+        this.settingsLoading = false;
+      }
+    });
+  }
+
+  saveLoanSettings() {
+    this.settingsSaving = true;
+    this.settingsMessage = '';
+    this.settingsError = '';
+    this.http.put<any>('/api/v1/admin/settings/loans', this.loanSettings).subscribe({
+      next: r => {
+        this.loanSettings.approval_levels = r.settings.approval_levels;
+        this.settingsMessage = r.message;
+        this.settingsSaving = false;
+      },
+      error: err => {
+        this.settingsError = this.firstError(err) || 'Failed to save loan settings.';
+        this.settingsSaving = false;
+      }
+    });
   }
 
   refreshAdminData() {

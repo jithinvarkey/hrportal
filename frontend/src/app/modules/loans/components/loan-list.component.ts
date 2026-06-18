@@ -28,6 +28,7 @@ export class LoanListComponent implements OnInit {
   filterSearch = '';
   filterType = '';
   currentPage = 1;
+  pageSize = 10;
 
   // ── Panels ──────────────────────────────────────────────────────────────
   showNewLoan = false;
@@ -88,6 +89,7 @@ export class LoanListComponent implements OnInit {
   isFinance = false;
   isMgr = false;
   isHR = false;
+  approvalLevels = 3;
 
   constructor(private http: HttpClient, private auth: AuthService) { }
 
@@ -108,8 +110,18 @@ export class LoanListComponent implements OnInit {
     this.http.get<any>('/api/v1/loans/stats').subscribe({
       next: r => {
         this.stats = r;
+        this.approvalLevels = r.approval_levels === 2 ? 2 : 3;
+        this.statusTabs = [
+          { id: '', label: 'All' },
+          ...(this.approvalLevels === 3 ? [{ id: 'pending_manager', label: 'Pending Manager' }] : []),
+          { id: 'pending_hr', label: 'Pending HR' },
+          { id: 'pending_finance', label: 'Pending Finance' },
+          { id: 'disbursed', label: 'Active' },
+          { id: 'completed', label: 'Completed' },
+          { id: 'rejected', label: 'Rejected' },
+        ];
         this.statItems = [
-          { label: 'Pending Manager', value: r.pending_manager, icon: 'manage_accounts', color: '#f59e0b' },
+          ...(this.approvalLevels === 3 ? [{ label: 'Pending Manager', value: r.pending_manager, icon: 'manage_accounts', color: '#f59e0b' }] : []),
           { label: 'Pending HR', value: r.pending_hr, icon: 'badge', color: '#6366f1' },
           { label: 'Pending Finance', value: r.pending_finance, icon: 'account_balance', color: '#3b82f6' },
           { label: 'Active Loans', value: r.active_loans, icon: 'credit_card', color: '#10b981' },
@@ -123,7 +135,7 @@ export class LoanListComponent implements OnInit {
   // ── Load loans list ───────────────────────────────────────────────────
   load(page = 1) {
     this.loading = true; this.currentPage = page;
-    const params: any = { per_page: 15, page };
+    const params: any = { per_page: this.pageSize, page };
     if (this.activeStatus) params.status = this.activeStatus;
     if (this.filterType) params.loan_type_id = this.filterType;
     if (this.filterSearch) params.search = this.filterSearch;
@@ -146,7 +158,9 @@ export class LoanListComponent implements OnInit {
     if (id === 'all') this.load();
   }
 
-  switchStatus(id: string) { this.activeStatus = id; this.load(); }
+  switchStatus(id: string) { this.activeStatus = id; this.load(1); }
+
+  changePageSize() { this.load(1); }
 
   // ── View detail ───────────────────────────────────────────────────────
   viewLoan(loan: any) {
@@ -299,7 +313,10 @@ export class LoanListComponent implements OnInit {
   // ── Helpers ───────────────────────────────────────────────────────────
   get pages(): number[] {
     if (!this.pagination?.last_page) return [];
-    return Array.from({ length: Math.min(this.pagination.last_page, 8) }, (_, i) => i + 1);
+    const lastPage = this.pagination.last_page;
+    const start = Math.max(1, Math.min(this.currentPage - 2, lastPage - 4));
+    const end = Math.min(lastPage, start + 4);
+    return Array.from({ length: Math.max(0, end - start + 1) }, (_, i) => start + i);
   }
 
   formatSAR(v: any): string {
@@ -368,17 +385,20 @@ export class LoanListComponent implements OnInit {
 
 
   canApprove(loan: any): boolean {
-
-    if (this.isHR) {
-      return ['pending_manager', 'pending_hr', 'pending_finance']
-        .includes(loan.status);
+    if (this.auth.isSuperAdmin()) {
+      return ['pending_manager', 'pending_hr', 'pending_finance'].includes(loan.status);
     }
 
     if (this.isFinance) {
       return loan.status === 'pending_finance';
     }
 
-    if (this.isMgr) {
+    if (this.auth.isHRManager()) {
+      return loan.status === 'pending_hr'
+        || (this.approvalLevels === 2 && loan.status === 'pending_manager');
+    }
+
+    if (this.auth.isDeptManager()) {
       return loan.status === 'pending_manager';
     }
 
@@ -387,17 +407,20 @@ export class LoanListComponent implements OnInit {
 
 
   canReject(loan: any): boolean {
-
-    if (this.isHR) {
-      return !['approved', 'disbursed', 'completed', 'cancelled', 'rejected']
-        .includes(loan.status);
+    if (this.auth.isSuperAdmin()) {
+      return ['pending_manager', 'pending_hr', 'pending_finance'].includes(loan.status);
     }
 
     if (this.isFinance) {
       return loan.status === 'pending_finance';
     }
 
-    if (this.isMgr) {
+    if (this.auth.isHRManager()) {
+      return loan.status === 'pending_hr'
+        || (this.approvalLevels === 2 && loan.status === 'pending_manager');
+    }
+
+    if (this.auth.isDeptManager()) {
       return loan.status === 'pending_manager';
     }
 
@@ -463,6 +486,7 @@ export class LoanListComponent implements OnInit {
   }
 
   approvalSteps(loan: any): any[] {
+    const levels = loan.approval_levels === 2 ? 2 : this.approvalLevels;
     return [
       {
         label: 'Employee', label2: 'Request Submitted', done: true, active: false,
@@ -483,6 +507,6 @@ export class LoanListComponent implements OnInit {
         done: !!loan.finance_approved_at, active: loan.status === 'pending_finance',
         by: loan.financeApprover?.name, date: loan.finance_approved_at
       },
-    ];
+    ].filter(step => levels === 3 || step.label !== 'Manager');
   }
 }
