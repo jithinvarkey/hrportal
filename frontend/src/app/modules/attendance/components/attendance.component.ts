@@ -42,6 +42,9 @@ export class AttendanceComponent implements OnInit, OnDestroy {
   // ── State ─────────────────────────────────────────────────────────────
   todayLog:    AttendanceLog | null = null;
   reportRows:  any[] = [];
+  reportPagination: any = null;
+  reportPage = 1;
+  reportPerPage = 25;
   departments: any[] = [];
 
   loading       = true;
@@ -224,16 +227,46 @@ this.isAdmin = this.auth.isAdminRole();
 
   // ── Report ─────────────────────────────────────────────────────────────
 
-  loadReport(): void {
+  loadReport(page = this.reportPage): void {
     this.reportLoading = true;
-    this.http.get<any>(`${this.api}/report`, { params: this.clean(this.filterForm.value) })
+    this.reportPage = page;
+    const params = this.clean({
+      ...this.filterForm.value,
+      page,
+      per_page: this.reportPerPage,
+    });
+    this.http.get<any>(`${this.api}/report`, { params })
       .pipe(takeUntil(this.destroy$)).subscribe({
-        next:  (r) => { this.reportRows = r.data ?? []; this.reportLoading = false; this.cdr.markForCheck(); },
+        next:  (r) => {
+          this.reportRows = r.data ?? [];
+          this.reportPagination = r;
+          this.reportPage = r.current_page ?? page;
+          this.reportLoading = false;
+          this.cdr.markForCheck();
+        },
         error: () => { this.reportLoading = false; this.cdr.markForCheck(); },
       });
   }
 
-  applyFilters(): void { this.loadReport(); }
+  applyFilters(): void { this.loadReport(1); }
+
+  changeReportPage(page: number): void {
+    const lastPage = this.reportPagination?.last_page ?? 1;
+    if (page < 1 || page > lastPage || page === this.reportPage || this.reportLoading) return;
+    this.editingRow = null;
+    this.loadReport(page);
+  }
+
+  changeReportPageSize(): void {
+    this.loadReport(1);
+  }
+
+  get reportPages(): number[] {
+    const lastPage = this.reportPagination?.last_page ?? 1;
+    const start = Math.max(1, Math.min(this.reportPage - 2, lastPage - 4));
+    const end = Math.min(lastPage, start + 4);
+    return Array.from({ length: Math.max(0, end - start + 1) }, (_, index) => start + index);
+  }
 
   allEmployees: any[] = [];
 

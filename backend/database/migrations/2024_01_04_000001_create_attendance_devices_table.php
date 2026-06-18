@@ -33,7 +33,7 @@ class CreateAttendanceDevicesTable extends Migration
             $table->unsignedBigInteger('device_id');
             $table->string('device_employee_number', 50);  // raw ID from device
             $table->unsignedBigInteger('employee_id')->nullable(); // matched employee
-            $table->timestamp('punch_time');
+            $table->dateTime('punch_time');
             $table->tinyInteger('punch_type')->default(0); // 0=check-in, 1=check-out (ZKTeco codes)
             $table->string('verification_mode', 20)->nullable(); // fingerprint, card, face, pin
             $table->boolean('processed')->default(false);

@@ -16,6 +16,7 @@ use App\Models\Payroll;
 use App\Models\PerformanceReview;
 use App\Models\Separation;
 use App\Models\User;
+use App\Services\LoanApprovalService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
@@ -25,6 +26,42 @@ use Spatie\Permission\Models\Role;
 
 class AdminController extends Controller
 {
+    protected $loanApprovalService;
+
+    public function __construct(LoanApprovalService $loanApprovalService)
+    {
+        $this->loanApprovalService = $loanApprovalService;
+    }
+
+    public function loanSettings(): JsonResponse
+    {
+        if (!$this->isSuperAdmin()) {
+            return response()->json(['message' => 'Only a super admin can manage system settings.'], 403);
+        }
+
+        return response()->json([
+            'settings' => ['approval_levels' => $this->loanApprovalService->levels()],
+        ]);
+    }
+
+    public function updateLoanSettings(Request $request): JsonResponse
+    {
+        if (!$this->isSuperAdmin()) {
+            return response()->json(['message' => 'Only a super admin can manage system settings.'], 403);
+        }
+
+        $validated = $request->validate([
+            'approval_levels' => 'required|integer|in:2,3',
+        ]);
+
+        $levels = $this->loanApprovalService->updateLevels((int) $validated['approval_levels']);
+
+        return response()->json([
+            'message' => 'Loan approval workflow updated.',
+            'settings' => ['approval_levels' => $levels],
+        ]);
+    }
+
     // ── Overview ──────────────────────────────────────────────────────────
 
     public function overview(): JsonResponse
@@ -309,6 +346,16 @@ class AdminController extends Controller
             'department_manager' => 'Department Manager',
             'employee'           => 'Employee',
         ][$name] ?? ucfirst(str_replace('_', ' ', $name));
+    }
+
+    private function isSuperAdmin(): bool
+    {
+        return DB::table('model_has_roles')
+            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('model_has_roles.model_id', auth()->id())
+            ->where('model_has_roles.model_type', get_class(auth()->user()))
+            ->where('roles.name', 'super_admin')
+            ->exists();
     }
 
     private function roleColor(string $name): string

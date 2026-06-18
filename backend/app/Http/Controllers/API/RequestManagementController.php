@@ -152,6 +152,7 @@ class RequestManagementController extends Controller {
     // LIST
     // ══════════════════════════════════════════════════════════════════════
     public function index(Request $request) {
+        $perPage = min(max((int) $request->input('per_page', 10), 10), 100);
         $user = auth()->user();
         $isMine = $request->scope === 'mine';
 
@@ -254,7 +255,8 @@ class RequestManagementController extends Controller {
                         });
                     });
                 })
-                ->orderByDesc('created_at');
+                ->orderByDesc('created_at')
+                ->orderByDesc('id');
         Log::info('SQL', [
             'sql' => $query->toSql(),
             'bindings' => $query->getBindings(),
@@ -266,7 +268,7 @@ class RequestManagementController extends Controller {
         ]);
 
         try {
-            return response()->json($query->paginate(15));
+            return response()->json($query->paginate($perPage));
         } catch (\Exception $e) {
             return response()->json(['error' => 'INDEX ERROR: ' . $e->getMessage(), 'line' => $e->getLine()], 500);
         }

@@ -159,6 +159,33 @@
   mat-icon { font-size:32px!important; width:32px!important; height:32px!important; opacity:.3; display:block; margin:0 auto 8px; }
 }
 
+.pagination-bar {
+  min-height:52px; padding:10px 14px; border-top:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+}
+.pagination-summary { font-size:11px; color:var(--text3); }
+.pagination-controls { display:flex; align-items:center; gap:4px; }
+.page-size-label { display:flex; align-items:center; gap:6px; margin-right:8px; font-size:11px; color:var(--text3); }
+.page-size-select {
+  height:30px; padding:0 24px 0 8px; border:1px solid var(--border2); border-radius:7px;
+  background:var(--surface2); color:var(--text2); font-size:11px; outline:none;
+  &:focus { border-color:var(--accent); }
+}
+.page-nav, .page-number {
+  width:30px; height:30px; border:1px solid var(--border2); border-radius:7px;
+  display:grid; place-items:center; background:var(--surface2); color:var(--text2); cursor:pointer;
+  font-size:11px; font-weight:700;
+  &:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+  &:disabled { opacity:.35; cursor:default; }
+}
+.page-nav mat-icon { font-size:17px!important; width:17px!important; height:17px!important; }
+.page-number.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+@media(max-width:600px) {
+  .pagination-bar { align-items:flex-start; }
+  .pagination-controls { width:100%; overflow-x:auto; padding-bottom:2px; }
+}
+
 /* Edit panel */
 .edit-panel {
   margin-top:12px; background:var(--surface); border:1.5px solid var(--accent);

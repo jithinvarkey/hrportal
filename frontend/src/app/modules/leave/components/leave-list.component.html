@@ -210,11 +210,17 @@
         </tr>
       </table>
 
-      <div class="pagination" *ngIf="pagination?.last_page > 1">
+      <div class="pagination" *ngIf="pagination?.total">
+        <span class="page-info">{{ pagination?.from }}–{{ pagination?.to }} of {{ pagination?.total }}</span>
+        <label class="page-size-wrap">Rows
+          <select class="page-size-select" [(ngModel)]="pageSize" (change)="changePageSize()">
+            <option [ngValue]="10">10</option><option [ngValue]="25">25</option>
+            <option [ngValue]="50">50</option><option [ngValue]="100">100</option>
+          </select>
+        </label>
         <button class="page-btn" [disabled]="currentPage===1" (click)="load(currentPage-1)"><mat-icon>chevron_left</mat-icon></button>
         <button *ngFor="let p of pages" class="page-btn" [class.active]="p===currentPage" (click)="load(p)">{{ p }}</button>
         <button class="page-btn" [disabled]="currentPage===pagination?.last_page" (click)="load(currentPage+1)"><mat-icon>chevron_right</mat-icon></button>
-        <span class="page-info">{{ pagination?.from }}–{{ pagination?.to }} of {{ pagination?.total }}</span>
       </div>
     </div>
   </ng-container>
