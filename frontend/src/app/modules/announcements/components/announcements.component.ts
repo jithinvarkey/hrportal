@@ -75,6 +75,19 @@ export class AnnouncementsComponent implements OnInit {
 
   readonly priorities = ['normal', 'high', 'urgent'];
 
+  // Birthday wishes
+  showBirthdayWishes = false;
+  birthdayLoading = false;
+  birthdaySaving = false;
+  birthdaySending = false;
+  birthdayError = '';
+  birthdaySettings: any = { enabled: true, subject: '', body: '' };
+  birthdayBackgroundFile: File | null = null;
+  birthdayBackgroundPreview: string | null = null;
+  removeBirthdayBackground = false;
+  todaysBirthdays: any[] = [];
+  readonly birthdayPlaceholders = ['{{employee_name}}', '{{first_name}}', '{{company_name}}'];
+
   constructor(
     private readonly http: HttpClient,
     private readonly auth: AuthService,
@@ -292,6 +305,111 @@ export class AnnouncementsComponent implements OnInit {
     this.http.delete(`${this.api}/categories/${c.id}`).subscribe({
       next: () => { this.loadCategories(); this.load(); this.toast('Category deleted.'); },
       error: err => this.toast(this.firstError(err) || 'Delete failed.'),
+    });
+  }
+
+  openBirthdayWishes(): void {
+    this.showBirthdayWishes = true;
+    this.birthdayLoading = true;
+    this.birthdayError = '';
+    this.http.get<any>(`${this.api}/birthday-wishes/settings`).subscribe({
+      next: r => {
+        this.birthdaySettings = r.settings;
+        this.birthdayBackgroundFile = null;
+        this.birthdayBackgroundPreview = r.settings.background_image_url || null;
+        this.removeBirthdayBackground = false;
+        this.todaysBirthdays = r.birthdays || [];
+        this.birthdayLoading = false;
+        this.cdr.markForCheck();
+      },
+      error: err => {
+        this.birthdayLoading = false;
+        this.birthdayError = this.firstError(err) || 'Could not load birthday settings.';
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  closeBirthdayWishes(): void { this.showBirthdayWishes = false; this.cdr.markForCheck(); }
+
+  insertBirthdayPlaceholder(token: string): void {
+    this.birthdaySettings.body = `${this.birthdaySettings.body || ''}${token}`;
+    this.cdr.markForCheck();
+  }
+
+  onBirthdayBackgroundSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] || null;
+    if (file && file.size > 5 * 1024 * 1024) {
+      this.birthdayError = 'Background image must be 5 MB or smaller.';
+      input.value = ''; return;
+    }
+    this.birthdayBackgroundFile = file;
+    this.removeBirthdayBackground = false;
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { this.birthdayBackgroundPreview = String(reader.result); this.cdr.markForCheck(); };
+    reader.readAsDataURL(file);
+  }
+
+  clearBirthdayBackground(): void {
+    this.birthdayBackgroundFile = null;
+    this.birthdayBackgroundPreview = null;
+    this.removeBirthdayBackground = true;
+    this.cdr.markForCheck();
+  }
+
+  saveBirthdayWishes(): void {
+    if (!this.birthdaySettings.subject?.trim() || !this.birthdaySettings.body?.trim()) {
+      this.birthdayError = 'Subject and message are required.';
+      this.cdr.markForCheck(); return;
+    }
+    this.birthdaySaving = true; this.birthdayError = '';
+    const formData = new FormData();
+    formData.append('_method', 'PUT');
+    formData.append('enabled', this.birthdaySettings.enabled ? '1' : '0');
+    formData.append('subject', this.birthdaySettings.subject);
+    formData.append('body', this.birthdaySettings.body);
+    if (this.birthdayBackgroundFile) formData.append('background_image', this.birthdayBackgroundFile);
+    if (this.removeBirthdayBackground) formData.append('remove_background_image', '1');
+    this.http.post<any>(`${this.api}/birthday-wishes/settings`, formData).subscribe({
+      next: r => {
+        this.birthdaySettings = r.settings;
+        this.birthdayBackgroundFile = null;
+        this.birthdayBackgroundPreview = r.settings.background_image_url || null;
+        this.removeBirthdayBackground = false;
+        this.birthdaySaving = false;
+        this.toast('Birthday wish template saved.');
+        this.cdr.markForCheck();
+      },
+      error: err => {
+        this.birthdaySaving = false;
+        this.birthdayError = this.firstError(err) || 'Could not save birthday settings.';
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  sendTodaysBirthdayWishes(): void {
+    const pending = this.todaysBirthdays.filter(b => b.status !== 'sent').length;
+    const force = pending === 0;
+    const count = force ? this.todaysBirthdays.length : pending;
+    const action = force ? 'Resend' : 'Send';
+    if (!count || !confirm(`${action} birthday wishes to ${count} employee(s) now? All other active employees will be CC'd.`)) return;
+    this.birthdaySending = true; this.birthdayError = '';
+    this.http.post<any>(`${this.api}/birthday-wishes/send`, { force }).subscribe({
+      next: r => {
+        this.todaysBirthdays = r.birthdays || [];
+        this.birthdaySending = false;
+        const result = r.result;
+        this.toast(`Birthday wishes sent: ${result.sent}; skipped: ${result.skipped}; failed: ${result.failed}.`);
+        this.cdr.markForCheck();
+      },
+      error: err => {
+        this.birthdaySending = false;
+        this.birthdayError = this.firstError(err) || 'Could not send birthday wishes.';
+        this.cdr.markForCheck();
+      },
     });
   }
 

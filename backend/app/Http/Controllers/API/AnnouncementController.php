@@ -11,6 +11,7 @@ use App\Models\AnnouncementReaction;
 use App\Models\AnnouncementRead;
 use App\Models\Employee;
 use App\Services\Communications\NotificationService;
+use App\Services\BirthdayWishService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -26,8 +27,44 @@ class AnnouncementController extends Controller
 {
     private const MANAGER_ROLES = ['super_admin', 'hr_manager', 'hr_staff'];
 
-    public function __construct(private readonly NotificationService $notifications)
+    public function __construct(private readonly NotificationService $notifications, private readonly BirthdayWishService $birthdayWishes)
     {
+    }
+
+    public function birthdayWishSettings(): JsonResponse
+    {
+        if ($deny = $this->ensureManager()) return $deny;
+        return response()->json(['settings' => $this->birthdayWishes->settings(), 'birthdays' => $this->birthdayWishes->dashboard()]);
+    }
+
+    public function updateBirthdayWishSettings(Request $request): JsonResponse
+    {
+        if ($deny = $this->ensureManager()) return $deny;
+        $data = $request->validate([
+            'enabled' => 'required|boolean',
+            'subject' => 'required|string|max:200',
+            'body' => 'required|string|max:5000',
+            'background_image' => 'nullable|image|mimes:jpeg,jpg,png,webp|max:5120',
+            'remove_background_image' => 'nullable|boolean',
+        ]);
+        $current = $this->birthdayWishes->settings();
+        $data['background_image_path'] = $current['background_image_path'] ?? null;
+
+        if ($request->boolean('remove_background_image') && $data['background_image_path']) {
+            Storage::disk('public')->delete($data['background_image_path']);
+            $data['background_image_path'] = null;
+        }
+        if ($request->hasFile('background_image')) {
+            if ($data['background_image_path']) Storage::disk('public')->delete($data['background_image_path']);
+            $data['background_image_path'] = $request->file('background_image')->store('birthday-wishes', 'public');
+        }
+        return response()->json(['settings' => $this->birthdayWishes->updateSettings($data), 'message' => 'Birthday wish settings saved.']);
+    }
+
+    public function sendBirthdayWishes(Request $request): JsonResponse
+    {
+        if ($deny = $this->ensureManager()) return $deny;
+        return response()->json(['result' => $this->birthdayWishes->sendToday(true, $request->boolean('force')), 'birthdays' => $this->birthdayWishes->dashboard()]);
     }
 
     /** Roles for the current user via raw DB (avoids Spatie/Sanctum guard mismatch). */

@@ -21,7 +21,7 @@ class Kernel extends ConsoleKernel
             \App\Models\EmployeeRequest::whereNotIn('status', ['completed','rejected','cancelled'])
                 ->where('due_date', '<', now()->toDateString())
                 ->update(['is_overdue' => true]);
-        })->dailyAt('07:00')->timezone('Asia/Riyadh')->withoutOverlapping();
+        })->name('mark-overdue-requests')->dailyAt('07:00')->timezone('Asia/Riyadh')->withoutOverlapping();
 
         // Auto-generate contract renewal requests 60 days before expiry
         $schedule->command('contracts:generate-renewals')
@@ -29,6 +29,12 @@ class Kernel extends ConsoleKernel
                  ->timezone('Asia/Riyadh')
                  ->withoutOverlapping()
                  ->appendOutputTo(storage_path('logs/contract-renewals.log'));
+
+        $schedule->command('birthday-wishes:send')
+                 ->dailyAt('08:00')
+                 ->timezone('Asia/Riyadh')
+                 ->withoutOverlapping()
+                 ->appendOutputTo(storage_path('logs/birthday-wishes.log'));
     }
 
     protected function commands(): void
