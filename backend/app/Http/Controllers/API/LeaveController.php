@@ -9,6 +9,7 @@ use App\Models\EmployeeRequest;
 use App\Models\RequestType;
 use App\Models\LeaveAllocation;
 use App\Services\LeaveService;
+use App\Services\RequestActivityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -17,9 +18,15 @@ use Illuminate\Support\Facades\Storage;
 class LeaveController extends Controller {
 
     protected $service;
+    protected $activityService;
 
-    public function __construct(LeaveService $service) {
+    public function __construct(LeaveService $service, RequestActivityService $activityService) {
         $this->service = $service;
+        $this->activityService = $activityService;
+    }
+
+    private function logLeaveActivity(LeaveRequest $leave, string $event, string $description, array $properties = []): void {
+        $this->activityService->record($leave, 'leave_request', $event, $description, $properties);
     }
 
     /**
@@ -338,6 +345,12 @@ class LeaveController extends Controller {
                         'reason' => $request->reason,
             ]);
 
+            $this->logLeaveActivity($leaveRequest, 'submitted', "{$leaveType->name} leave request submitted.", [
+                'to_status' => $leaveRequest->status,
+                'total_hours' => $hours,
+                'notes' => $request->reason,
+            ]);
+
             $this->service->notifyManager($leaveRequest, 'submitted');
             return response()->json(['message' => "{$leaveType->name} of {$hours}h submitted", 'request' => $leaveRequest->load('leaveType')], 201);
         }
@@ -399,6 +412,12 @@ class LeaveController extends Controller {
                     'document_path' => $documentPath,
                     'status' => $leaveType->skip_manager_approval ? 'manager_approved' : 'pending',
         ]));
+
+        $this->logLeaveActivity($leaveRequest, 'submitted', "{$leaveType->name} leave request submitted.", [
+            'to_status' => $leaveRequest->status,
+            'total_days' => $totalDays,
+            'notes' => $request->reason,
+        ]);
         /*
           |--------------------------------------------------------------------------
           | FIND ANY EMPLOYEE IN THE SAME DEPARTMENT WHO HAS APPLIED FOR ANNUAL LEAVE WITH IN THE SAME DATE PERIOD
@@ -493,6 +512,7 @@ class LeaveController extends Controller {
 
     public function show($id) {
         $request = LeaveRequest::with(['employee', 'leaveType', 'approver', 'managerApprover'])->findOrFail($id);
+        $request->setAttribute('activities', $this->activityService->timeline($request));
         return response()->json(['request' => $request]);
     }
 
@@ -519,11 +539,17 @@ class LeaveController extends Controller {
                 return response()->json(['message' => 'Only the employee direct manager can approve this leave request.'], 403);
             }
 
+            $oldStatus = $leave->status;
             $leave->update([
                 'status' => 'manager_approved',
                 'manager_approved_by' => $user->id,
                 'manager_approved_at' => now(),
                 'manager_notes' => $request->input('notes'),
+            ]);
+            $this->logLeaveActivity($leave, 'manager_approved', 'Leave request approved at manager level.', [
+                'from_status' => $oldStatus,
+                'to_status' => 'manager_approved',
+                'notes' => $request->input('notes'),
             ]);
             $this->service->updateLeaveBalance($leave, 'approve');
             /*
@@ -552,10 +578,15 @@ class LeaveController extends Controller {
                 return response()->json(['message' => 'Only HR can give final approval.'], 403);
             }
 
+            $oldStatus = $leave->status;
             $leave->update([
                 'status' => 'approved',
                 'approved_by' => $user->id,
                 'approved_at' => now(),
+            ]);
+            $this->logLeaveActivity($leave, 'hr_approved', 'Leave request fully approved by HR.', [
+                'from_status' => $oldStatus,
+                'to_status' => 'approved',
             ]);
 
             $this->service->updateLeaveBalance($leave, 'approve');
@@ -618,27 +649,40 @@ class LeaveController extends Controller {
         }
 
 
+        $oldStatus = $leave->status;
         $leave->update([
             'status' => 'rejected',
             'rejection_reason' => $request->reason,
             'rejected_stage' => $stage,
             'approved_by' => $user->id,
         ]);
+        $this->logLeaveActivity($leave, $action, "Leave request rejected at {$stage} stage.", [
+            'from_status' => $oldStatus,
+            'to_status' => 'rejected',
+            'reason' => $request->reason,
+            'stage' => $stage,
+        ]);
         $this->service->updateLeaveBalance($leave, 'cancel');
         $this->service->notifyEmployee($leave, $action,$request->reason);
         return response()->json(['message' => "Leave rejected at {$stage} stage."]);
     }
 
-    public function cancel($id) {
+    public function cancel(Request $request, $id) {
         $leave = LeaveRequest::findOrFail($id);
         if (!in_array($leave->status, ['pending', 'approved'])) {
             return response()->json(['message' => 'Cannot cancel this leave'], 422);
         }
+        $oldStatus = $leave->status;
         if ($leave->status === 'approved') {
             $this->service->updateLeaveBalance($leave, 'cancel');
         }
         $leave->update(['status' => 'cancelled']);
-        $this->service->notifyEmployee($leave, 'cancelled',$request->reason);
+        $this->logLeaveActivity($leave, 'cancelled', 'Leave request cancelled.', [
+            'from_status' => $oldStatus,
+            'to_status' => 'cancelled',
+            'reason' => $request->input('reason'),
+        ]);
+        $this->service->notifyEmployee($leave, 'cancelled',$request->input('reason'));
         /*
           |--------------------------------------------------------------------------
           | Notify HR
@@ -694,6 +738,10 @@ class LeaveController extends Controller {
         if ($leave->status !== 'pending')
             return response()->json(['message' => 'Cannot edit non-pending leave'], 422);
         $leave->update($request->only(['start_date', 'end_date', 'reason']));
+        $this->logLeaveActivity($leave, 'updated', 'Leave request details updated.', [
+            'to_status' => $leave->status,
+            'notes' => $request->input('reason'),
+        ]);
         return response()->json(['message' => 'Leave updated', 'request' => $leave]);
     }
 

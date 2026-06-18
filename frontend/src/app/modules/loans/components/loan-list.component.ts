@@ -345,6 +345,27 @@ export class LoanListComponent implements OnInit {
     return map[s] || 'help';
   }
 
+  activityIcon(event: string): string {
+    const map: any = {
+      submitted: 'send',
+      manager_approved: 'manage_accounts',
+      hr_approved: 'badge',
+      finance_approved: 'account_balance',
+      rejected: 'cancel',
+      cancelled: 'block',
+      disbursed: 'payments',
+      installment_paid: 'check_circle',
+      installment_skipped: 'redo',
+    };
+    return map[event] || 'history';
+  }
+
+  activityStatus(a: any): string {
+    if (a.from_status && a.to_status) return `${this.statusLabel(a.from_status)} -> ${this.statusLabel(a.to_status)}`;
+    if (a.to_status) return this.statusLabel(a.to_status);
+    return '';
+  }
+
 
   canApprove(loan: any): boolean {
 
