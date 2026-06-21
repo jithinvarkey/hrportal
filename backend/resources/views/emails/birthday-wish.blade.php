@@ -12,13 +12,14 @@
     <tr><td style="background:#1e3a5f;padding:24px 32px;color:#fff;font-size:20px;font-weight:bold">{{ config('app.name', 'HRMS') }}</td></tr>
     @if($backgroundImage)
     <tr><td style="padding:0;line-height:0">
-      <img src="{{ $backgroundImage }}" width="600" alt="Birthday celebration"
+      <img src="{{ $backgroundImage }}" width="600" alt="{{ $mailBody }}"
            style="display:block;width:100%;max-width:600px;height:auto;border:0">
     </td></tr>
-    @endif
+    @else
     <tr><td style="padding:32px;color:#1f2937;font-size:15px;line-height:1.7">
       {!! nl2br(e($mailBody)) !!}
     </td></tr>
+    @endif
     <tr><td style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:11px;text-align:center">Sent by Human Resources</td></tr>
   </table>
 </td></tr></table>

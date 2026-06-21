@@ -133,7 +133,7 @@
 .placeholder-row { display:flex; align-items:center; flex-wrap:wrap; gap:6px; font-size:11px; color:var(--text3);
   button { border:1px solid var(--border2); border-radius:6px; padding:4px 7px; background:var(--surface2); color:var(--accent); font-family:monospace; font-size:11px; cursor:pointer; } }
 .optional-label { margin-left:5px; color:var(--text3); font-weight:400; }
-.birthday-background-preview { min-height:150px; display:flex; align-items:center; justify-content:center; position:relative; padding:20px; border:1px solid var(--border); border-radius:8px; background-size:cover; background-position:center;
+.birthday-background-preview { min-height:220px; display:flex; align-items:flex-start; justify-content:center; position:relative; padding:20px; border:1px solid var(--border); border-radius:8px; background-size:cover; background-position:center top;
   > div { padding:16px 22px; border-radius:6px; background:rgba(255,255,255,.88); color:#1f2937; font-size:13px; font-weight:700; }
   > button { position:absolute; top:8px; right:8px; background:rgba(255,255,255,.9); } }
 .today-birthdays { border-top:1px solid var(--border); padding-top:14px; }

@@ -39,7 +39,7 @@
       <div class="fg">
         <label>Background image <span class="optional-label">Optional</span></label>
         <input type="file" accept="image/jpeg,image/png,image/webp" (change)="onBirthdayBackgroundSelected($event)">
-        <small class="file-hint">JPG, PNG or WebP, up to 5 MB. Displayed as full-width birthday artwork above the message.</small>
+        <small class="file-hint">JPG, PNG or WebP, up to 5 MB. The birthday message is overlaid at the top.</small>
       </div>
       <div class="birthday-background-preview" *ngIf="birthdayBackgroundPreview" [style.background-image]="'url(' + birthdayBackgroundPreview + ')'">
         <div>Birthday email artwork</div>

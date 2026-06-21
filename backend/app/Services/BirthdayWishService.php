@@ -14,6 +14,10 @@ class BirthdayWishService
     private const DEFAULT_SUBJECT = 'Happy Birthday, {{employee_name}}!';
     private const DEFAULT_BODY = "Dear {{first_name}},\n\nWishing you a very happy birthday and a wonderful year ahead!\n\nBest wishes,\n{{company_name}}";
 
+    public function __construct(private readonly BirthdayWishImageComposer $imageComposer)
+    {
+    }
+
     public function settings(): array
     {
         $values = DB::table('system_settings')->whereIn('key', [
@@ -91,7 +95,13 @@ class BirthdayWishService
                 ->pluck('email')->filter()->unique()->values()->all();
             $backgroundPath = $settings['background_image_path']
                 ? Storage::disk('public')->path($settings['background_image_path']) : null;
-            Mail::to($employee->email)->cc($cc)->send(new BirthdayWishMail($subject, $body, $backgroundPath));
+            $renderedImage = $backgroundPath && is_file($backgroundPath)
+                ? $this->imageComposer->compose($backgroundPath, $body) : null;
+            try {
+                Mail::to($employee->email)->cc($cc)->send(new BirthdayWishMail($subject, $body, $renderedImage));
+            } finally {
+                if ($renderedImage && is_file($renderedImage)) @unlink($renderedImage);
+            }
             DB::table('birthday_wish_deliveries')->where('employee_id', $employee->id)->where('birthday_year', $year)
                 ->update(['status' => 'sent', 'sent_at' => now(), 'updated_at' => now()]);
             activity('birthday_wishes')->performedOn($employee)->event('sent')->log('Birthday wish sent');
