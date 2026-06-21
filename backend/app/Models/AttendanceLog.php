@@ -36,10 +36,12 @@ class AttendanceLog extends Model
         'source',
         'ip_address',
         'notes',
+        'missed_checkout_notified_at',
     ];
 
     protected $casts = [
         'date' => 'date',
+        'missed_checkout_notified_at' => 'datetime',
     ];
 
     protected $appends = [

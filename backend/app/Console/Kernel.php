@@ -35,6 +35,12 @@ class Kernel extends ConsoleKernel
                  ->timezone('Asia/Riyadh')
                  ->withoutOverlapping()
                  ->appendOutputTo(storage_path('logs/birthday-wishes.log'));
+
+        $schedule->command('attendance:notify-missed-checkouts')
+                 ->dailyAt('12:01')
+                 ->timezone('Asia/Riyadh')
+                 ->withoutOverlapping()
+                 ->appendOutputTo(storage_path('logs/missed-checkouts.log'));
     }
 
     protected function commands(): void
