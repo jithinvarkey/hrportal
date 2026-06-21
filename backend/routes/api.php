@@ -68,6 +68,9 @@ Route::prefix('v1')->group(function () {
 
         // Announcements (HR/Admin manage; everyone reads)
         Route::prefix('announcements')->group(function () {
+            Route::get('/birthday-wishes/settings', [AnnouncementController::class, 'birthdayWishSettings']);
+            Route::put('/birthday-wishes/settings', [AnnouncementController::class, 'updateBirthdayWishSettings']);
+            Route::post('/birthday-wishes/send', [AnnouncementController::class, 'sendBirthdayWishes']);
             Route::get('/categories',          [AnnouncementController::class, 'categories']);
             Route::post('/categories',         [AnnouncementController::class, 'storeCategory']);
             Route::put('/categories/{id}',     [AnnouncementController::class, 'updateCategory'])->whereNumber('id');

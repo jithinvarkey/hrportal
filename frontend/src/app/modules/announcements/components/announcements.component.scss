@@ -123,3 +123,27 @@
 .sc-date, .sc-code { color:var(--text3); white-space:nowrap; }
 .sc-empty { padding:12px; font-size:12px; color:var(--text3); text-align:center; }
 .loading-wrap { display:flex; justify-content:center; padding:40px; }
+
+/* Birthday wishes */
+.birthday-panel { width:min(680px,93vw); }
+.birthday-toggle { display:flex; align-items:flex-start; gap:10px; padding:12px; border:1px solid var(--border); border-radius:8px; cursor:pointer;
+  input { margin-top:3px; }
+  span { display:flex; flex-direction:column; gap:3px; color:var(--text); font-size:13px; }
+  small { color:var(--text3); font-size:11px; } }
+.placeholder-row { display:flex; align-items:center; flex-wrap:wrap; gap:6px; font-size:11px; color:var(--text3);
+  button { border:1px solid var(--border2); border-radius:6px; padding:4px 7px; background:var(--surface2); color:var(--accent); font-family:monospace; font-size:11px; cursor:pointer; } }
+.optional-label { margin-left:5px; color:var(--text3); font-weight:400; }
+.birthday-background-preview { min-height:220px; display:flex; align-items:flex-start; justify-content:center; position:relative; padding:20px; border:1px solid var(--border); border-radius:8px; background-size:cover; background-position:center top;
+  > div { padding:16px 22px; border-radius:6px; background:rgba(255,255,255,.88); color:#1f2937; font-size:13px; font-weight:700; }
+  > button { position:absolute; top:8px; right:8px; background:rgba(255,255,255,.9); } }
+.today-birthdays { border-top:1px solid var(--border); padding-top:14px; }
+.birthday-section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; color:var(--text); font-size:13px;
+  span { min-width:24px; padding:2px 7px; border-radius:999px; background:var(--surface2); text-align:center; color:var(--text2); } }
+.birthday-person { display:flex; align-items:center; gap:9px; padding:8px 0; border-top:1px solid var(--border); font-size:12px;
+  > mat-icon { color:var(--text3); }
+  div { display:flex; flex:1; min-width:0; flex-direction:column; gap:2px; color:var(--text); }
+  small { color:var(--text3); overflow:hidden; text-overflow:ellipsis; }
+  .delivery-status { color:#b45309; font-weight:700; &.sent { color:var(--success); } } }
+.birthday-empty { padding:12px 0; color:var(--text3); font-size:12px; }
+.birthday-footer { justify-content:space-between; }
+@media (max-width:600px) { .hdr-actions { width:100%; flex-wrap:wrap; } .birthday-footer { flex-direction:column-reverse; button { width:100%; justify-content:center; } } }
