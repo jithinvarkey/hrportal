@@ -516,7 +516,20 @@
       <button class="row-btn" (click)="showDetail=false"><mat-icon>close</mat-icon></button>
     </div>
 
+    <div class="drawer-tabs" role="tablist" aria-label="Request information">
+      <button type="button" role="tab" [attr.aria-selected]="detailDrawerTab === 'details'"
+              [class.active]="detailDrawerTab === 'details'" (click)="detailDrawerTab = 'details'">
+        <mat-icon>description</mat-icon> Details
+      </button>
+      <button type="button" role="tab" [attr.aria-selected]="detailDrawerTab === 'activity'"
+              [class.active]="detailDrawerTab === 'activity'" (click)="detailDrawerTab = 'activity'">
+        <mat-icon>history</mat-icon> Activity
+        <span class="tab-count" *ngIf="selectedRequest.activities?.length">{{ selectedRequest.activities.length }}</span>
+      </button>
+    </div>
+
     <div class="drawer-body">
+      <ng-container *ngIf="detailDrawerTab === 'details'">
 
       <!-- Status hero -->
       <div class="status-hero" [class]="'status-hero-'+selectedRequest.status">
@@ -595,9 +608,10 @@
             {{ selectedRequest.start_time }} – {{ selectedRequest.end_time }}
           </div>
         </div>
-        <div class="detail-block" style="grid-column:1/-1">
-          <div class="detail-lbl">Reason</div>
+        <div class="detail-block reason-block">
+          <div class="detail-lbl"><mat-icon>notes</mat-icon> Reason</div>
           <div class="detail-val reason-text">{{ selectedRequest.reason }}</div>
+        </div>
 
         <!-- Annual leave: travel requirements -->
         <div class="travel-flags" *ngIf="selectedRequest.requires_exit_reentry || selectedRequest.requires_ticket">
@@ -606,7 +620,10 @@
             <mat-icon>swap_horiz</mat-icon> Exit Re-entry Visa Required
           </div>
           <div class="tf-item" *ngIf="selectedRequest.requires_ticket">
-            <mat-icon>flight</mat-icon> Air Ticket Required
+            <mat-icon>flight</mat-icon> Air Ticket Required · {{ selectedRequest.ticket_count || 1 }} ticket(s)
+          </div>
+          <div class="tf-item" *ngFor="let passenger of selectedRequest.ticket_passengers">
+            <mat-icon>person</mat-icon> {{ passenger.passenger_name }} <span class="name-sub">({{ passenger.passenger_type }})</span>
           </div>
           <div class="tf-item" *ngIf="selectedRequest.destination_country">
             <mat-icon>location_on</mat-icon> Destination: <strong>{{ selectedRequest.destination_country }}</strong>
@@ -624,7 +641,6 @@
             </a>
           </div>
         </div>
-        </div>
         <div class="detail-block">
           <div class="detail-lbl">Submitted</div>
           <div class="detail-val">{{ selectedRequest.created_at | date:'dd MMM yyyy' }}</div>
@@ -634,8 +650,9 @@
           <div class="detail-val">{{ selectedRequest.approved_at | date:'dd MMM yyyy' }}</div>
         </div>
       </div>
+      </ng-container>
 
-      <div class="activity-timeline" *ngIf="selectedRequest.activities?.length">
+      <div class="activity-timeline" *ngIf="detailDrawerTab === 'activity' && selectedRequest.activities?.length">
         <div class="activity-title">
           <mat-icon>history</mat-icon>
           Activity Log
@@ -654,6 +671,12 @@
             <div class="activity-note" *ngIf="a.notes">{{ a.notes }}</div>
           </div>
         </div>
+      </div>
+
+      <div class="activity-empty" *ngIf="detailDrawerTab === 'activity' && !selectedRequest.activities?.length">
+        <mat-icon>history</mat-icon>
+        <strong>No activity yet</strong>
+        <span>Actions on this request will appear here.</span>
       </div>
 
     </div>
@@ -804,8 +827,7 @@
       <div class="two-col">
         <div class="field-group">
           <label class="field-label">{{ form.is_half_day ? 'Date' : 'Start Date' }} <span class="req">*</span></label>
-          <input class="field-input" type="date" [(ngModel)]="form.start_date"
-                 (change)="form.is_half_day && (form.end_date = form.start_date)">
+          <input class="field-input" type="date" [(ngModel)]="form.start_date" (change)="onLeaveStartDateChange()">
         </div>
         <div class="field-group" *ngIf="!form.is_half_day">
           <label class="field-label">End Date <span class="req">*</span></label>
@@ -851,16 +873,33 @@
 
         <!-- Air Ticket -->
         <label class="ao-card" [class.ao-selected]="form.requires_ticket">
-          <input type="checkbox" [(ngModel)]="form.requires_ticket">
+          <input type="checkbox" [(ngModel)]="form.requires_ticket" (change)="onTicketRequirementChange()">
           <div class="ao-card-icon"><mat-icon>airplane_ticket</mat-icon></div>
           <div class="ao-card-body">
-            <div class="ao-card-title">Air Ticket</div>
-            <div class="ao-card-sub">Company air ticket requested for this leave</div>
+            <div class="ao-card-title">Is ticket needed?</div>
+            <div class="ao-card-sub">Request your yearly annual ticket entitlement</div>
           </div>
           <div class="ao-card-check" *ngIf="form.requires_ticket">
             <mat-icon>check_circle</mat-icon>
           </div>
         </label>
+      </div>
+
+      <div class="ticket-passengers" *ngIf="form.requires_ticket">
+        <div class="ticket-loading" *ngIf="ticketOptionsLoading"><mat-spinner diameter="22"></mat-spinner> Loading ticket eligibility...</div>
+        <ng-container *ngIf="ticketOptions && !ticketOptionsLoading">
+          <div class="ticket-used" *ngIf="ticketOptions.already_used"><mat-icon>error_outline</mat-icon> Ticket entitlement for {{ ticketOptions.year }} has already been used.</div>
+          <div class="passenger-heading">Ticket passengers <span>{{ 1 + (form.ticket_dependent_ids?.length || 0) }} ticket(s)</span></div>
+          <label class="passenger-row selected fixed"><input type="checkbox" checked disabled><mat-icon>person</mat-icon><div><strong>{{ ticketOptions.employee.name }}</strong><small>Employee · Automatically selected</small></div><mat-icon>check_circle</mat-icon></label>
+          <ng-container *ngIf="!ticketOptions.is_saudi">
+            <div class="dependent-limit">Select up to {{ ticketOptions.max_dependents }} dependents.</div>
+            <label class="passenger-row" *ngFor="let d of ticketOptions.dependents" [class.selected]="form.ticket_dependent_ids.includes(d.id)" [class.disabled]="!form.ticket_dependent_ids.includes(d.id) && form.ticket_dependent_ids.length >= ticketOptions.max_dependents">
+              <input type="checkbox" [checked]="form.ticket_dependent_ids.includes(d.id)" [disabled]="!form.ticket_dependent_ids.includes(d.id) && form.ticket_dependent_ids.length >= ticketOptions.max_dependents" (change)="toggleTicketDependent(d.id)">
+              <mat-icon>family_restroom</mat-icon><div><strong>{{ d.full_name }}</strong><small>{{ d.relationship | titlecase }}</small></div><mat-icon *ngIf="form.ticket_dependent_ids.includes(d.id)">check_circle</mat-icon>
+            </label>
+            <div class="dependent-limit" *ngIf="!ticketOptions.dependents.length">No dependents are registered. Contact HR to add dependent details.</div>
+          </ng-container>
+        </ng-container>
       </div>
 
       <!-- Destination (shown when either is checked) -->

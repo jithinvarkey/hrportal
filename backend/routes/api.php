@@ -123,14 +123,19 @@ Route::prefix('v1')->group(function () {
             Route::get('/',                              [EmployeeController::class, 'index']);
             Route::post('/',                             [EmployeeController::class, 'store']);
             Route::get('/export',                        [EmployeeController::class, 'export']);
-            Route::get('/stats',                         [EmployeeController::class, 'stats']);
-            Route::get('/{id}',                          [EmployeeController::class, 'show']);
+             Route::get('/stats',                         [EmployeeController::class, 'stats']);
+             Route::get('/manager-options',               [EmployeeController::class, 'managerOptions']);
+             Route::get('/{id}',                          [EmployeeController::class, 'show']);
             Route::put('/{id}',                          [EmployeeController::class, 'update']);
             Route::delete('/{id}',                       [EmployeeController::class, 'destroy']);
             Route::post('/{id}/avatar',                  [EmployeeController::class, 'uploadAvatar']);
             Route::post('/{id}/documents',               [EmployeeController::class, 'uploadDocument']);
             Route::get('/{id}/documents',                [EmployeeController::class, 'listDocuments']);
             Route::delete('/{id}/documents/{docId}',     [EmployeeController::class, 'deleteDocument']);
+            Route::get('/{id}/dependents',               [EmployeeController::class, 'dependents'])->whereNumber('id');
+            Route::post('/{id}/dependents',              [EmployeeController::class, 'storeDependent'])->whereNumber('id');
+            Route::put('/{id}/dependents/{dependentId}', [EmployeeController::class, 'updateDependent'])->whereNumber('id')->whereNumber('dependentId');
+            Route::delete('/{id}/dependents/{dependentId}', [EmployeeController::class, 'deleteDependent'])->whereNumber('id')->whereNumber('dependentId');
             Route::get('/{id}/documents/{docId}/download', [EmployeeController::class, 'downloadDocument']);
         });
 
@@ -176,6 +181,7 @@ Route::prefix('v1')->group(function () {
         Route::prefix('leave')->group(function () {
             Route::post('/accrue',   [LeaveController::class, 'runAccrual']);   // manual trigger
             Route::get('/types',                   [LeaveController::class, 'types']);
+            Route::get('/ticket-options',          [LeaveController::class, 'ticketOptions']);
             Route::post('/types',                  [LeaveController::class, 'storeType']);
             Route::get('/types/{id}/visibility',   [LeaveController::class, 'typeVisibility']);
             Route::post('/types/{id}/visibility',  [LeaveController::class, 'saveTypeVisibility']);
@@ -420,7 +426,9 @@ Route::prefix('v1')->group(function () {
             Route::get('/overview',                         [AdminController::class, 'overview']);
             Route::get('/permissions',                      [AdminController::class, 'permissions']);
             Route::get('/settings/loans',                   [AdminController::class, 'loanSettings']);
-            Route::put('/settings/loans',                   [AdminController::class, 'updateLoanSettings']);
+              Route::put('/settings/loans',                   [AdminController::class, 'updateLoanSettings']);
+              Route::get('/settings/annual-tickets',          [AdminController::class, 'annualTicketSettings']);
+              Route::put('/settings/annual-tickets',          [AdminController::class, 'updateAnnualTicketSettings']);
 
             Route::prefix('users')->group(function () {
                 Route::get('/',         [AdminController::class, 'users']);

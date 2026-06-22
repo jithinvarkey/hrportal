@@ -32,6 +32,7 @@ export class LeaveListComponent implements OnInit {
   showNewRequest = false;
   showReject = false;
   showDetail = false;
+  detailDrawerTab: 'details' | 'activity' = 'details';
   showTypeForm = false;
   showHolidayForm = false;
   showVisibilityPanel = false;
@@ -65,10 +66,12 @@ export class LeaveListComponent implements OnInit {
   holidaySaving = false;
 
   // New request form
-  form: any = { leave_type_id: '', start_date: '', end_date: '', start_time: '08:00', end_time: '09:00', reason: '', employee_id: '', is_half_day: false, half_day_period: 'morning', requires_exit_reentry: false, requires_ticket: false, destination_country: '' };
+  form: any = { leave_type_id: '', start_date: '', end_date: '', start_time: '08:00', end_time: '09:00', reason: '', employee_id: '', is_half_day: false, half_day_period: 'morning', requires_exit_reentry: false, requires_ticket: false, ticket_dependent_ids: [], destination_country: '' };
   selectedFile: File | null = null;
   fileError = '';
   formError = '';
+  ticketOptions: any = null;
+  ticketOptionsLoading = false;
 
   // Department limits panel
   showLimitsPanel = false;
@@ -188,6 +191,7 @@ export class LeaveListComponent implements OnInit {
 
   viewRequest(r: any) {
     this.selectedRequest = r;
+    this.detailDrawerTab = 'details';
     this.showDetail = true;
     this.http.get<any>(`/api/v1/leave/requests/${r.id}`).subscribe({
       next: res => this.selectedRequest = res?.request || r,
@@ -220,7 +224,8 @@ export class LeaveListComponent implements OnInit {
 
   // ── New Request ───────────────────────────────────────────────────────────
   openNewRequest() {
-    this.form = { leave_type_id: '', start_date: '', end_date: '', start_time: '08:00', end_time: '09:00', reason: '', employee_id: '', is_half_day: false, half_day_period: 'morning', requires_exit_reentry: false, requires_ticket: false, destination_country: '' };
+    this.form = { leave_type_id: '', start_date: '', end_date: '', start_time: '08:00', end_time: '09:00', reason: '', employee_id: '', is_half_day: false, half_day_period: 'morning', requires_exit_reentry: false, requires_ticket: false, ticket_dependent_ids: [], destination_country: '' };
+    this.ticketOptions = null;
     this.formError = '';
     this.selectedFile = null;
     this.fileError = '';
@@ -244,12 +249,22 @@ export class LeaveListComponent implements OnInit {
     if (lt?.requires_document && !this.selectedFile) {
       this.formError = `A supporting document is required for "${lt.name}" leave.`; return;
     }
+    if (this.form.requires_ticket && this.ticketOptions?.already_used) {
+      this.formError = `Your annual ticket entitlement for ${this.ticketOptions.year} has already been used.`; return;
+    }
+    if ((this.form.ticket_dependent_ids?.length || 0) > (this.ticketOptions?.max_dependents ?? 0)) {
+      this.formError = `A maximum of ${this.ticketOptions.max_dependents} dependents can be selected.`; return;
+    }
     this.submitting = true; this.formError = '';
 
     // Build multipart FormData so file is included
     const fd = new FormData();
     const booleanFields = ['is_half_day', 'requires_exit_reentry', 'requires_ticket'];
     Object.entries(this.form).forEach(([k, v]) => {
+      if (k === 'ticket_dependent_ids') {
+        (v as number[] || []).forEach(id => fd.append('ticket_dependent_ids[]', String(id)));
+        return;
+      }
       if (booleanFields.includes(k)) {
         // Always send booleans as '1'/'0' so Laravel's boolean validation passes
         fd.append(k, v ? '1' : '0');
@@ -262,7 +277,7 @@ export class LeaveListComponent implements OnInit {
     this.http.post<any>('/api/v1/leave/requests', fd).subscribe({
       next: () => {
         this.submitting = false; this.showNewRequest = false;
-        this.form = { leave_type_id: '', start_date: '', end_date: '', start_time: '08:00', end_time: '09:00', reason: '', employee_id: '', is_half_day: false, half_day_period: 'morning', requires_exit_reentry: false, requires_ticket: false, destination_country: '' };
+        this.form = { leave_type_id: '', start_date: '', end_date: '', start_time: '08:00', end_time: '09:00', reason: '', employee_id: '', is_half_day: false, half_day_period: 'morning', requires_exit_reentry: false, requires_ticket: false, ticket_dependent_ids: [], destination_country: '' };
         this.selectedFile = null; this.excuseUsage = null;
         this.load(1); this.loadStats(); this.loadMyBalance();
       },
@@ -507,6 +522,36 @@ export class LeaveListComponent implements OnInit {
     const start = Math.max(1, Math.min(this.currentPage - 2, lastPage - 4));
     const end = Math.min(lastPage, start + 4);
     return Array.from({ length: Math.max(0, end - start + 1) }, (_, i) => start + i);
+  }
+
+  onTicketRequirementChange(): void {
+    if (!this.form.requires_ticket) {
+      this.form.ticket_dependent_ids = [];
+      this.ticketOptions = null;
+      return;
+    }
+    this.loadTicketOptions();
+  }
+
+  onLeaveStartDateChange(): void {
+    if (this.form.is_half_day) this.form.end_date = this.form.start_date;
+    if (this.form.requires_ticket) this.loadTicketOptions();
+  }
+
+  loadTicketOptions(): void {
+    const year = this.form.start_date ? new Date(`${this.form.start_date}T00:00:00`).getFullYear() : new Date().getFullYear();
+    this.ticketOptionsLoading = true;
+    this.http.get<any>('/api/v1/leave/ticket-options', { params: { year } }).subscribe({
+      next: r => { this.ticketOptions = r.ticket_options; this.ticketOptionsLoading = false; },
+      error: err => { this.ticketOptionsLoading = false; this.formError = err?.error?.message || 'Could not load ticket entitlement.'; }
+    });
+  }
+
+  toggleTicketDependent(id: number): void {
+    const selected = this.form.ticket_dependent_ids as number[];
+    const index = selected.indexOf(id);
+    if (index >= 0) selected.splice(index, 1);
+    else if (selected.length < (this.ticketOptions?.max_dependents || 0)) selected.push(id);
   }
 
   get calMonthLabel(): string {

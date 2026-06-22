@@ -7,7 +7,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * An HR policy document, visible to all employees and optionally requiring
@@ -15,6 +14,8 @@ use Illuminate\Support\Facades\Storage;
  */
 class Policy extends Model
 {
+    protected $hidden = ['attachment_path'];
+
     protected $fillable = [
         'category_id', 'audience_type', 'target_department_ids', 'title', 'content', 'version', 'effective_date', 'review_date',
         'requires_acknowledgement', 'mandatory', 'is_published', 'status',
@@ -32,7 +33,7 @@ class Policy extends Model
         'approved_at'              => 'datetime',
     ];
 
-    protected $appends = ['attachment_url', 'has_attachment'];
+    protected $appends = ['has_attachment'];
 
     public function category(): BelongsTo
     {
@@ -54,11 +55,9 @@ class Policy extends Model
         return $this->hasMany(PolicyAcknowledgement::class, 'policy_id');
     }
 
-    public function getAttachmentUrlAttribute(): ?string
+    public function reads(): HasMany
     {
-        return $this->attachment_path
-            ? Storage::disk('public')->url($this->attachment_path)
-            : null;
+        return $this->hasMany(PolicyRead::class);
     }
 
     public function getHasAttachmentAttribute(): bool

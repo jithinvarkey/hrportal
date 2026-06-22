@@ -58,6 +58,8 @@ export class AdminComponent implements OnInit {
   ];
 
   loanSettings = { approval_levels: 2 };
+  annualTicketSettings = { saudi_employee_tickets: 1, non_saudi_employee_tickets: 1, non_saudi_max_dependents: 3 };
+  ticketSettingsSaving = false;
   settingsLoading = false;
   settingsSaving = false;
   settingsMessage = '';
@@ -182,7 +184,7 @@ export class AdminComponent implements OnInit {
     if (id === 'permissions')  { this.loadPermissions(); this.loadRoles(); this.loadOverview(); }
     if (id === 'departments')  this.loadDepartments();
     if (id === 'designations') { this.loadDesignations(); this.loadDepartments(); }
-    if (id === 'settings')     this.loadLoanSettings();
+    if (id === 'settings')     { this.loadLoanSettings(); this.loadAnnualTicketSettings(); }
   }
 
   loadLoanSettings() {
@@ -214,6 +216,21 @@ export class AdminComponent implements OnInit {
         this.settingsError = this.firstError(err) || 'Failed to save loan settings.';
         this.settingsSaving = false;
       }
+    });
+  }
+
+  loadAnnualTicketSettings() {
+    this.http.get<any>('/api/v1/admin/settings/annual-tickets').subscribe({
+      next: r => this.annualTicketSettings = r.settings,
+      error: err => this.settingsError = this.firstError(err) || 'Failed to load annual ticket settings.'
+    });
+  }
+
+  saveAnnualTicketSettings() {
+    this.ticketSettingsSaving = true; this.settingsMessage = ''; this.settingsError = '';
+    this.http.put<any>('/api/v1/admin/settings/annual-tickets', this.annualTicketSettings).subscribe({
+      next: r => { this.annualTicketSettings = r.settings; this.settingsMessage = r.message; this.ticketSettingsSaving = false; },
+      error: err => { this.settingsError = this.firstError(err) || 'Failed to save annual ticket settings.'; this.ticketSettingsSaving = false; }
     });
   }
 

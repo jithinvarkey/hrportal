@@ -87,7 +87,6 @@
             <option value="male">Male</option>
             <option value="female">Female</option>
             <option value="other">Other</option>
-            <option value="prefer_not_to_say">Prefer not to say</option>
           </select>
         </div>
 
@@ -104,16 +103,11 @@
 
         <div class="field-group">
           <label class="field-label">Nationality</label>
-          <select class="field-select" formControlName="nationality">
-            <option value="">Select nationality</option>
-            <option value="Saudi">Saudi</option>
-            <option value="Emirati">Emirati</option>
-            <option value="Egyptian">Egyptian</option>
-            <option value="Indian">Indian</option>
-            <option value="Pakistani">Pakistani</option>
-            <option value="Filipino">Filipino</option>
-            <option value="Other">Other</option>
-          </select>
+          <input class="field-input" formControlName="nationality" list="nationality-options" placeholder="Enter nationality">
+          <datalist id="nationality-options">
+            <option value="Saudi"><option value="Emirati"><option value="Egyptian">
+            <option value="Indian"><option value="Pakistani"><option value="Filipino">
+          </datalist>
         </div>
 
         <div class="field-group">
@@ -164,7 +158,7 @@
           <label class="field-label">Reporting Manager</label>
           <select class="field-select" formControlName="manager_id">
             <option [ngValue]="''">Select Manager</option>
-            <option *ngFor="let m of managers" [ngValue]="m.id">{{ m.full_name }}</option>
+            <option *ngFor="let m of managers" [ngValue]="m.id">{{ m.full_name }} · {{ m.designation?.title || m.employee_code }}</option>
           </select>
         </div>
 

@@ -76,7 +76,7 @@ class NotificationService
      *
      * @param Collection<int>|array $employeeIds
      */
-    public function emailMany($employeeIds, string $type, string $title, ?string $body, string $link): int
+    public function emailMany($employeeIds, string $type, string $title, ?string $body, string $link, ?string $titleAr = null, ?string $bodyAr = null): int
     {
         $ids = collect($employeeIds)->filter()->unique()->values();
         if ($ids->isEmpty()) {
@@ -97,6 +97,8 @@ class NotificationService
                     $body,
                     $link,
                     trim($employee->first_name . ' ' . $employee->last_name) ?: 'Employee',
+                    $titleAr,
+                    $bodyAr,
                 ));
                 $sent++;
             } catch (\Throwable $e) {

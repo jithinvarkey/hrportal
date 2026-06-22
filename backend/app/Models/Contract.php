@@ -33,13 +33,14 @@ class Contract extends Model {
         'employee_id', 'reference', 'type', 'status',
         'start_date', 'end_date', 'salary', 'currency',
         'position', 'department_id', 'terms', 'pdf_path',
-        'created_by', 'approved_by', 'approved_at','renewal_requested',
-'renewal_notified'
+        'created_by', 'approved_by', 'approved_at', 'renewal_requested',
+        'renewal_notified', 'annual_leave_reminder_sent_at',
     ];
     protected $casts = [
         'start_date' => 'date',
         'end_date' => 'date',
         'approved_at' => 'datetime',
+        'annual_leave_reminder_sent_at' => 'datetime',
         'salary' => 'decimal:2',
     ];
 

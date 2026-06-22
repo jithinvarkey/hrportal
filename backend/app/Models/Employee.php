@@ -69,6 +69,7 @@ class Employee extends Model
     public function leaveRequests() { return $this->hasMany(LeaveRequest::class); }
     public function leaveAllocations() { return $this->hasMany(LeaveAllocation::class); }
     public function attendanceLogs()   { return $this->hasMany(AttendanceLog::class); }
+    public function dependents()       { return $this->hasMany(EmployeeDependent::class); }
     public function onboardingTasks()  { return $this->hasMany(OnboardingTask::class); }
     public function performanceReviews() { return $this->hasMany(PerformanceReview::class); }
     public function kpis()          { return $this->hasMany(Kpi::class); }

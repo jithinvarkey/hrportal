@@ -37,10 +37,9 @@ export class EmployeeFormComponent implements OnInit {
 
   ngOnInit() {
     this.buildForm();
-    this.loadLookups();
-
     this.employeeId = this.route.snapshot.paramMap.get('id');
     this.isEdit = !!this.employeeId && this.employeeId !== 'new';
+    this.loadLookups();
 
     if (this.isEdit) {
       this.loadingData = true;
@@ -152,18 +151,12 @@ export class EmployeeFormComponent implements OnInit {
   loadLookups() {
     this.http.get<any>('/api/v1/departments').subscribe(r => this.departments = r?.data || r || []);
 
-    this.http
-  .get<any>('/api/v1/employees?status=active&per_page=500')
-  .subscribe(r => {
-
-    const employees = r?.data || [];
-
-    this.managers = employees.filter((e: any) =>
-      ['management', 'executive']
-        .includes(e.designation?.level)
-    );
-
-  });
+    const params: any = {};
+    if (this.isEdit) params.employee_id = this.employeeId;
+    this.http.get<any>('/api/v1/employees/manager-options', { params }).subscribe({
+      next: r => this.managers = r?.managers || [],
+      error: () => this.managers = [],
+    });
   }
 
   /**
@@ -247,8 +240,9 @@ export class EmployeeFormComponent implements OnInit {
     }
     this.saving   = true;
     this.errorMsg = '';
+    const payload = this.buildPayload();
     const url  = this.isEdit ? `/api/v1/employees/${this.employeeId}` : '/api/v1/employees';
-    const req  = this.isEdit ? this.http.put<any>(url, this.form.value) : this.http.post<any>(url, this.form.value);
+    const req  = this.isEdit ? this.http.put<any>(url, payload) : this.http.post<any>(url, payload);
     req.subscribe({
       next: r => {
         const id = r.employee?.id || this.employeeId;
@@ -270,6 +264,20 @@ export class EmployeeFormComponent implements OnInit {
         }
       }
     });
+  }
+
+  buildPayload(): any {
+    const payload = { ...this.form.getRawValue() };
+    ['dob', 'hire_date', 'confirmation_date', 'termination_date'].forEach(field => {
+      payload[field] = this.toDateInput(payload[field]) || null;
+    });
+    ['department_id', 'designation_id', 'manager_id'].forEach(field => {
+      payload[field] = payload[field] === '' || payload[field] === null ? null : Number(payload[field]);
+    });
+    ['housing_allowance', 'transport_allowance', 'years_of_experience'].forEach(field => {
+      if (payload[field] === '') payload[field] = null;
+    });
+    return payload;
   }
 
   tabHasError(tabId: string): boolean {

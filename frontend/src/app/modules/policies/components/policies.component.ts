@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef, ElementRef, HostListener, ViewChild } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
 
@@ -17,7 +17,10 @@ interface Policy {
   category: { id: number; name: string; icon?: string } | null;
   has_attachment: boolean;
   attachment_name: string | null;
+  attachment_mime?: string | null;
   acknowledged?: boolean;
+  is_read?: boolean;
+  reads_count?: number;
 }
 
 type PolicyAction = 'open' | 'report' | 'edit' | 'publish' | 'delete';
@@ -35,6 +38,8 @@ type PolicyAction = 'open' | 'report' | 'edit' | 'publish' | 'delete';
 })
 export class PoliciesComponent implements OnInit {
 
+  @ViewChild('pdfPages') private pdfPagesContainer?: ElementRef<HTMLDivElement>;
+
   private readonly api = '/api/v1/policies';
 
   isManager = false;
@@ -50,6 +55,10 @@ export class PoliciesComponent implements OnInit {
   selected: Policy | null = null;
   showReader = false;
   acknowledging = false;
+  pdfLoading = false;
+  pdfError = '';
+  pdfPageCount = 0;
+  private previewGeneration = 0;
 
   // Form (HR)
   showForm = false;
@@ -142,16 +151,124 @@ export class PoliciesComponent implements OnInit {
 
   openReader(p: Policy): void {
     this.selected = p;
+    this.clearPolicyPreview();
     this.showReader = true;
     this.cdr.markForCheck();
     // Fetch full content (list may omit large content for brevity in future).
     this.http.get<any>(`${this.api}/${p.id}`).subscribe({
-      next: r => { this.selected = r?.policy || p; this.cdr.markForCheck(); },
+      next: r => {
+        this.selected = r?.policy || p;
+        const inList = this.policies.find(item => item.id === p.id);
+        if (inList) {
+          inList.is_read = true;
+          inList.reads_count = this.selected?.reads_count ?? inList.reads_count;
+        }
+        if (!this.isManager && this.selected?.has_attachment && this.selected.attachment_mime === 'application/pdf') {
+          this.loadPolicyPreview(this.selected);
+        }
+        this.cdr.markForCheck();
+      },
       error: () => {},
     });
   }
 
-  closeReader(): void { this.showReader = false; this.selected = null; this.cdr.markForCheck(); }
+  closeReader(): void {
+    this.showReader = false;
+    this.selected = null;
+    this.clearPolicyPreview();
+    this.cdr.markForCheck();
+  }
+
+  private loadPolicyPreview(policy: Policy): void {
+    const generation = ++this.previewGeneration;
+    this.pdfLoading = true;
+    this.pdfError = '';
+    this.cdr.markForCheck();
+    this.http.get(`${this.api}/${policy.id}/attachment`, { responseType: 'blob' }).subscribe({
+      next: blob => this.renderPolicyPdf(blob, generation),
+      error: () => {
+        this.pdfLoading = false;
+        this.pdfError = 'Secure policy preview is unavailable.';
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  private async renderPolicyPdf(blob: Blob, generation: number): Promise<void> {
+    try {
+      const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      pdfjs.GlobalWorkerOptions.workerSrc = '/assets/pdfjs/pdf.worker.min.mjs';
+      const pdfDocument = await pdfjs.getDocument({ data: await blob.arrayBuffer() }).promise;
+      if (generation !== this.previewGeneration) return;
+
+      this.pdfPageCount = pdfDocument.numPages;
+      this.pdfLoading = false;
+      this.cdr.detectChanges();
+      const container = this.pdfPagesContainer?.nativeElement;
+      if (!container) return;
+      container.replaceChildren();
+
+      for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber++) {
+        if (generation !== this.previewGeneration) return;
+        const page = await pdfDocument.getPage(pageNumber);
+        const natural = page.getViewport({ scale: 1 });
+        const targetWidth = Math.max(280, Math.min(container.clientWidth - 32, 1150));
+        const viewport = page.getViewport({ scale: targetWidth / natural.width });
+        const outputScale = Math.min(window.devicePixelRatio || 1, 2);
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d', { alpha: false });
+        if (!context) throw new Error('Canvas rendering is unavailable.');
+
+        canvas.width = Math.floor(viewport.width * outputScale);
+        canvas.height = Math.floor(viewport.height * outputScale);
+        canvas.style.width = `${Math.floor(viewport.width)}px`;
+        canvas.style.height = `${Math.floor(viewport.height)}px`;
+        canvas.style.display = 'block';
+        canvas.style.maxWidth = '100%';
+        canvas.style.margin = '0 auto 20px';
+        canvas.style.background = '#fff';
+        canvas.style.boxShadow = '0 2px 12px rgba(0,0,0,.22)';
+        canvas.setAttribute('aria-label', `Policy page ${pageNumber} of ${pdfDocument.numPages}`);
+        container.appendChild(canvas);
+
+        await page.render({
+          canvas: null,
+          canvasContext: context,
+          viewport,
+          transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
+        }).promise;
+      }
+    } catch (error) {
+      if (generation !== this.previewGeneration) return;
+      console.error('Policy PDF preview failed.', error);
+      this.pdfLoading = false;
+      this.pdfError = 'Secure policy preview is unavailable.';
+      this.cdr.markForCheck();
+    }
+  }
+
+  private clearPolicyPreview(): void {
+    this.previewGeneration++;
+    this.pdfLoading = false;
+    this.pdfError = '';
+    this.pdfPageCount = 0;
+    this.pdfPagesContainer?.nativeElement.replaceChildren();
+  }
+
+  blockPolicyActions(event: Event): void {
+    if (this.isManager) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  blockPolicyShortcuts(event: KeyboardEvent): void {
+    if (!this.showReader || this.isManager || !(event.ctrlKey || event.metaKey)) return;
+    if (['s', 'p'].includes(event.key.toLowerCase())) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }
 
   acknowledge(): void {
     if (!this.selected) return;
@@ -171,6 +288,36 @@ export class PoliciesComponent implements OnInit {
 
   downloadAttachment(p: Policy): void {
     window.open(`${this.api}/${p.id}/attachment`, '_blank');
+  }
+
+  viewAttachment(p: Policy): void {
+    const previewWindow = window.open('', '_blank');
+    this.http.get(`${this.api}/${p.id}/attachment`, {
+      params: { inline: '1' },
+      responseType: 'blob',
+    }).subscribe({
+      next: blob => {
+        const previewUrl = URL.createObjectURL(blob);
+        if (previewWindow) {
+          previewWindow.location.href = previewUrl;
+        } else {
+          window.open(previewUrl, '_blank');
+        }
+      },
+      error: () => {
+        previewWindow?.close();
+        this.toast('Attachment preview is unavailable.');
+      },
+    });
+  }
+
+  canPreviewAttachment(p: Policy): boolean {
+    const mime = (p.attachment_mime || '').toLowerCase();
+    if (mime === 'application/pdf' || ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/avif'].includes(mime)) {
+      return true;
+    }
+
+    return /\.(pdf|png|jpe?g|gif|webp|bmp|avif)$/i.test(p.attachment_name || '');
   }
 
   onPolicyAction(event: Event, action: PolicyAction, policy: Policy): void {

@@ -48,7 +48,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   // ── Helpers ───────────────────────────────────────────────────────────────
   pct(a: number, b: number) { return b ? Math.round((a / b) * 100) : 0; }
   isOD(d: string)           { return d && new Date(d) < new Date(); }
-  go(path: string)          { this.router.navigate([path]); }
+  go(path: string)          { this.router.navigateByUrl(path); }
 
   empStatusCls(s: string)   { return ({ active:'badge-green', on_leave:'badge-yellow', probation:'badge-blue', inactive:'badge-gray', terminated:'badge-red' } as any)[s] || 'badge-gray'; }
   leaveCls(s: string)       { return ({ pending:'badge-yellow', approved:'badge-green', rejected:'badge-red', cancelled:'badge-gray' } as any)[s] || 'badge-gray'; }
@@ -98,15 +98,15 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
 
     get('/api/v1/dashboard/stats', d => {
       this.st = d;
+      this.employees = d?.recent?.employees || [];
+      this.leaveReqs = d?.recent?.leave_requests || [];
+      this.openJobs = d?.recent?.open_jobs || [];
+      this.reviews = d?.recent?.reviews || [];
       this.loading = false;
       this.buildKpis();
       this.buildStatCards();
     });
 
-    get('/api/v1/employees?per_page=5&sort=created_at',          r => this.employees = r?.data || []);
-    get('/api/v1/leave/requests?needs_action=1&per_page=5',       r => this.leaveReqs = r?.data || []);
-    get('/api/v1/recruitment/jobs?status=open&per_page=5',        r => this.openJobs  = r?.data || []);
-    get('/api/v1/performance?view=reviews&per_page=5',            r => this.reviews   = r?.data || []);
     get('/api/v1/dashboard/recent-activities',                    r => this.activity  = Array.isArray(r) ? r : r?.data || []);
   }
 
@@ -137,7 +137,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
           { label: 'On Leave',  value: d.employees?.on_leave  ?? 0, color: '#6366f1' },
           { label: 'New/Month', value: d.employees?.new_this_month ?? 0, color: '#0ea5e9' },
         ],
-        route: '/employees',
+        route: '/employees?dashboard_scope=1',
         alert: d.employees?.contracts_expiring > 0 ? `${d.employees.contracts_expiring} contracts expiring` : null,
         alertColor: '#f59e0b',
         progress: this.pct(d.employees?.active, d.employees?.total),

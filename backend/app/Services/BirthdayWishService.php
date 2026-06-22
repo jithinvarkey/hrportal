@@ -21,13 +21,16 @@ class BirthdayWishService
     public function settings(): array
     {
         $values = DB::table('system_settings')->whereIn('key', [
-            'birthday_wishes_enabled', 'birthday_wish_subject', 'birthday_wish_body', 'birthday_wish_background_image',
+            'birthday_wishes_enabled', 'birthday_wish_subject', 'birthday_wish_body',
+            'birthday_wish_subject_ar', 'birthday_wish_body_ar', 'birthday_wish_background_image',
         ])->pluck('value', 'key');
 
         return [
             'enabled' => ($values['birthday_wishes_enabled'] ?? '1') === '1',
             'subject' => $values['birthday_wish_subject'] ?? self::DEFAULT_SUBJECT,
             'body' => $values['birthday_wish_body'] ?? self::DEFAULT_BODY,
+            'subject_ar' => $values['birthday_wish_subject_ar'] ?? '',
+            'body_ar' => $values['birthday_wish_body_ar'] ?? '',
             'background_image_path' => $values['birthday_wish_background_image'] ?? null,
             'background_image_url' => !empty($values['birthday_wish_background_image'])
                 ? Storage::disk('public')->url($values['birthday_wish_background_image']) : null,
@@ -41,6 +44,8 @@ class BirthdayWishService
             'birthday_wishes_enabled' => $settings['enabled'] ? '1' : '0',
             'birthday_wish_subject' => $settings['subject'],
             'birthday_wish_body' => $settings['body'],
+            'birthday_wish_subject_ar' => $settings['subject_ar'] ?? '',
+            'birthday_wish_body_ar' => $settings['body_ar'] ?? '',
             'birthday_wish_background_image' => $settings['background_image_path'] ?? null,
         ] as $key => $value) {
             DB::table('system_settings')->updateOrInsert(['key' => $key], ['value' => $value, 'updated_at' => $now, 'created_at' => $now]);
@@ -85,9 +90,12 @@ class BirthdayWishService
         $settings = $this->settings();
         $subject = $this->render($settings['subject'], $employee);
         $body = $this->render($settings['body'], $employee);
+        $subjectAr = $this->render($settings['subject_ar'], $employee);
+        $bodyAr = $this->render($settings['body_ar'], $employee);
+        $mailSubject = $subjectAr ? "{$subject} | {$subjectAr}" : $subject;
         DB::table('birthday_wish_deliveries')->updateOrInsert(
             ['employee_id' => $employee->id, 'birthday_year' => $year],
-            ['status' => 'pending', 'recipient_email' => $employee->email, 'subject' => $subject, 'error' => null, 'updated_at' => now(), 'created_at' => now()]
+            ['status' => 'pending', 'recipient_email' => $employee->email, 'subject' => $mailSubject, 'error' => null, 'updated_at' => now(), 'created_at' => now()]
         );
 
         try {
@@ -96,9 +104,9 @@ class BirthdayWishService
             $backgroundPath = $settings['background_image_path']
                 ? Storage::disk('public')->path($settings['background_image_path']) : null;
             $renderedImage = $backgroundPath && is_file($backgroundPath)
-                ? $this->imageComposer->compose($backgroundPath, $body) : null;
+                ? $this->imageComposer->compose($backgroundPath, $body, $bodyAr) : null;
             try {
-                Mail::to($employee->email)->cc($cc)->send(new BirthdayWishMail($subject, $body, $renderedImage));
+                Mail::to($employee->email)->cc($cc)->send(new BirthdayWishMail($mailSubject, $body, $bodyAr, $renderedImage));
             } finally {
                 if ($renderedImage && is_file($renderedImage)) @unlink($renderedImage);
             }

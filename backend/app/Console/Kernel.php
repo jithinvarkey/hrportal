@@ -41,6 +41,12 @@ class Kernel extends ConsoleKernel
                  ->timezone('Asia/Riyadh')
                  ->withoutOverlapping()
                  ->appendOutputTo(storage_path('logs/missed-checkouts.log'));
+
+        $schedule->command('leave:notify-contract-expiry')
+                 ->dailyAt('08:30')
+                 ->timezone('Asia/Riyadh')
+                 ->withoutOverlapping()
+                 ->appendOutputTo(storage_path('logs/annual-leave-contract-expiry.log'));
     }
 
     protected function commands(): void

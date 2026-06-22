@@ -24,17 +24,37 @@
         <input type="checkbox" [(ngModel)]="birthdaySettings.enabled">
         <span><strong>Automatic birthday wishes</strong><small>Send daily at 8:00 AM Riyadh time</small></span>
       </label>
-      <div class="fg">
-        <label>Email subject <span class="req">*</span></label>
-        <input [(ngModel)]="birthdaySettings.subject" maxlength="200" placeholder="Happy Birthday, {{employee_name}}!">
-      </div>
-      <div class="fg">
-        <label>Message <span class="req">*</span></label>
-        <textarea rows="8" [(ngModel)]="birthdaySettings.body" maxlength="5000"></textarea>
-      </div>
-      <div class="placeholder-row">
-        <span>Insert:</span>
-        <button type="button" *ngFor="let token of birthdayPlaceholders" (click)="insertBirthdayPlaceholder(token)">{{ token }}</button>
+      <div class="language-editors">
+        <section class="language-editor" dir="ltr">
+          <div class="language-label">English</div>
+          <div class="fg">
+            <label>Email subject <span class="req">*</span></label>
+            <input [(ngModel)]="birthdaySettings.subject" maxlength="200" placeholder="Happy Birthday, {{employee_name}}!">
+          </div>
+          <div class="fg">
+            <label>Message <span class="req">*</span></label>
+            <textarea rows="8" [(ngModel)]="birthdaySettings.body" maxlength="5000"></textarea>
+          </div>
+          <div class="placeholder-row">
+            <span>Insert:</span>
+            <button type="button" *ngFor="let token of birthdayPlaceholders" (click)="insertBirthdayPlaceholder(token, 'en')">{{ token }}</button>
+          </div>
+        </section>
+        <section class="language-editor arabic-editor" dir="rtl" lang="ar">
+          <div class="language-label">العربية</div>
+          <div class="fg">
+            <label>عنوان البريد</label>
+            <input [(ngModel)]="birthdaySettings.subject_ar" maxlength="200" placeholder="عيد ميلاد سعيد، {{employee_name}}!">
+          </div>
+          <div class="fg">
+            <label>الرسالة</label>
+            <textarea rows="8" [(ngModel)]="birthdaySettings.body_ar" maxlength="5000"></textarea>
+          </div>
+          <div class="placeholder-row">
+            <span>إدراج:</span>
+            <button type="button" *ngFor="let token of birthdayPlaceholders" (click)="insertBirthdayPlaceholder(token, 'ar')">{{ token }}</button>
+          </div>
+        </section>
       </div>
       <div class="fg">
         <label>Background image <span class="optional-label">Optional</span></label>
@@ -87,7 +107,8 @@
 <!-- List -->
 <div class="ann-list" *ngIf="!loading">
   <div class="ann-card" *ngFor="let a of announcements"
-       [class.pinned]="a.is_pinned" [class.unpublished]="!a.is_published">
+       [class.pinned]="a.is_pinned" [class.unpublished]="!a.is_published" [class.read]="a.is_read" [class.clickable]="!isManager"
+       [attr.tabindex]="isManager ? null : 0" (click)="markRead(a)" (keydown.enter)="markRead(a)">
     <div class="ann-top">
       <div class="ann-badges">
         <span class="cat-chip" *ngIf="a.category"
@@ -109,12 +130,24 @@
       </div>
     </div>
 
-    <h3 class="ann-title">{{ a.title }}</h3>
-    <p class="ann-body">{{ a.body }}</p>
+    <div class="announcement-languages">
+      <section dir="ltr">
+        <h3 class="ann-title">{{ a.title }}</h3>
+        <p class="ann-body">{{ a.body }}</p>
+      </section>
+      <section class="announcement-arabic" dir="rtl" lang="ar" *ngIf="a.title_ar || a.body_ar">
+        <h3 class="ann-title" *ngIf="a.title_ar">{{ a.title_ar }}</h3>
+        <p class="ann-body" *ngIf="a.body_ar">{{ a.body_ar }}</p>
+      </section>
+    </div>
 
     <div class="ann-attach" *ngIf="a.has_attachment">
       <mat-icon>attach_file</mat-icon>
       <span>{{ a.attachment_name }}</span>
+      <button class="attachment-view" *ngIf="canPreviewAttachment(a)" (click)="viewAttachment(a)"
+              matTooltip="View attachment" [attr.aria-label]="'View ' + a.attachment_name">
+        <mat-icon>visibility</mat-icon>
+      </button>
       <button class="link-btn" (click)="downloadAttachment(a)">Download</button>
     </div>
 
@@ -131,11 +164,7 @@
         👍 <span *ngIf="a.reactions_count">{{ a.reactions_count }}</span>
       </button>
       <!-- Read marker for employees -->
-      <button class="read-btn" *ngIf="!isManager" [class.read]="a.is_read" (click)="markRead(a)"
-              [matTooltip]="a.is_read ? 'Read' : 'Mark as read'">
-        <mat-icon>{{ a.is_read ? 'done_all' : 'done' }}</mat-icon>
-        {{ a.is_read ? 'Read' : 'Mark read' }}
-      </button>
+      <span class="read-count" *ngIf="!isManager && a.is_read"><mat-icon>done_all</mat-icon> Read</span>
       <!-- Read count for HR -->
       <span class="read-count" *ngIf="isManager"><mat-icon>visibility</mat-icon> {{ a.reads_count || 0 }}</span>
     </div>
@@ -154,7 +183,10 @@
     <h3><mat-icon>{{ editId ? 'edit' : 'campaign' }}</mat-icon> {{ editId ? 'Edit Announcement' : 'New Announcement' }}</h3>
     <button class="icon-btn" (click)="closeForm()"><mat-icon>close</mat-icon></button>
   </div>
-  <div class="modal-body">
+  <div class="modal-body announcement-form-body">
+    <div class="language-editors announcement-editors">
+      <section class="language-editor" dir="ltr">
+        <div class="language-label">English</div>
     <div class="fg">
       <label>Title <span class="req">*</span></label>
       <input [(ngModel)]="form.title" placeholder="Announcement title">
@@ -162,6 +194,19 @@
     <div class="fg">
       <label>Message <span class="req">*</span></label>
       <textarea rows="6" [(ngModel)]="form.body" placeholder="Write your announcement…"></textarea>
+    </div>
+      </section>
+      <section class="language-editor arabic-editor" dir="rtl" lang="ar">
+        <div class="language-label">العربية</div>
+        <div class="fg">
+          <label>العنوان</label>
+          <input [(ngModel)]="form.title_ar" placeholder="عنوان الإعلان">
+        </div>
+        <div class="fg">
+          <label>الرسالة</label>
+          <textarea rows="6" [(ngModel)]="form.body_ar" placeholder="اكتب نص الإعلان..."></textarea>
+        </div>
+      </section>
     </div>
     <div class="two-col">
       <div class="fg">

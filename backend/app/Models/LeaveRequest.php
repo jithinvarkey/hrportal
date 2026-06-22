@@ -8,7 +8,7 @@ class LeaveRequest extends Model {
         'start_date','start_time','end_date','end_time',
         'total_days','total_hours',
         'is_half_day','half_day_period',
-        'requires_exit_reentry','requires_ticket','destination_country',
+        'requires_exit_reentry','requires_ticket','ticket_year','ticket_count','destination_country',
         'status','reason','rejection_reason',
         'approved_by','approved_at','document_path',
     ];
@@ -20,11 +20,14 @@ class LeaveRequest extends Model {
         'is_half_day'           => 'boolean',
         'requires_exit_reentry' => 'boolean',
         'requires_ticket'       => 'boolean',
+        'ticket_year'           => 'integer',
+        'ticket_count'          => 'integer',
         'total_hours' => 'decimal:2',
     ];
     public function employee()  { return $this->belongsTo(Employee::class); }
     public function leaveType() { return $this->belongsTo(LeaveType::class); }
     public function approver()  { return $this->belongsTo(User::class,'approved_by'); }
     public function managerApprover()  { return $this->belongsTo(User::class,'manager_approved_by'); }
+    public function ticketPassengers() { return $this->hasMany(LeaveTicketPassenger::class); }
     public function scopePending($q) { return $q->where('status','pending'); }
 }

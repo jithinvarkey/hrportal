@@ -31,6 +31,22 @@
               A new {{ $type === 'policy' ? 'policy' : 'announcement' }} has been published for you.
             </p>
             <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+              @if($type === 'announcement')
+              <tr>
+                <td width="{{ $titleAr || $bodyAr ? '50%' : '100%' }}" valign="top" dir="ltr" style="padding:16px;text-align:left">
+                  <div style="font-size:11px;color:#6b7280;font-weight:bold;text-transform:uppercase;margin-bottom:8px">English</div>
+                  <div style="font-size:15px;color:#1a1a2e;font-weight:700;margin-bottom:8px">{{ $title }}</div>
+                  @if($body)<div style="font-size:13px;color:#374151;line-height:1.6">{{ $body }}</div>@endif
+                </td>
+                @if($titleAr || $bodyAr)
+                <td width="50%" valign="top" dir="rtl" lang="ar" style="padding:16px;border-left:1px solid #e5e7eb;text-align:right;font-family:Arial,Tahoma,sans-serif">
+                  <div style="font-size:11px;color:#6b7280;font-weight:bold;margin-bottom:8px">العربية</div>
+                  @if($titleAr)<div style="font-size:15px;color:#1a1a2e;font-weight:700;margin-bottom:8px">{{ $titleAr }}</div>@endif
+                  @if($bodyAr)<div style="font-size:13px;color:#374151;line-height:1.6">{{ $bodyAr }}</div>@endif
+                </td>
+                @endif
+              </tr>
+              @else
               <tr style="background:#f9fafb">
                 <td style="padding:10px 16px;font-size:12px;color:#6b7280;font-weight:bold;text-transform:uppercase;letter-spacing:.05em;width:30%">Title</td>
                 <td style="padding:10px 16px;font-size:13px;color:#1a1a2e;font-weight:600">{{ $title }}</td>
@@ -40,6 +56,7 @@
                 <td style="padding:10px 16px;font-size:12px;color:#6b7280;font-weight:bold;text-transform:uppercase;letter-spacing:.05em;border-top:1px solid #e5e7eb">Summary</td>
                 <td style="padding:10px 16px;font-size:13px;color:#374151;border-top:1px solid #e5e7eb;line-height:1.5">{{ $body }}</td>
               </tr>
+              @endif
               @endif
             </table>
             <p style="margin:24px 0 0">

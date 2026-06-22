@@ -17,6 +17,7 @@ use App\Models\PerformanceReview;
 use App\Models\Separation;
 use App\Models\User;
 use App\Services\LoanApprovalService;
+use App\Services\AnnualTicketService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
@@ -27,10 +28,29 @@ use Spatie\Permission\Models\Role;
 class AdminController extends Controller
 {
     protected $loanApprovalService;
+    protected $annualTicketService;
 
-    public function __construct(LoanApprovalService $loanApprovalService)
+    public function __construct(LoanApprovalService $loanApprovalService, AnnualTicketService $annualTicketService)
     {
         $this->loanApprovalService = $loanApprovalService;
+        $this->annualTicketService = $annualTicketService;
+    }
+
+    public function annualTicketSettings(): JsonResponse
+    {
+        if (!$this->isSuperAdmin()) return response()->json(['message' => 'Only a super admin can manage system settings.'], 403);
+        return response()->json(['settings' => $this->annualTicketService->settings()]);
+    }
+
+    public function updateAnnualTicketSettings(Request $request): JsonResponse
+    {
+        if (!$this->isSuperAdmin()) return response()->json(['message' => 'Only a super admin can manage system settings.'], 403);
+        $data = $request->validate([
+            'saudi_employee_tickets' => 'required|integer|in:1',
+            'non_saudi_employee_tickets' => 'required|integer|in:1',
+            'non_saudi_max_dependents' => 'required|integer|min:0|max:3',
+        ]);
+        return response()->json(['message' => 'Annual ticket policy updated.', 'settings' => $this->annualTicketService->updateSettings($data)]);
     }
 
     public function loanSettings(): JsonResponse

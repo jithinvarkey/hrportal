@@ -5,7 +5,9 @@ import { AuthService } from '../../../core/services/auth.service';
 interface Announcement {
   id: number;
   title: string;
+  title_ar?: string | null;
   body: string;
+  body_ar?: string | null;
   priority: 'normal' | 'high' | 'urgent';
   audience_type?: 'all' | 'departments' | 'roles';
   is_pinned: boolean;
@@ -17,6 +19,7 @@ interface Announcement {
   creator: { id: number; name: string } | null;
   has_attachment: boolean;
   attachment_name: string | null;
+  attachment_mime?: string | null;
   created_at: string;
   reads_count?: number;
   reactions_count?: number;
@@ -81,7 +84,7 @@ export class AnnouncementsComponent implements OnInit {
   birthdaySaving = false;
   birthdaySending = false;
   birthdayError = '';
-  birthdaySettings: any = { enabled: true, subject: '', body: '' };
+  birthdaySettings: any = { enabled: true, subject: '', body: '', subject_ar: '', body_ar: '' };
   birthdayBackgroundFile: File | null = null;
   birthdayBackgroundPreview: string | null = null;
   removeBirthdayBackground = false;
@@ -102,7 +105,7 @@ export class AnnouncementsComponent implements OnInit {
   }
 
   private blankForm(): any {
-    return { category_id: null, title: '', body: '', priority: 'normal',
+    return { category_id: null, title: '', title_ar: '', body: '', body_ar: '', priority: 'normal',
              audience_type: 'all', target_department_ids: [], target_roles: [],
              is_pinned: false, is_published: true, scheduled_at: '', expires_at: '' };
   }
@@ -143,7 +146,8 @@ export class AnnouncementsComponent implements OnInit {
     if (a) {
       this.editId = a.id;
       this.form = {
-        category_id: a.category?.id ?? null, title: a.title, body: a.body,
+        category_id: a.category?.id ?? null, title: a.title, title_ar: a.title_ar ?? '',
+        body: a.body, body_ar: a.body_ar ?? '',
         priority: a.priority, audience_type: a.audience_type ?? 'all',
         target_department_ids: (a as any).target_department_ids ?? [],
         target_roles: (a as any).target_roles ?? [],
@@ -183,7 +187,9 @@ export class AnnouncementsComponent implements OnInit {
 
     const fd = new FormData();
     fd.append('title', this.form.title);
+    fd.append('title_ar', this.form.title_ar?.trim() || '');
     fd.append('body', this.form.body);
+    fd.append('body_ar', this.form.body_ar?.trim() || '');
     fd.append('priority', this.form.priority);
     fd.append('audience_type', this.form.audience_type || 'all');
     fd.append('is_pinned', this.form.is_pinned ? '1' : '0');
@@ -229,6 +235,36 @@ export class AnnouncementsComponent implements OnInit {
     window.open(`${this.api}/${a.id}/attachment`, '_blank');
   }
 
+  viewAttachment(a: Announcement): void {
+    const previewWindow = window.open('', '_blank');
+    this.http.get(`${this.api}/${a.id}/attachment`, {
+      params: { inline: '1' },
+      responseType: 'blob',
+    }).subscribe({
+      next: blob => {
+        const previewUrl = URL.createObjectURL(blob);
+        if (previewWindow) {
+          previewWindow.location.href = previewUrl;
+        } else {
+          window.open(previewUrl, '_blank');
+        }
+      },
+      error: () => {
+        previewWindow?.close();
+        this.toast('Attachment preview is unavailable.');
+      },
+    });
+  }
+
+  canPreviewAttachment(a: Announcement): boolean {
+    const mime = (a.attachment_mime || '').toLowerCase();
+    if (mime === 'application/pdf' || ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/avif'].includes(mime)) {
+      return true;
+    }
+
+    return /\.(pdf|png|jpe?g|gif|webp|bmp|avif)$/i.test(a.attachment_name || '');
+  }
+
   /** Toggle a 👍 reaction and update the local count optimistically. */
   toggleReaction(a: Announcement): void {
     this.http.post<any>(`${this.api}/${a.id}/react`, { emoji: '👍' }).subscribe({
@@ -239,7 +275,7 @@ export class AnnouncementsComponent implements OnInit {
 
   /** Mark an announcement as read (called when expanding/opening). */
   markRead(a: Announcement): void {
-    if (a.is_read) return;
+    if (this.isManager || a.is_read) return;
     this.http.post<any>(`${this.api}/${a.id}/read`, {}).subscribe({
       next: () => { a.is_read = true; a.reads_count = (a.reads_count ?? 0) + 1; this.cdr.markForCheck(); },
       error: () => {},
@@ -332,8 +368,9 @@ export class AnnouncementsComponent implements OnInit {
 
   closeBirthdayWishes(): void { this.showBirthdayWishes = false; this.cdr.markForCheck(); }
 
-  insertBirthdayPlaceholder(token: string): void {
-    this.birthdaySettings.body = `${this.birthdaySettings.body || ''}${token}`;
+  insertBirthdayPlaceholder(token: string, language: 'en' | 'ar' = 'en'): void {
+    const field = language === 'ar' ? 'body_ar' : 'body';
+    this.birthdaySettings[field] = `${this.birthdaySettings[field] || ''}${token}`;
     this.cdr.markForCheck();
   }
 
@@ -370,6 +407,8 @@ export class AnnouncementsComponent implements OnInit {
     formData.append('enabled', this.birthdaySettings.enabled ? '1' : '0');
     formData.append('subject', this.birthdaySettings.subject);
     formData.append('body', this.birthdaySettings.body);
+    formData.append('subject_ar', this.birthdaySettings.subject_ar || '');
+    formData.append('body_ar', this.birthdaySettings.body_ar || '');
     if (this.birthdayBackgroundFile) formData.append('background_image', this.birthdayBackgroundFile);
     if (this.removeBirthdayBackground) formData.append('remove_background_image', '1');
     this.http.post<any>(`${this.api}/birthday-wishes/settings`, formData).subscribe({

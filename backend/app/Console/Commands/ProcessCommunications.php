@@ -50,8 +50,10 @@ class ProcessCommunications extends Command
             );
             $notifications->emailMany(
                 $ids, 'announcement', $a->title,
-                $summary,
-                rtrim((string) config('app.frontend_url'), '/') . '/announcements'
+                $a->body,
+                rtrim((string) config('app.frontend_url'), '/') . '/announcements',
+                $a->title_ar,
+                $a->body_ar,
             );
             $this->info("Published scheduled announcement #{$a->id}: {$a->title}");
         }
