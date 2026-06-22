@@ -325,20 +325,33 @@ class EmployeeController extends Controller {
         if (!$this->canManageDependents($id)) return response()->json(['message' => 'Unauthorized.'], 403);
         $employee = Employee::findOrFail($id);
         $data = $this->validateDependent($request);
+        $data = $this->storeDependentFiles($request, $id, $data);
         return response()->json(['dependent' => $employee->dependents()->create($data)], 201);
     }
 
     public function updateDependent(Request $request, int $id, int $dependentId): JsonResponse {
         if (!$this->canManageDependents($id)) return response()->json(['message' => 'Unauthorized.'], 403);
         $dependent = EmployeeDependent::where('employee_id', $id)->findOrFail($dependentId);
-        $dependent->update($this->validateDependent($request));
+        $data = $this->storeDependentFiles($request, $id, $this->validateDependent($request), $dependent);
+        $dependent->update($data);
         return response()->json(['dependent' => $dependent->fresh()]);
     }
 
     public function deleteDependent(int $id, int $dependentId): JsonResponse {
         if (!$this->canManageDependents($id)) return response()->json(['message' => 'Unauthorized.'], 403);
-        EmployeeDependent::where('employee_id', $id)->findOrFail($dependentId)->delete();
+        $dependent = EmployeeDependent::where('employee_id', $id)->findOrFail($dependentId);
+        Storage::delete(array_filter([$dependent->passport_file_path, $dependent->id_file_path]));
+        $dependent->delete();
         return response()->json(['message' => 'Dependent deleted.']);
+    }
+
+    public function downloadDependentDocument(int $id, int $dependentId, string $type) {
+        if (!$this->canManageDependents($id)) return response()->json(['message' => 'Unauthorized.'], 403);
+        $dependent = EmployeeDependent::where('employee_id', $id)->findOrFail($dependentId);
+        $path = $type === 'passport' ? $dependent->passport_file_path : $dependent->id_file_path;
+        $name = $type === 'passport' ? $dependent->passport_file_name : $dependent->id_file_name;
+        if (!$path || !Storage::exists($path)) return response()->json(['message' => 'Document not found.'], 404);
+        return Storage::download($path, $name ?: basename($path));
     }
 
     private function validateDependent(Request $request): array {
@@ -347,10 +360,28 @@ class EmployeeController extends Controller {
             'relationship' => 'required|in:spouse,son,daughter,father,mother,other',
             'date_of_birth' => 'nullable|date|before:today',
             'nationality' => 'nullable|string|max:100',
+            'id_number' => 'required|string|max:50',
+            'id_expiry' => 'nullable|date',
             'passport_number' => 'nullable|string|max:50',
             'passport_expiry' => 'nullable|date',
+            'passport_file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'id_file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
             'is_active' => 'nullable|boolean',
         ]);
+    }
+
+    private function storeDependentFiles(Request $request, int $employeeId, array $data, ?EmployeeDependent $dependent = null): array {
+        unset($data['passport_file'], $data['id_file']);
+        foreach (['passport', 'id'] as $type) {
+            $field = "{$type}_file";
+            if (!$request->hasFile($field)) continue;
+            $pathColumn = "{$type}_file_path";
+            $nameColumn = "{$type}_file_name";
+            if ($dependent?->{$pathColumn}) Storage::delete($dependent->{$pathColumn});
+            $data[$pathColumn] = $request->file($field)->store("employees/{$employeeId}/dependents");
+            $data[$nameColumn] = $request->file($field)->getClientOriginalName();
+        }
+        return $data;
     }
 
     private function canManageDependents(int $employeeId): bool {
@@ -459,6 +490,7 @@ class EmployeeController extends Controller {
             'expiry_date' => 'nullable|date',
         ]);
         $employee = Employee::findOrFail($id);
+        $isHrUpload = $this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff']);
         $path = $request->file('file')->store("employees/{$id}/documents");
         $doc = $employee->documents()->create([
             'title' => $request->title,
@@ -468,6 +500,10 @@ class EmployeeController extends Controller {
             'mime_type' => $request->file('file')->getMimeType(),
             'file_size' => $request->file('file')->getSize(),
             'expiry_date' => $request->expiry_date,
+            'is_verified' => $isHrUpload,
+            'uploaded_by' => auth()->id(),
+            'verified_by' => $isHrUpload ? auth()->id() : null,
+            'verified_at' => $isHrUpload ? now() : null,
         ]);
         return response()->json(['document' => $doc], 201);
     }
@@ -481,6 +517,19 @@ class EmployeeController extends Controller {
         Storage::delete($doc->file_path);
         $doc->delete();
         return response()->json(['message' => 'Document deleted']);
+    }
+
+    public function approveDocument(int $id, int $docId): JsonResponse {
+        if (!$this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff'])) {
+            return response()->json(['message' => 'Only HR or a super admin can approve documents.'], 403);
+        }
+        $doc = Employee::findOrFail($id)->documents()->findOrFail($docId);
+        $doc->update([
+            'is_verified' => true,
+            'verified_by' => auth()->id(),
+            'verified_at' => now(),
+        ]);
+        return response()->json(['message' => 'Document approved.', 'document' => $doc->fresh()]);
     }
 
     public function downloadDocument(int $id, int $docId) {

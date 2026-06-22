@@ -33,10 +33,10 @@ class Employee extends Model
     protected $hidden = ['national_id','bank_account'];
 
     protected $casts = [
-        'dob'               => 'date',
-        'hire_date'         => 'date',
-        'confirmation_date' => 'date',
-        'termination_date'  => 'date',
+        'dob'               => 'date:Y-m-d',
+        'hire_date'         => 'date:Y-m-d',
+        'confirmation_date' => 'date:Y-m-d',
+        'termination_date'  => 'date:Y-m-d',
         'salary'             => 'decimal:2',
         'housing_allowance'  => 'decimal:2',
         'transport_allowance'=> 'decimal:2',

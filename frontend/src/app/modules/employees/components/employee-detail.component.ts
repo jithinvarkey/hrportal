@@ -31,6 +31,8 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
   dependentSaving = false;
   dependentError = '';
   showDependentForm = false;
+  dependentPassportFile: File | null = null;
+  dependentIdFile: File | null = null;
 
   // ── Quick status change ───────────────────────────────────────────────
   statusSaving = false;
@@ -146,24 +148,65 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
   }
 
   private blankDependent(): any {
-    return { full_name: '', relationship: 'spouse', date_of_birth: '', nationality: '', passport_number: '', passport_expiry: '', is_active: true };
+    return { full_name: '', relationship: 'spouse', date_of_birth: '', nationality: '', id_number: '', id_expiry: '', passport_number: '', passport_expiry: '', is_active: true };
   }
 
   openDependentForm(dependent?: any): void {
     this.dependentEditId = dependent?.id || null;
-    this.dependentForm = dependent ? { ...dependent, date_of_birth: dependent.date_of_birth?.substring(0, 10) || '', passport_expiry: dependent.passport_expiry?.substring(0, 10) || '' } : this.blankDependent();
+    this.dependentForm = dependent ? {
+      ...dependent,
+      date_of_birth: dependent.date_of_birth?.substring(0, 10) || '',
+      id_expiry: dependent.id_expiry?.substring(0, 10) || '',
+      passport_expiry: dependent.passport_expiry?.substring(0, 10) || '',
+    } : this.blankDependent();
+    this.dependentPassportFile = null;
+    this.dependentIdFile = null;
     this.dependentError = ''; this.showDependentForm = true;
   }
 
   saveDependent(): void {
     if (!this.dependentForm.full_name?.trim()) { this.dependentError = 'Dependent name is required.'; return; }
+    if (!this.dependentForm.id_number?.trim()) { this.dependentError = 'Iqama / ID number is required.'; return; }
     this.dependentSaving = true; this.dependentError = '';
+    const formData = new FormData();
+    Object.entries(this.dependentForm).forEach(([key, value]) => {
+      if (value !== null && value !== undefined) formData.append(key, typeof value === 'boolean' ? (value ? '1' : '0') : String(value));
+    });
+    if (this.dependentPassportFile) formData.append('passport_file', this.dependentPassportFile);
+    if (this.dependentIdFile) formData.append('id_file', this.dependentIdFile);
+    if (this.dependentEditId) formData.append('_method', 'PUT');
     const request = this.dependentEditId
-      ? this.http.put<any>(`/api/v1/employees/${this.employeeId}/dependents/${this.dependentEditId}`, this.dependentForm)
-      : this.http.post<any>(`/api/v1/employees/${this.employeeId}/dependents`, this.dependentForm);
+      ? this.http.post<any>(`/api/v1/employees/${this.employeeId}/dependents/${this.dependentEditId}`, formData)
+      : this.http.post<any>(`/api/v1/employees/${this.employeeId}/dependents`, formData);
     request.subscribe({
       next: () => { this.dependentSaving = false; this.showDependentForm = false; this.loadDependents(); },
-      error: err => { this.dependentSaving = false; this.dependentError = err?.error?.message || 'Could not save dependent.'; }
+      error: err => {
+        this.dependentSaving = false;
+        const errors = err?.error?.errors;
+        this.dependentError = errors ? String(Object.values(errors)[0]?.[0] || '') : (err?.error?.message || 'Could not save dependent.');
+      }
+    });
+  }
+
+  selectDependentFile(type: 'passport' | 'id', event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0] || null;
+    if (type === 'passport') this.dependentPassportFile = file;
+    else this.dependentIdFile = file;
+  }
+
+  downloadDependentDocument(dependent: any, type: 'passport' | 'id'): void {
+    this.http.get(`/api/v1/employees/${this.employeeId}/dependents/${dependent.id}/documents/${type}`, {
+      responseType: 'blob', observe: 'response',
+    }).subscribe({
+      next: response => {
+        const url = URL.createObjectURL(response.body as Blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = type === 'passport' ? dependent.passport_file_name : dependent.id_file_name;
+        link.click();
+        URL.revokeObjectURL(url);
+      },
+      error: () => this.dependentError = 'Could not download the document.',
     });
   }
 
@@ -352,6 +395,23 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
       .subscribe({
         next: () => { this.documents = this.documents.filter(d => d.id !== docId); },
         error: () => {},
+      });
+  }
+
+  approveDoc(doc: any): void {
+    if (doc.verifying) return;
+    doc.verifying = true;
+    this.http.post<any>(`/api/v1/employees/${this.employee.id}/documents/${doc.id}/approve`, {})
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: response => {
+          const index = this.documents.findIndex(item => item.id === doc.id);
+          if (index >= 0) this.documents[index] = response.document;
+        },
+        error: err => {
+          doc.verifying = false;
+          this.uploadError = err?.error?.message || 'Could not approve the document.';
+        },
       });
   }
 

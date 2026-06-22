@@ -155,14 +155,18 @@
           <div class="field-group"><label class="field-label">Relationship *</label><select class="field-select" [(ngModel)]="dependentForm.relationship"><option value="spouse">Spouse</option><option value="son">Son</option><option value="daughter">Daughter</option><option value="father">Father</option><option value="mother">Mother</option><option value="other">Other</option></select></div>
           <div class="field-group"><label class="field-label">Date of birth</label><input class="field-input" type="date" [(ngModel)]="dependentForm.date_of_birth"></div>
           <div class="field-group"><label class="field-label">Nationality</label><input class="field-input" [(ngModel)]="dependentForm.nationality"></div>
+          <div class="field-group"><label class="field-label">Iqama / ID number *</label><input class="field-input" [(ngModel)]="dependentForm.id_number" required></div>
+          <div class="field-group"><label class="field-label">Iqama / ID expiry</label><input class="field-input" type="date" [(ngModel)]="dependentForm.id_expiry"></div>
           <div class="field-group"><label class="field-label">Passport number</label><input class="field-input" [(ngModel)]="dependentForm.passport_number"></div>
           <div class="field-group"><label class="field-label">Passport expiry</label><input class="field-input" type="date" [(ngModel)]="dependentForm.passport_expiry"></div>
+          <div class="field-group dependent-upload"><label class="field-label">Passport copy</label><input type="file" accept=".pdf,.jpg,.jpeg,.png" (change)="selectDependentFile('passport', $event)"><small>{{ dependentPassportFile?.name || dependentForm.passport_file_name || 'PDF or image, maximum 5 MB' }}</small></div>
+          <div class="field-group dependent-upload"><label class="field-label">Iqama / ID copy</label><input type="file" accept=".pdf,.jpg,.jpeg,.png" (change)="selectDependentFile('id', $event)"><small>{{ dependentIdFile?.name || dependentForm.id_file_name || 'PDF or image, maximum 5 MB' }}</small></div>
         </div>
         <div class="form-err" *ngIf="dependentError">{{ dependentError }}</div>
         <div class="dependent-actions"><button class="btn-outline" (click)="showDependentForm=false">Cancel</button><button class="btn-primary" (click)="saveDependent()" [disabled]="dependentSaving"><mat-icon>save</mat-icon> {{ dependentSaving ? 'Saving...' : 'Save' }}</button></div>
       </div>
       <div class="dependent-row" *ngFor="let d of dependents">
-        <mat-icon>person</mat-icon><div><strong>{{ d.full_name }}</strong><span>{{ d.relationship | titlecase }} Â· {{ d.passport_number || 'No passport entered' }}</span></div>
+        <mat-icon>person</mat-icon><div><strong>{{ d.full_name }}</strong><span>{{ d.relationship | titlecase }} &middot; ID: {{ d.id_number }}</span><span class="dependent-documents"><button *ngIf="d.passport_file_path" type="button" (click)="downloadDependentDocument(d, 'passport')"><mat-icon>description</mat-icon> Passport</button><button *ngIf="d.id_file_path" type="button" (click)="downloadDependentDocument(d, 'id')"><mat-icon>badge</mat-icon> ID / Iqama</button></span></div>
         <button class="row-btn" matTooltip="Edit" (click)="openDependentForm(d)"><mat-icon>edit</mat-icon></button>
         <button class="row-btn danger" matTooltip="Delete" (click)="deleteDependent(d)"><mat-icon>delete_outline</mat-icon></button>
       </div>
@@ -273,6 +277,9 @@
             {{ doc.is_verified ? 'Verified' : 'Pending' }}
           </span>
           <div class="doc-actions">
+            <button class="row-btn approve" *ngIf="isHR && !doc.is_verified" matTooltip="Approve document" (click)="approveDoc(doc)" [disabled]="doc.verifying">
+              <mat-icon>{{ doc.verifying ? 'hourglass_empty' : 'verified' }}</mat-icon>
+            </button>
             <button class="row-btn" matTooltip="Download" (click)="downloadDoc(doc)">
               <mat-icon>download</mat-icon>
             </button>

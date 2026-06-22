@@ -132,10 +132,12 @@ Route::prefix('v1')->group(function () {
             Route::post('/{id}/documents',               [EmployeeController::class, 'uploadDocument']);
             Route::get('/{id}/documents',                [EmployeeController::class, 'listDocuments']);
             Route::delete('/{id}/documents/{docId}',     [EmployeeController::class, 'deleteDocument']);
+            Route::post('/{id}/documents/{docId}/approve', [EmployeeController::class, 'approveDocument'])->whereNumber('id')->whereNumber('docId');
             Route::get('/{id}/dependents',               [EmployeeController::class, 'dependents'])->whereNumber('id');
             Route::post('/{id}/dependents',              [EmployeeController::class, 'storeDependent'])->whereNumber('id');
             Route::put('/{id}/dependents/{dependentId}', [EmployeeController::class, 'updateDependent'])->whereNumber('id')->whereNumber('dependentId');
             Route::delete('/{id}/dependents/{dependentId}', [EmployeeController::class, 'deleteDependent'])->whereNumber('id')->whereNumber('dependentId');
+            Route::get('/{id}/dependents/{dependentId}/documents/{type}', [EmployeeController::class, 'downloadDependentDocument'])->whereNumber('id')->whereNumber('dependentId')->whereIn('type', ['passport', 'id']);
             Route::get('/{id}/documents/{docId}/download', [EmployeeController::class, 'downloadDocument']);
         });
 
