@@ -10,6 +10,7 @@ use App\Models\RequestType;
 use App\Models\LeaveAllocation;
 use App\Services\LeaveService;
 use App\Services\RequestActivityService;
+use App\Services\AnnualTicketService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -20,9 +21,16 @@ class LeaveController extends Controller {
     protected $service;
     protected $activityService;
 
-    public function __construct(LeaveService $service, RequestActivityService $activityService) {
+    public function __construct(LeaveService $service, RequestActivityService $activityService, protected AnnualTicketService $annualTickets) {
         $this->service = $service;
         $this->activityService = $activityService;
+    }
+
+    public function ticketOptions(Request $request) {
+        $employee = auth()->user()->employee;
+        abort_unless($employee, 404, 'Employee record not found.');
+        $year = (int) ($request->query('year') ?: now()->year);
+        return response()->json(['ticket_options' => $this->annualTickets->options($employee, $year)]);
     }
 
     private function logLeaveActivity(LeaveRequest $leave, string $event, string $description, array $properties = []): void {
@@ -367,10 +375,20 @@ class LeaveController extends Controller {
             'requires_exit_reentry' => 'nullable|boolean',
             'requires_ticket' => 'nullable|boolean',
             'destination_country' => 'nullable|string|max:100',
+            'ticket_dependent_ids' => 'nullable|array|max:3',
+            'ticket_dependent_ids.*' => 'integer',
         ]);
 
         $employee = auth()->user()->employee;
         $isHalfDay = (bool) $request->is_half_day;
+        $requiresTicket = $leaveType->is_annual ? (bool) $request->requires_ticket : false;
+        $ticketYear = (int) date('Y', strtotime($request->start_date));
+        $dependentIds = $this->annualTickets->validateSelection(
+            $employee,
+            $requiresTicket,
+            array_map('intval', $request->input('ticket_dependent_ids', [])),
+            $ticketYear
+        );
 
         // Half day: force start_date = end_date, total = 0.5 days
         if ($isHalfDay) {
@@ -408,11 +426,17 @@ class LeaveController extends Controller {
                     'is_half_day' => $isHalfDay,
                     'half_day_period' => $isHalfDay ? $request->half_day_period : null,
                     'requires_exit_reentry' => $leaveType->is_annual ? (bool) $request->requires_exit_reentry : false,
-                    'requires_ticket' => $leaveType->is_annual ? (bool) $request->requires_ticket : false,
+                    'requires_ticket' => $requiresTicket,
+                    'ticket_year' => $requiresTicket ? $ticketYear : null,
+                    'ticket_count' => $requiresTicket ? 1 + count($dependentIds) : 0,
                     'destination_country' => $leaveType->is_annual ? $request->destination_country : null,
                     'document_path' => $documentPath,
                     'status' => $leaveType->skip_manager_approval ? 'manager_approved' : 'pending',
         ]));
+
+        if ($requiresTicket) {
+            $this->annualTickets->savePassengers($leaveRequest, $employee, $dependentIds);
+        }
 
         $this->logLeaveActivity($leaveRequest, 'submitted', "{$leaveType->name} leave request submitted.", [
             'to_status' => $leaveRequest->status,
@@ -443,23 +467,20 @@ class LeaveController extends Controller {
         
         $this->service->notifyEmployee($leaveRequest, 'submitted');
 
-        // ── Auto-create linked HR requests for annual leave requirements ──
-        if ($leaveType->is_annual ?? false) {
-            $this->createLinkedRequests($leaveRequest, $employee, $request);
-        }
-
         return response()->json(['message' => 'Leave request submitted', 'request' => $leaveRequest->load('leaveType')], 201);
     }
 
     /**
-     * Automatically create EmployeeRequest records when an annual leave
-     * is submitted with exit re-entry or ticket requirements.
+     * Create linked HR requests after an annual leave reaches final approval.
      */
-    private function createLinkedRequests(LeaveRequest $leave, $employee, $request): void {
-        $leaveRef = 'REQ-LEAVE-' . $leave->id;
+    private function createLinkedRequests(LeaveRequest $leave, $employee): void {
         $travelInfo = $leave->destination_country ? "Destination: {$leave->destination_country}. " : '';
         $dateInfo = "Annual leave: {$leave->start_date} – {$leave->end_date} ({$leave->total_days} days). ";
         $baseNote = "Auto-generated from annual leave request #{$leave->id}. {$dateInfo}{$travelInfo}";
+        $passengerManifest = $leave->requires_ticket ? $this->ticketPassengerManifest($leave, $employee) : '';
+        $selectionDetails = $passengerManifest
+            ? "\n\nSelected ticket passengers:\n{$passengerManifest}"
+            : '';
 
         // Exit re-entry visa request
         if ($leave->requires_exit_reentry) {
@@ -470,12 +491,12 @@ class LeaveController extends Controller {
             }
             if ($visaType) {
                 $dueDate = now()->addDays($visaType->sla_days)->toDateString();
-                EmployeeRequest::create([
-                    'reference' => $this->generateLeaveRef(),
+                $this->saveLinkedRequest($leave, 'exit_reentry', [
                     'employee_id' => $employee->id,
                     'request_type_id' => $visaType->id,
                     'status' => 'pending',
-                    'details' => $baseNote . 'Exit re-entry visa required before departure.',
+                    'details' => $baseNote . 'Exit re-entry visa required before departure.' . $selectionDetails,
+                    'required_by' => $leave->start_date,
                     'due_date' => $dueDate,
                     'copies_needed' => 1,
                 ]);
@@ -491,17 +512,74 @@ class LeaveController extends Controller {
             }
             if ($ticketType) {
                 $dueDate = now()->addDays($ticketType->sla_days)->toDateString();
-                EmployeeRequest::create([
-                    'reference' => $this->generateLeaveRef(),
+                $this->saveLinkedRequest($leave, 'ticket', [
                     'employee_id' => $employee->id,
                     'request_type_id' => $ticketType->id,
                     'status' => 'pending',
-                    'details' => $baseNote . 'Air ticket requested for annual leave travel.',
+                    'details' => $baseNote . "\n\nTicket passenger details:\n" . $passengerManifest,
+                    'required_by' => $leave->start_date,
                     'due_date' => $dueDate,
-                    'copies_needed' => 1,
+                    'copies_needed' => max(1, (int) $leave->ticket_count),
                 ]);
             }
         }
+    }
+
+    private function saveLinkedRequest(LeaveRequest $leave, string $service, array $values): void {
+        $linked = EmployeeRequest::where('leave_request_id', $leave->id)
+            ->where('linked_service', $service)
+            ->first();
+
+        // Adopt requests generated before source links were introduced.
+        if (!$linked) {
+            $linked = EmployeeRequest::where('employee_id', $leave->employee_id)
+                ->where('details', 'LIKE', "%annual leave request #{$leave->id}.%")
+                ->where('request_type_id', $values['request_type_id'])
+                ->first();
+        }
+
+        if ($linked) {
+            $linked->update(array_merge($values, [
+                'leave_request_id' => $leave->id,
+                'linked_service' => $service,
+            ]));
+            return;
+        }
+
+        EmployeeRequest::create(array_merge($values, [
+            'reference' => $this->generateLeaveRef(),
+            'leave_request_id' => $leave->id,
+            'linked_service' => $service,
+        ]));
+    }
+
+    private function ticketPassengerManifest(LeaveRequest $leave, $employee): string {
+        $lines = [];
+        $number = 1;
+        foreach ($leave->ticketPassengers()->with('dependent')->get() as $passenger) {
+            if ($passenger->passenger_type === 'employee') {
+                $lines[] = implode("\n", [
+                    "{$number}. Employee: {$employee->full_name}",
+                    "   Employee code: {$employee->employee_code}",
+                    '   Nationality: ' . ($employee->nationality ?: 'Not provided'),
+                    '   Date of birth: ' . ($employee->dob?->format('Y-m-d') ?: 'Not provided'),
+                    '   Email: ' . ($employee->email ?: 'Not provided'),
+                    '   Phone: ' . ($employee->phone ?: 'Not provided'),
+                ]);
+            } else {
+                $dependent = $passenger->dependent;
+                $lines[] = implode("\n", [
+                    "{$number}. Dependent: {$passenger->passenger_name}",
+                    '   Relationship: ' . ($dependent?->relationship ? ucfirst($dependent->relationship) : 'Not provided'),
+                    '   Nationality: ' . ($dependent?->nationality ?: 'Not provided'),
+                    '   Date of birth: ' . ($dependent?->date_of_birth?->format('Y-m-d') ?: 'Not provided'),
+                    '   Passport number: ' . ($dependent?->passport_number ?: 'Not provided'),
+                    '   Passport expiry: ' . ($dependent?->passport_expiry?->format('Y-m-d') ?: 'Not provided'),
+                ]);
+            }
+            $number++;
+        }
+        return implode("\n\n", $lines);
     }
 
     /** Generate a unique reference number for auto-created requests. */
@@ -512,7 +590,7 @@ class LeaveController extends Controller {
     }
 
     public function show($id) {
-        $request = LeaveRequest::with(['employee', 'leaveType', 'approver', 'managerApprover'])->findOrFail($id);
+        $request = LeaveRequest::with(['employee', 'leaveType', 'approver', 'managerApprover', 'ticketPassengers'])->findOrFail($id);
         $request->setAttribute('activities', $this->activityService->timeline($request));
         return response()->json(['request' => $request]);
     }
@@ -589,6 +667,10 @@ class LeaveController extends Controller {
                 'from_status' => $oldStatus,
                 'to_status' => 'approved',
             ]);
+
+            if ($leave->leaveType?->is_annual) {
+                $this->createLinkedRequests($leave, $leave->employee);
+            }
 
             $this->service->updateLeaveBalance($leave, 'approve');
             /*

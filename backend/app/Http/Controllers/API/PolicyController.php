@@ -7,6 +7,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Policy;
 use App\Models\PolicyAcknowledgement;
+use App\Models\PolicyRead;
 use App\Models\PolicyCategory;
 use App\Services\Communications\NotificationService;
 use Illuminate\Http\JsonResponse;
@@ -172,7 +173,7 @@ class PolicyController extends Controller
     {
         $empId = $this->employeeId();
 
-        $query = Policy::with(['category:id,name,icon', 'creator:id,name'])
+        $query = Policy::with(['category:id,name,icon', 'creator:id,name'])->withCount('reads')
             ->when(!$this->isManager(), fn($q) => $q->where('is_published', true))
             ->when($request->category_id, fn($q) => $q->where('category_id', $request->category_id))
             ->when($request->search, fn($q) => $q->where('title', 'like', "%{$request->search}%"));
@@ -191,6 +192,9 @@ class PolicyController extends Controller
         // Annotate with the current employee's acknowledgement of the CURRENT
         // version (a prior-version ack no longer counts).
         $ackedIds = [];
+        $readIds = $empId
+            ? PolicyRead::where('employee_id', $empId)->whereIn('policy_id', $policies->pluck('id'))->pluck('policy_id')->all()
+            : [];
         if ($empId) {
             foreach ($policies as $p) {
                 $hasCurrent = PolicyAcknowledgement::where('policy_id', $p->id)
@@ -201,8 +205,9 @@ class PolicyController extends Controller
             }
         }
 
-        $policies->each(function ($p) use ($ackedIds) {
+        $policies->each(function ($p) use ($ackedIds, $readIds) {
             $p->acknowledged = in_array($p->id, $ackedIds, true);
+            $p->is_read = in_array($p->id, $readIds, true);
         });
 
         return response()->json(['policies' => $policies]);
@@ -210,13 +215,21 @@ class PolicyController extends Controller
 
     public function show(int $id): JsonResponse
     {
-        $policy = Policy::with(['category', 'creator:id,name'])->findOrFail($id);
+        $policy = Policy::with(['category', 'creator:id,name'])->withCount('reads')->findOrFail($id);
 
         if ((!$this->isManager() && !$policy->is_published) || !$this->policyVisibleToCurrentUser($policy)) {
             return response()->json(['message' => 'Not found.'], 404);
         }
 
         $empId = $this->employeeId();
+        if ($empId && !$this->isManager()) {
+            PolicyRead::firstOrCreate(
+                ['policy_id' => $policy->id, 'employee_id' => $empId],
+                ['read_at' => now()],
+            );
+            $policy->is_read = true;
+            $policy->reads_count = PolicyRead::where('policy_id', $policy->id)->count();
+        }
         $policy->acknowledged = $empId
             ? PolicyAcknowledgement::where('policy_id', $id)
                 ->where('employee_id', $empId)
@@ -244,7 +257,7 @@ class PolicyController extends Controller
             'requires_acknowledgement' => 'nullable|boolean',
             'mandatory'                => 'nullable|boolean',
             'is_published'             => 'nullable|boolean',
-            'attachment'               => 'nullable|file|mimes:pdf,doc,docx|max:10240',
+            'attachment'               => 'nullable|file|mimes:pdf|max:10240',
         ]);
 
         $audience = $this->normalizeAudience($request);
@@ -329,7 +342,7 @@ class PolicyController extends Controller
             'requires_acknowledgement' => 'nullable|boolean',
             'mandatory'                => 'nullable|boolean',
             'is_published'             => 'nullable|boolean',
-            'attachment'               => 'nullable|file|mimes:pdf,doc,docx|max:10240',
+            'attachment'               => 'nullable|file|mimes:pdf|max:10240',
         ]);
 
         $oldVersion = $policy->version;
@@ -356,6 +369,9 @@ class PolicyController extends Controller
         // employees are automatically prompted to re-acknowledge the new
         // version. Notify them so they know.
         $versionChanged = isset($data['version']) && $data['version'] !== $oldVersion;
+        if ($versionChanged) {
+            PolicyRead::where('policy_id', $policy->id)->delete();
+        }
         $publishedNow = !$wasPublished && $policy->is_published;
         if ($publishedNow) {
             $this->notifyPolicyAudience(
@@ -378,6 +394,7 @@ class PolicyController extends Controller
 
         $policy = Policy::findOrFail($id);
         if ($policy->attachment_path) {
+            Storage::disk('local')->delete($policy->attachment_path);
             Storage::disk('public')->delete($policy->attachment_path);
         }
         $policy->delete();
@@ -385,15 +402,62 @@ class PolicyController extends Controller
         return response()->json(['message' => 'Policy deleted.']);
     }
 
-    public function downloadAttachment(int $id): StreamedResponse|JsonResponse
+    public function downloadAttachment(Request $request, int $id): StreamedResponse|JsonResponse
     {
         $policy = Policy::findOrFail($id);
 
-        if (!$policy->attachment_path || !Storage::disk('public')->exists($policy->attachment_path)) {
+        if ((!$this->isManager() && !$policy->is_published) || !$this->policyVisibleToCurrentUser($policy)) {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
+
+        $disk = Storage::disk('local')->exists($policy->attachment_path ?? '') ? 'local' : 'public';
+
+        if (!$policy->attachment_path || !Storage::disk($disk)->exists($policy->attachment_path)) {
             return response()->json(['message' => 'No attachment.'], 404);
         }
 
-        return Storage::disk('public')->download(
+        if (!$this->isManager()) {
+            if ($policy->attachment_mime !== 'application/pdf') {
+                return response()->json(['message' => 'This attachment is not available in secure preview format.'], 403);
+            }
+
+            return Storage::disk($disk)->response($policy->attachment_path, 'policy.pdf', [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="policy.pdf"',
+                'Cache-Control' => 'private, no-store, max-age=0',
+                'Pragma' => 'no-cache',
+                'X-Frame-Options' => 'SAMEORIGIN',
+            ]);
+        }
+
+        $mime = $policy->attachment_mime
+            ?: Storage::disk($disk)->mimeType($policy->attachment_path)
+            ?: 'application/octet-stream';
+        $previewableMimes = [
+            'application/pdf',
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+            'image/bmp',
+            'image/avif',
+        ];
+
+        if ($request->boolean('inline') && in_array(strtolower($mime), $previewableMimes, true)) {
+            $filename = str_replace(["\r", "\n", '"'], '', basename($policy->attachment_name ?: 'policy'));
+
+            return Storage::disk($disk)->response(
+                $policy->attachment_path,
+                $filename,
+                [
+                    'Content-Type' => $mime,
+                    'Content-Disposition' => 'inline; filename="'.$filename.'"',
+                    'X-Content-Type-Options' => 'nosniff',
+                ]
+            );
+        }
+
+        return Storage::disk($disk)->download(
             $policy->attachment_path,
             $policy->attachment_name ?: 'policy'
         );
@@ -574,9 +638,10 @@ class PolicyController extends Controller
     private function attachFile(Policy $p, $file, bool $replace = false): void
     {
         if ($replace && $p->attachment_path) {
+            Storage::disk('local')->delete($p->attachment_path);
             Storage::disk('public')->delete($p->attachment_path);
         }
-        $p->attachment_path = $file->store('policies', 'public');
+        $p->attachment_path = $file->store('policies', 'local');
         $p->attachment_name = $file->getClientOriginalName();
         $p->attachment_mime = $file->getMimeType();
         $p->attachment_size = $file->getSize();

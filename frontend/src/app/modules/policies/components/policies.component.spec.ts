@@ -66,6 +66,19 @@ describe('PoliciesComponent', () => {
     expect(component.pendingAckCount).toBe(1);
   });
 
+  it('opens previewable policy attachments inline', () => {
+    setup(true);
+    flushInit();
+    spyOn(window, 'open').and.returnValue(null);
+    spyOn(URL, 'createObjectURL').and.returnValue('blob:policy-preview');
+    const policy = { id: 5, attachment_name: 'policy.pdf', attachment_mime: 'application/pdf' } as any;
+    expect(component.canPreviewAttachment(policy)).toBeTrue();
+    component.viewAttachment(policy);
+    const request = httpMock.expectOne(r => r.url === `${API}/5/attachment` && r.params.get('inline') === '1');
+    request.flush(new Blob(['pdf'], { type: 'application/pdf' }));
+    expect(window.open).toHaveBeenCalledWith('blob:policy-preview', '_blank');
+  });
+
   it('acknowledges a policy and flips the flag', () => {
     setup(false);
     flushInit([{ id: 9, title: 'X', category: null, requires_acknowledgement: true, acknowledged: false, version: '1', is_published: true, has_attachment: false }]);

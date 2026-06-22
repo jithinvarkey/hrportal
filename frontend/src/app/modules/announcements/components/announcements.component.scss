@@ -19,6 +19,8 @@
 
 .ann-list { display:flex; flex-direction:column; gap:14px; }
 .ann-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px;
+  &.clickable { cursor:pointer; }
+  &.read { border-color:color-mix(in srgb,var(--success) 28%,var(--border)); }
   &.pinned { border-color:color-mix(in srgb,var(--accent) 45%,var(--border)); }
   &.unpublished { opacity:.7; border-style:dashed; } }
 .ann-top { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:8px; }
@@ -34,9 +36,17 @@
 .ann-admin { display:flex; gap:4px; }
 .ann-title { font-size:17px; font-weight:700; color:var(--text); margin:2px 0 6px; }
 .ann-body { font-size:14px; line-height:1.6; color:var(--text2); white-space:pre-wrap; }
+.announcement-languages { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px;
+  > section { min-width:0; }
+  > section:only-child { grid-column:1 / -1; }
+  .announcement-arabic { padding-left:20px; border-left:1px solid var(--border); font-family:Arial,Tahoma,sans-serif; } }
 .ann-attach { display:flex; align-items:center; gap:8px; margin-top:12px; padding:8px 12px; border:1px solid var(--border); border-radius:9px; background:var(--surface2); font-size:13px; color:var(--text2);
   mat-icon { font-size:18px!important; width:18px!important; height:18px!important; color:var(--text3); } }
-.link-btn { margin-left:auto; background:none; border:none; color:var(--accent); cursor:pointer; font-size:13px; font-weight:600; text-decoration:underline; }
+.attachment-view { margin-left:auto; width:32px; height:32px; display:inline-flex; align-items:center; justify-content:center; flex:0 0 32px;
+  border:1px solid var(--border2); border-radius:6px; background:transparent; color:var(--text2); cursor:pointer;
+  &:hover { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb,var(--accent) 8%,transparent); }
+  mat-icon { color:inherit!important; } }
+.link-btn { background:none; border:none; color:var(--accent); cursor:pointer; font-size:13px; font-weight:600; text-decoration:underline; }
 .ann-foot { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; font-size:12px; color:var(--text3);
   span { display:flex; align-items:center; gap:3px; }
   mat-icon { font-size:14px!important; width:14px!important; height:14px!important; }
@@ -126,6 +136,12 @@
 
 /* Birthday wishes */
 .birthday-panel { width:min(680px,93vw); }
+.language-editors { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.language-editor { display:flex; flex-direction:column; gap:12px; min-width:0; padding:14px; border:1px solid var(--border); border-radius:8px; background:var(--surface2); }
+.language-label { color:var(--accent); font-size:12px; font-weight:800; text-transform:uppercase; }
+.arabic-editor { font-family:Arial,Tahoma,sans-serif;
+  input, textarea { text-align:right; font-family:Arial,Tahoma,sans-serif; }
+  .placeholder-row { justify-content:flex-start; } }
 .birthday-toggle { display:flex; align-items:flex-start; gap:10px; padding:12px; border:1px solid var(--border); border-radius:8px; cursor:pointer;
   input { margin-top:3px; }
   span { display:flex; flex-direction:column; gap:3px; color:var(--text); font-size:13px; }
@@ -146,4 +162,9 @@
   .delivery-status { color:#b45309; font-weight:700; &.sent { color:var(--success); } } }
 .birthday-empty { padding:12px 0; color:var(--text3); font-size:12px; }
 .birthday-footer { justify-content:space-between; }
-@media (max-width:600px) { .hdr-actions { width:100%; flex-wrap:wrap; } .birthday-footer { flex-direction:column-reverse; button { width:100%; justify-content:center; } } }
+@media (max-width:700px) {
+  .hdr-actions { width:100%; flex-wrap:wrap; }
+  .birthday-footer { flex-direction:column-reverse; button { width:100%; justify-content:center; } }
+  .language-editors, .announcement-languages { grid-template-columns:1fr; }
+  .announcement-languages .announcement-arabic { padding:16px 0 0; border-left:0; border-top:1px solid var(--border); }
+}

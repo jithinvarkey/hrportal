@@ -131,6 +131,7 @@ export interface EmployeeFilters {
   sort_dir?:        'asc' | 'desc';
   page?:            number;
   per_page?:        number;
+  dashboard_scope?: boolean;
 }
 
 // ── Create / Update DTOs ──────────────────────────────────────────────────────

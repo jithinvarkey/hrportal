@@ -59,7 +59,9 @@
       </button>
       <div class="pr-status">
         <span class="ack-badge done" *ngIf="p.acknowledged"><mat-icon>check_circle</mat-icon> Acknowledged</span>
+        <span class="ack-badge read" *ngIf="!isManager && p.is_read"><mat-icon>done_all</mat-icon> Read</span>
         <span class="ack-badge pending" *ngIf="!p.acknowledged && p.requires_acknowledgement"><mat-icon>pending</mat-icon> Action needed</span>
+        <span class="read-total" *ngIf="isManager"><mat-icon>visibility</mat-icon> {{ p.reads_count || 0 }}</span>
         <button type="button" class="action-btn" *ngIf="isManager" (click)="onPolicyAction($event, 'report', p)"><mat-icon>fact_check</mat-icon><span>Report</span></button>
         <button type="button" class="action-btn" *ngIf="isManager" (click)="onPolicyAction($event, 'edit', p)"><mat-icon>edit</mat-icon><span>Edit</span></button>
         <button type="button" class="action-btn warn" *ngIf="isManager" (click)="onPolicyAction($event, 'publish', p)"><mat-icon>{{ p.is_published ? 'visibility_off' : 'publish' }}</mat-icon><span>{{ p.is_published ? 'Draft' : 'Publish' }}</span></button>
@@ -78,7 +80,7 @@
 
 <!-- ── Reader drawer ─────────────────────────────────────────────────────── -->
 <div class="modal-backdrop" *ngIf="showReader" (click)="closeReader()"></div>
-<div class="reader-drawer" [class.open]="showReader">
+<div class="reader-drawer" [class.open]="showReader" (contextmenu)="blockPolicyActions($event)" (dragstart)="blockPolicyActions($event)">
   <ng-container *ngIf="selected">
     <div class="modal-hdr">
       <h3><mat-icon>policy</mat-icon> {{ selected.title }}</h3>
@@ -96,10 +98,22 @@
         No text content. Please refer to the attached document if provided.
       </div>
 
-      <div class="reader-attach" *ngIf="selected.has_attachment">
+      <div class="reader-attach" *ngIf="selected.has_attachment && isManager">
         <mat-icon>picture_as_pdf</mat-icon>
         <span>{{ selected.attachment_name }}</span>
+        <button class="attachment-view" *ngIf="canPreviewAttachment(selected)" (click)="viewAttachment(selected)"
+                matTooltip="View attachment" [attr.aria-label]="'View ' + selected.attachment_name">
+          <mat-icon>visibility</mat-icon>
+        </button>
         <button class="link-btn" (click)="downloadAttachment(selected)">Download</button>
+      </div>
+      <div class="policy-preview-wrap" *ngIf="!isManager && selected.has_attachment && selected.attachment_mime === 'application/pdf'">
+        <div class="pdf-loading" *ngIf="pdfLoading"><mat-spinner diameter="32"></mat-spinner> Preparing secure preview...</div>
+        <div class="pdf-error" *ngIf="pdfError"><mat-icon>error_outline</mat-icon> {{ pdfError }}</div>
+        <div #pdfPages class="policy-pdf-pages" [attr.aria-label]="pdfPageCount ? 'Policy document, ' + pdfPageCount + ' pages' : 'Policy document'"></div>
+      </div>
+      <div class="reader-empty" *ngIf="!isManager && selected.has_attachment && selected.attachment_mime !== 'application/pdf'">
+        This legacy attachment is not available in secure preview format. Please contact Human Resources.
       </div>
     </div>
     <div class="reader-foot">
@@ -156,8 +170,8 @@
       <div class="fg"><label>Effective date</label><input type="date" [(ngModel)]="form.effective_date"></div>
       <div class="fg"><label>Next review date</label><input type="date" [(ngModel)]="form.review_date"></div>
     </div>
-    <div class="fg"><label>Document (PDF/DOC, ≤10MB)</label>
-      <input type="file" accept=".pdf,.doc,.docx" (change)="onFileSelected($event)">
+    <div class="fg"><label>Document (PDF, ≤10MB)</label>
+      <input type="file" accept=".pdf" (change)="onFileSelected($event)">
       <div class="file-hint" *ngIf="selectedFile">{{ selectedFile.name }}</div>
     </div>
     <div class="check-row">

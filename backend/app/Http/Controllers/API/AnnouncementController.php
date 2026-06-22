@@ -44,6 +44,8 @@ class AnnouncementController extends Controller
             'enabled' => 'required|boolean',
             'subject' => 'required|string|max:200',
             'body' => 'required|string|max:5000',
+            'subject_ar' => 'nullable|string|max:200',
+            'body_ar' => 'nullable|string|max:5000',
             'background_image' => 'nullable|image|mimes:jpeg,jpg,png,webp|max:5120',
             'remove_background_image' => 'nullable|boolean',
         ]);
@@ -161,7 +163,9 @@ class AnnouncementController extends Controller
             ->when($request->category_id, fn($q) => $q->where('category_id', $request->category_id))
             ->when($request->search, fn($q) => $q->where(function ($w) use ($request) {
                 $w->where('title', 'like', "%{$request->search}%")
-                  ->orWhere('body', 'like', "%{$request->search}%");
+                  ->orWhere('body', 'like', "%{$request->search}%")
+                  ->orWhere('title_ar', 'like', "%{$request->search}%")
+                  ->orWhere('body_ar', 'like', "%{$request->search}%");
             }))
             ->orderByDesc('is_pinned')
             ->orderByDesc('published_at')
@@ -316,7 +320,9 @@ class AnnouncementController extends Controller
         $data = $request->validate([
             'category_id'  => 'nullable|exists:announcement_categories,id',
             'title'        => 'required|string|max:200',
+            'title_ar'     => 'nullable|string|max:200',
             'body'         => 'required|string',
+            'body_ar'      => 'nullable|string',
             'priority'     => 'nullable|in:normal,high,urgent',
             'audience_type'=> 'nullable|in:all,departments,roles',
             'target_department_ids'   => 'nullable',
@@ -336,7 +342,9 @@ class AnnouncementController extends Controller
         $announcement = new Announcement([
             'category_id'   => $data['category_id'] ?? null,
             'title'         => $data['title'],
+            'title_ar'      => $data['title_ar'] ?? null,
             'body'          => $data['body'],
+            'body_ar'       => $data['body_ar'] ?? null,
             'priority'      => $data['priority'] ?? 'normal',
             'audience_type' => $data['audience_type'] ?? 'all',
             'target_department_ids' => $this->arr($request->input('target_department_ids')),
@@ -382,8 +390,10 @@ class AnnouncementController extends Controller
         );
         $this->notifications->emailMany(
             $ids, 'announcement', $a->title,
-            $summary,
+            $a->body,
             rtrim((string) config('app.frontend_url'), '/') . '/announcements',
+            $a->title_ar,
+            $a->body_ar,
         );
     }
 
@@ -407,7 +417,9 @@ class AnnouncementController extends Controller
         $data = $request->validate([
             'category_id'  => 'nullable|exists:announcement_categories,id',
             'title'        => 'sometimes|string|max:200',
+            'title_ar'     => 'nullable|string|max:200',
             'body'         => 'sometimes|string',
+            'body_ar'      => 'nullable|string',
             'priority'     => 'nullable|in:normal,high,urgent',
             'audience_type'=> 'nullable|in:all,departments,roles',
             'target_department_ids' => 'nullable',
@@ -463,12 +475,39 @@ class AnnouncementController extends Controller
         return response()->json(['message' => 'Announcement deleted.']);
     }
 
-    public function downloadAttachment(int $id): StreamedResponse|JsonResponse
+    public function downloadAttachment(Request $request, int $id): StreamedResponse|JsonResponse
     {
         $announcement = Announcement::findOrFail($id);
 
         if (!$announcement->attachment_path || !Storage::disk('public')->exists($announcement->attachment_path)) {
             return response()->json(['message' => 'No attachment.'], 404);
+        }
+
+        $mime = $announcement->attachment_mime
+            ?: Storage::disk('public')->mimeType($announcement->attachment_path)
+            ?: 'application/octet-stream';
+        $previewableMimes = [
+            'application/pdf',
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+            'image/bmp',
+            'image/avif',
+        ];
+
+        if ($request->boolean('inline') && in_array(strtolower($mime), $previewableMimes, true)) {
+            $filename = str_replace(["\r", "\n", '"'], '', basename($announcement->attachment_name ?: 'attachment'));
+
+            return Storage::disk('public')->response(
+                $announcement->attachment_path,
+                $filename,
+                [
+                    'Content-Type' => $mime,
+                    'Content-Disposition' => 'inline; filename="'.$filename.'"',
+                    'X-Content-Type-Options' => 'nosniff',
+                ]
+            );
         }
 
         return Storage::disk('public')->download(

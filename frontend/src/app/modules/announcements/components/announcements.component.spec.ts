@@ -98,6 +98,19 @@ describe('AnnouncementsComponent', () => {
     expect(window.open).toHaveBeenCalledWith(`${API}/5/attachment`, '_blank');
   });
 
+  it('opens previewable attachments inline', () => {
+    setup(false);
+    flushInit();
+    spyOn(window, 'open').and.returnValue(null);
+    spyOn(URL, 'createObjectURL').and.returnValue('blob:announcement-preview');
+    const announcement = { id: 5, attachment_name: 'notice.pdf', attachment_mime: 'application/pdf' } as any;
+    expect(component.canPreviewAttachment(announcement)).toBeTrue();
+    component.viewAttachment(announcement);
+    const request = httpMock.expectOne(r => r.url === `${API}/5/attachment` && r.params.get('inline') === '1');
+    request.flush(new Blob(['pdf'], { type: 'application/pdf' }));
+    expect(window.open).toHaveBeenCalledWith('blob:announcement-preview', '_blank');
+  });
+
   it('rejects an oversized attachment', () => {
     setup(true);
     flushInit(true);

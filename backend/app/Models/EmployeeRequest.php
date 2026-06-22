@@ -7,7 +7,7 @@ class EmployeeRequest extends Model {
     protected $table = 'employee_requests';
     protected $appends = ['has_completion_file'];
     protected $fillable = [
-        'reference','employee_id','request_type_id','status','details','hr_notes',
+        'reference','employee_id','leave_request_id','linked_service','request_type_id','status','details','hr_notes',
         'rejection_reason','required_by','copies_needed','attachment_path',
         'manager_approved_by','manager_approved_at','assigned_to',
         'completed_by','completed_at','rejected_by','rejected_at',
@@ -19,6 +19,7 @@ class EmployeeRequest extends Model {
         'is_overdue'=>'boolean',
     ];
     public function employee()        { return $this->belongsTo(Employee::class); }
+    public function leaveRequest()    { return $this->belongsTo(LeaveRequest::class); }
     public function requestType()     { return $this->belongsTo(RequestType::class); }
     public function managerApprover() { return $this->belongsTo(User::class,'manager_approved_by'); }
     public function assignedTo()      { return $this->belongsTo(User::class,'assigned_to'); }

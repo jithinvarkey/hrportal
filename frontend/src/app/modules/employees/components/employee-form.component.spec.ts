@@ -77,7 +77,7 @@ describe('EmployeeFormComponent — edit data load', () => {
 
     // Lookups fired by loadLookups()
     httpMock.expectOne('/api/v1/departments').flush({ data: [{ id: 3, name: 'Engineering' }] });
-    httpMock.expectOne('/api/v1/employees?status=active&per_page=500').flush({ data: [] });
+    httpMock.expectOne(req => req.url === '/api/v1/employees/manager-options' && req.params.get('employee_id') === '42').flush({ managers: [] });
 
     // Employee fetch
     httpMock.expectOne('/api/v1/employees/42').flush({
@@ -85,8 +85,13 @@ describe('EmployeeFormComponent — edit data load', () => {
         id: 42, first_name: 'Sara', last_name: 'Khan', email: 's@x.com',
         dob: '1990-06-01T00:00:00.000000Z',
         hire_date: '2022-01-10T00:00:00.000000Z',
+        confirmation_date: '2022-04-10T00:00:00.000000Z',
+        termination_date: '2026-01-31T00:00:00.000000Z',
         department_id: 3, designation_id: 9, manager_id: 5,
         employment_type: 'full_time', status: 'active', salary: '12000.00',
+        nationality: 'Sri Lankan', national_id: 'IQAMA-123', bank_account: 'SA123',
+        address: 'King Fahd Road', notes: 'Existing notes',
+        emergency_contact_name: 'Emergency Person',
       },
     });
 
@@ -97,19 +102,48 @@ describe('EmployeeFormComponent — edit data load', () => {
 
     expect(component.form.get('dob')?.value).toBe('1990-06-01');
     expect(component.form.get('hire_date')?.value).toBe('2022-01-10');
+    expect(component.form.get('confirmation_date')?.value).toBe('2022-04-10');
+    expect(component.form.get('termination_date')?.value).toBe('2026-01-31');
     expect(component.form.get('department_id')?.value).toBe(3);
     expect(component.form.get('designation_id')?.value).toBe(9); // race fixed
     expect(component.form.get('manager_id')?.value).toBe(5);
+    expect(component.form.get('nationality')?.value).toBe('Sri Lankan');
+    expect(component.form.get('national_id')?.value).toBe('IQAMA-123');
+    expect(component.form.get('bank_account')?.value).toBe('SA123');
+    expect(component.form.get('address')?.value).toBe('King Fahd Road');
+    expect(component.form.get('notes')?.value).toBe('Existing notes');
+    expect(component.form.get('emergency_contact_name')?.value).toBe('Emergency Person');
     expect(component.designations.length).toBe(1);
     expect(component.loadingData).toBeFalse();
   }));
+
+  it('normalizes empty optional dates and foreign keys before update', () => {
+    configure('new');
+    component.buildForm();
+    component.form.patchValue({
+      hire_date: '2024-01-15T00:00:00Z',
+      dob: '', confirmation_date: '', termination_date: '',
+      department_id: '', designation_id: '', manager_id: '',
+      housing_allowance: '', transport_allowance: '', years_of_experience: '',
+    });
+
+    const payload = component.buildPayload();
+    expect(payload.hire_date).toBe('2024-01-15');
+    expect(payload.dob).toBeNull();
+    expect(payload.confirmation_date).toBeNull();
+    expect(payload.termination_date).toBeNull();
+    expect(payload.department_id).toBeNull();
+    expect(payload.designation_id).toBeNull();
+    expect(payload.manager_id).toBeNull();
+    expect(payload.housing_allowance).toBeNull();
+  });
 
   it('patches immediately when the employee has no department', fakeAsync(() => {
     configure('43');
     fixture.detectChanges();
 
     httpMock.expectOne('/api/v1/departments').flush({ data: [] });
-    httpMock.expectOne('/api/v1/employees?status=active&per_page=500').flush({ data: [] });
+    httpMock.expectOne(req => req.url === '/api/v1/employees/manager-options' && req.params.get('employee_id') === '43').flush({ managers: [] });
     httpMock.expectOne('/api/v1/employees/43').flush({
       employee: { id: 43, first_name: 'Tom', last_name: 'Lee', email: 't@x.com', department_id: null },
     });

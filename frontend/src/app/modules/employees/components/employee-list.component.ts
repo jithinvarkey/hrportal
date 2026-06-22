@@ -16,7 +16,7 @@ import {
   ChangeDetectorRef,
 } from '@angular/core';
 import { AuthService } from '../../../core/services/auth.service';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { Store } from '@ngrx/store';
 import { Observable, Subject } from 'rxjs';
@@ -111,12 +111,14 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
     'employment_type', 'status', 'actions',
   ];
   isHR = false;
+  fromDashboard = false;
 
   private readonly destroy$ = new Subject<void>();
 
   constructor(
     private readonly store:  Store<AppState>,
     private readonly router: Router,
+    private readonly route: ActivatedRoute,
     private readonly http:   HttpClient,
     private readonly cdr:    ChangeDetectorRef,
     private auth: AuthService
@@ -128,6 +130,7 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
 
   /** @inheritdoc */
   ngOnInit(): void {
+    this.fromDashboard = this.route.snapshot.queryParamMap.get('dashboard_scope') === '1';
     this.loadEmployees();
     this.loadStats();
     this.loadDepartments();
@@ -146,7 +149,9 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
   /** Fetch workforce summary from the dedicated stats endpoint. */
   loadStats(): void {
     this.statsLoading = true;
-    this.http.get<EmpStats>('/api/v1/employees/stats')
+    this.http.get<EmpStats>('/api/v1/employees/stats', {
+      params: this.fromDashboard ? { dashboard_scope: '1' } : {},
+    })
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (s) => {
@@ -211,6 +216,7 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
         employment_type: this.typeFilter.value      ?? '',
         page,
         per_page:        15,
+        dashboard_scope: this.fromDashboard,
       },
     }));
   }

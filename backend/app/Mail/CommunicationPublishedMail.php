@@ -16,6 +16,8 @@ class CommunicationPublishedMail extends Mailable
         public ?string $body,
         public string $link,
         public string $recipientName = 'Employee',
+        public ?string $titleAr = null,
+        public ?string $bodyAr = null,
     ) {
     }
 

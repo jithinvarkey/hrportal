@@ -146,7 +146,6 @@ export class AuthService {
         path: '/org-chart', label: 'Org Chart', icon: 'account_tree',
         perms: ['orgchart.view']
       },
-
       // ── HR & Workforce ────────────────────────────────────────────────
       {
         group: 'HR & Workforce',

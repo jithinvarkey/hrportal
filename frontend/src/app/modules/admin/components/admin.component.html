@@ -434,6 +434,18 @@
         </button>
       </div>
     </div>
+
+    <div class="settings-panel ticket-policy-panel">
+      <div class="settings-heading">
+        <div class="settings-icon"><mat-icon>flight</mat-icon></div>
+        <div><div class="settings-title">Yearly Annual Ticket Policy</div><div class="settings-sub">Calendar-year entitlement used with annual leave.</div></div>
+      </div>
+      <div class="ticket-policy-grid">
+        <div class="policy-group"><strong>Saudi employees</strong><span>Ticket request is optional.</span><label>Employee tickets <input type="number" min="1" max="1" [(ngModel)]="annualTicketSettings.saudi_employee_tickets"></label></div>
+        <div class="policy-group"><strong>Non-Saudi employees</strong><span>Employee ticket is mandatory when tickets are requested.</span><label>Employee tickets <input type="number" min="1" max="1" [(ngModel)]="annualTicketSettings.non_saudi_employee_tickets"></label><label>Maximum dependent tickets <input type="number" min="0" max="3" [(ngModel)]="annualTicketSettings.non_saudi_max_dependents"></label></div>
+      </div>
+      <div class="settings-actions"><button class="btn-primary" (click)="saveAnnualTicketSettings()" [disabled]="ticketSettingsSaving"><mat-icon>{{ ticketSettingsSaving ? 'hourglass_empty' : 'save' }}</mat-icon>{{ ticketSettingsSaving ? 'Saving...' : 'Save Ticket Policy' }}</button></div>
+    </div>
   </ng-container>
 
 </div>

@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Models\Employee;
+use App\Models\JobPosting;
+use App\Models\LeaveRequest;
+use App\Models\PerformanceReview;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +20,56 @@ use Illuminate\Support\Facades\DB;
  */
 class DashboardController extends Controller
 {
+    private function dashboardScope(): array
+    {
+        $user = auth()->user();
+        $roles = DB::table('model_has_roles')
+            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('model_has_roles.model_id', $user->id)
+            ->where('model_has_roles.model_type', get_class($user))
+            ->pluck('roles.name')
+            ->all();
+
+        $isGlobal = (bool) array_intersect($roles, ['super_admin', 'hr_manager', 'hr_staff']);
+        $employee = Employee::where('user_id', $user->id)->first();
+
+        if ($isGlobal) {
+            return ['type' => 'global', 'employee_ids' => null, 'department_id' => null, 'employee_id' => $employee?->id];
+        }
+
+        if (in_array('department_manager', $roles, true) && $employee?->department_id) {
+            return [
+                'type' => 'department',
+                'employee_ids' => Employee::where('department_id', $employee->department_id)->pluck('id')->all(),
+                'department_id' => (int) $employee->department_id,
+                'employee_id' => $employee->id,
+            ];
+        }
+
+        return [
+            'type' => 'personal',
+            'employee_ids' => $employee ? [$employee->id] : [],
+            'department_id' => $employee?->department_id ? (int) $employee->department_id : null,
+            'employee_id' => $employee?->id,
+        ];
+    }
+
+    private function applyEmployeeScope($query, array $scope, string $column = 'employee_id')
+    {
+        return $scope['employee_ids'] === null
+            ? $query
+            : $query->whereIn($column, $scope['employee_ids']);
+    }
+
+    private function applyDepartmentScope($query, array $scope, string $column = 'department_id')
+    {
+        if ($scope['type'] === 'global') return $query;
+        if ($scope['type'] === 'department' && $scope['department_id']) {
+            return $query->where($column, $scope['department_id']);
+        }
+        return $query->whereRaw('1 = 0');
+    }
+
     // ── Stats ─────────────────────────────────────────────────────────────
 
     public function stats(): JsonResponse
@@ -23,92 +77,132 @@ class DashboardController extends Controller
         $today = now()->toDateString();
         $month = now()->month;
         $year  = now()->year;
+        $scope = $this->dashboardScope();
 
         // ── Helpers ────────────────────────────────────────────────────
         $safe = fn (callable $fn, $default = 0) => rescue($fn, $default, false);
 
         // ── Employees ──────────────────────────────────────────────────
-        $totalEmp     = $safe(fn () => DB::table('employees')->whereNull('deleted_at')->count());
-        $activeEmp    = $safe(fn () => DB::table('employees')->whereNull('deleted_at')->where('status', 'active')->count());
-        $probation    = $safe(fn () => DB::table('employees')->whereNull('deleted_at')->where('status', 'probation')->count());
-        $onLeave      = $safe(fn () => DB::table('employees')->whereNull('deleted_at')->where('status', 'on_leave')->count());
-        $newThisMonth = $safe(fn () => DB::table('employees')->whereNull('deleted_at')->whereMonth('hire_date', $month)->whereYear('hire_date', $year)->count());
-        $terminated   = $safe(fn () => DB::table('employees')->whereNull('deleted_at')->whereMonth('termination_date', $month)->whereYear('termination_date', $year)->count());
+        $employeeQuery = fn () => $this->applyEmployeeScope(DB::table('employees')->whereNull('deleted_at'), $scope, 'employees.id');
+        $totalEmp     = $safe(fn () => $employeeQuery()->count());
+        $activeEmp    = $safe(fn () => $employeeQuery()->where('status', 'active')->count());
+        $probation    = $safe(fn () => $employeeQuery()->where('status', 'probation')->count());
+        $onLeave      = $safe(fn () => $employeeQuery()->where('status', 'on_leave')->count());
+        $newThisMonth = $safe(fn () => $employeeQuery()->whereMonth('hire_date', $month)->whereYear('hire_date', $year)->count());
+        $terminated   = $safe(fn () => $employeeQuery()->whereMonth('termination_date', $month)->whereYear('termination_date', $year)->count());
 
         // ── Leave ──────────────────────────────────────────────────────
-        $pendingLeave  = $safe(fn () => DB::table('leave_requests')->whereIn('status', ['pending', 'manager_approved'])->count());
-        $approvedLeave = $safe(fn () => DB::table('leave_requests')->where('status', 'approved')->count());
-        $rejectedLeave = $safe(fn () => DB::table('leave_requests')->where('status', 'rejected')->count());
-        $onLeaveToday  = $safe(fn () => DB::table('leave_requests')
+        $leaveQuery = fn () => $this->applyEmployeeScope(DB::table('leave_requests'), $scope);
+        $pendingLeave  = $safe(fn () => $leaveQuery()->whereIn('status', ['pending', 'manager_approved'])->count());
+        $approvedLeave = $safe(fn () => $leaveQuery()->where('status', 'approved')->count());
+        $rejectedLeave = $safe(fn () => $leaveQuery()->where('status', 'rejected')->count());
+        $onLeaveToday  = $safe(fn () => $leaveQuery()
             ->where('status', 'approved')
             ->where('start_date', '<=', $today)
             ->where('end_date', '>=', $today)->count());
-        $approvedMonth = $safe(fn () => DB::table('leave_requests')
+        $approvedMonth = $safe(fn () => $leaveQuery()
             ->where('status', 'approved')
             ->whereMonth('updated_at', $month)->count());
-        $totalLeave    = $safe(fn () => DB::table('leave_requests')->count());
+        $totalLeave    = $safe(fn () => $leaveQuery()->count());
 
         // ── Attendance ─────────────────────────────────────────────────
-        $presentToday = $safe(fn () => DB::table('attendance_logs')
+        $attendanceQuery = fn () => $this->applyEmployeeScope(DB::table('attendance_logs'), $scope);
+        $presentToday = $safe(fn () => $attendanceQuery()
             ->whereDate('date', $today)
             ->whereIn('status', ['present', 'late'])->count());
-        $lateToday    = $safe(fn () => DB::table('attendance_logs')
+        $lateToday    = $safe(fn () => $attendanceQuery()
             ->whereDate('date', $today)->where('status', 'late')->count());
-        $absentToday  = $safe(fn () => DB::table('attendance_logs')
+        $absentToday  = $safe(fn () => $attendanceQuery()
             ->whereDate('date', $today)->where('status', 'absent')->count());
         $attRate      = $activeEmp > 0 ? round(($presentToday / max($activeEmp, 1)) * 100, 1) : 0;
 
         // ── Payroll ────────────────────────────────────────────────────
-        $payProcessed = $safe(fn () => DB::table('payrolls')->where('status', 'approved')->count());
-        $payPending   = $safe(fn () => DB::table('payrolls')->whereIn('status', ['pending_approval', 'draft'])->count());
-        $payErrors    = $safe(fn () => DB::table('payrolls')->where('status', 'rejected')->count());
-        $payOnHold    = $safe(fn () => DB::table('payrolls')->where('status', 'on_hold')->count());
-        $payDue       = $safe(fn () => DB::table('payrolls')->whereMonth('created_at', $month)->count());
-        $payTotal     = $safe(fn () => DB::table('payrolls')->count());
+        $payrollQuery = fn () => $this->applyEmployeeScope(DB::table('payrolls'), $scope);
+        $payProcessed = $safe(fn () => $payrollQuery()->where('status', 'approved')->count());
+        $payPending   = $safe(fn () => $payrollQuery()->whereIn('status', ['pending_approval', 'draft'])->count());
+        $payErrors    = $safe(fn () => $payrollQuery()->where('status', 'rejected')->count());
+        $payOnHold    = $safe(fn () => $payrollQuery()->where('status', 'on_hold')->count());
+        $payDue       = $safe(fn () => $payrollQuery()->whereMonth('created_at', $month)->count());
+        $payTotal     = $safe(fn () => $payrollQuery()->count());
 
         // ── Recruitment ────────────────────────────────────────────────
-        $openJobs        = $safe(fn () => DB::table('job_postings')->where('status', 'open')->count());
-        $totalApplicants = $safe(fn () => DB::table('job_applications')->count());
-        $newApplicants   = $safe(fn () => DB::table('job_applications')->where('created_at', '>=', now()->subDays(7))->count());
-        $offersSent      = $safe(fn () => DB::table('job_applications')->where('stage', 'offer')->count());
-        $hiredThisMonth  = $safe(fn () => DB::table('job_applications')->where('stage', 'hired')->whereMonth('updated_at', $month)->count());
+        $jobQuery = fn () => $this->applyDepartmentScope(DB::table('job_postings'), $scope, 'job_postings.department_id');
+        $applicationQuery = fn () => $this->applyDepartmentScope(
+            DB::table('job_applications')->join('job_postings', 'job_postings.id', '=', 'job_applications.job_posting_id'),
+            $scope,
+            'job_postings.department_id'
+        );
+        $openJobs        = $safe(fn () => $jobQuery()->where('job_postings.status', 'open')->count());
+        $totalApplicants = $safe(fn () => $applicationQuery()->count());
+        $newApplicants   = $safe(fn () => $applicationQuery()->where('job_applications.created_at', '>=', now()->subDays(7))->count());
+        $offersSent      = $safe(fn () => $applicationQuery()->where('job_applications.stage', 'offer')->count());
+        $hiredThisMonth  = $safe(fn () => $applicationQuery()->where('job_applications.stage', 'hired')->whereMonth('job_applications.updated_at', $month)->count());
 
         // ── Performance ────────────────────────────────────────────────
-        $perfPending  = $safe(fn () => DB::table('performance_reviews')->where('status', 'pending')->count());
-        $perfProgress = $safe(fn () => DB::table('performance_reviews')->whereIn('status', ['self_submitted', 'manager_reviewed'])->count());
-        $perfDone     = $safe(fn () => DB::table('performance_reviews')->where('status', 'finalized')->count());
+        $performanceQuery = fn () => $this->applyEmployeeScope(DB::table('performance_reviews'), $scope);
+        $perfPending  = $safe(fn () => $performanceQuery()->where('status', 'pending')->count());
+        $perfProgress = $safe(fn () => $performanceQuery()->whereIn('status', ['self_submitted', 'manager_reviewed'])->count());
+        $perfDone     = $safe(fn () => $performanceQuery()->where('status', 'finalized')->count());
         // Reviews still pending self-assessment past the cycle self_assessment_deadline
-        $perfOverdue  = $safe(fn () => DB::table('performance_reviews')
+        $perfOverdue  = $safe(fn () => $this->applyEmployeeScope(DB::table('performance_reviews'), $scope, 'performance_reviews.employee_id')
             ->join('performance_cycles', 'performance_cycles.id', '=', 'performance_reviews.cycle_id')
             ->where('performance_reviews.status', 'pending')
             ->where('performance_cycles.self_assessment_deadline', '<', $today)
             ->count());
-        $perfTotal    = $safe(fn () => DB::table('performance_reviews')->count());
-        $perfAvg      = $safe(fn () => DB::table('performance_reviews')->whereNotNull('final_rating')->avg('final_rating'), null);
+        $perfTotal    = $safe(fn () => $performanceQuery()->count());
+        $perfAvg      = $safe(fn () => $performanceQuery()->whereNotNull('final_rating')->avg('final_rating'), null);
 
         // ── Departments ────────────────────────────────────────────────
-        $depts       = $safe(fn () => DB::table('departments')->whereNull('deleted_at')->get(), collect());
+        $depts       = $safe(fn () => $scope['type'] === 'global'
+            ? DB::table('departments')->whereNull('deleted_at')->get()
+            : DB::table('departments')->whereNull('deleted_at')->where('id', $scope['department_id'])->get(), collect());
         $totalDepts  = is_object($depts) ? $depts->count() : 0;
         $withManager = is_object($depts) ? $depts->filter(fn ($d) => !empty($d->manager_id))->count() : 0;
         $vacantMgr   = $totalDepts - $withManager;
 
         // ── Loans ──────────────────────────────────────────────────────
-        $loanPending  = $safe(fn () => DB::table('loans')->where('status', 'pending')->count());
-        $loanActive   = $safe(fn () => DB::table('loans')->where('status', 'active')->count());
-        $loanOverdue  = $safe(fn () => DB::table('loans')->where('status', 'overdue')->count());
+        $loanQuery = fn () => $this->applyEmployeeScope(DB::table('loans'), $scope);
+        $loanPending  = $safe(fn () => $loanQuery()->where('status', 'pending')->count());
+        $loanActive   = $safe(fn () => $loanQuery()->where('status', 'active')->count());
+        $loanOverdue  = $safe(fn () => $loanQuery()->where('status', 'overdue')->count());
 
         // ── Separations ────────────────────────────────────────────────
-        $sepPending = $safe(fn () => DB::table('separations')->where('status', 'pending')->count());
-        $sepActive  = $safe(fn () => DB::table('separations')->whereIn('status', ['approved', 'in_progress'])->count());
+        $separationQuery = fn () => $this->applyEmployeeScope(DB::table('separations'), $scope);
+        $sepPending = $safe(fn () => $separationQuery()->where('status', 'pending')->count());
+        $sepActive  = $safe(fn () => $separationQuery()->whereIn('status', ['approved', 'in_progress'])->count());
 
         // ── Requests ──────────────────────────────────────────────────
-        $reqPending     = $safe(fn () => DB::table('employee_requests')->whereIn('status', ['pending', 'pending_manager'])->count());
-        $reqInProgress  = $safe(fn () => DB::table('employee_requests')->where('status', 'in_progress')->count());
-        $reqCompleted   = $safe(fn () => DB::table('employee_requests')->where('status', 'completed')->count());
-        $reqOverdue     = $safe(fn () => DB::table('employee_requests')->where('is_overdue', true)->whereNotIn('status', ['completed', 'rejected', 'cancelled'])->count());
-        $reqOpen        = $safe(fn () => DB::table('employee_requests')->whereNotIn('status', ['completed', 'rejected', 'cancelled'])->count());
+        $requestQuery = fn () => $this->applyEmployeeScope(DB::table('employee_requests'), $scope);
+        $reqPending     = $safe(fn () => $requestQuery()->whereIn('status', ['pending', 'pending_manager'])->count());
+        $reqInProgress  = $safe(fn () => $requestQuery()->where('status', 'in_progress')->count());
+        $reqCompleted   = $safe(fn () => $requestQuery()->where('status', 'completed')->count());
+        $reqOverdue     = $safe(fn () => $requestQuery()->where('is_overdue', true)->whereNotIn('status', ['completed', 'rejected', 'cancelled'])->count());
+        $reqOpen        = $safe(fn () => $requestQuery()->whereNotIn('status', ['completed', 'rejected', 'cancelled'])->count());
+
+        $recentEmployees = $safe(function () use ($scope) {
+            $query = $this->applyEmployeeScope(Employee::with('department'), $scope, 'employees.id');
+            if ($scope['type'] === 'department') {
+                $query->orderByRaw('employees.id = ? DESC', [$scope['employee_id']]);
+            }
+            return $query->latest()->limit(5)->get()->each(function ($employee) {
+                $employee->setAttribute('name', $employee->full_name);
+                $employee->setAttribute('employee_id', $employee->employee_code);
+            });
+        }, collect());
+        $recentLeaves = $safe(function () use ($scope) {
+            $query = $this->applyEmployeeScope(LeaveRequest::with(['employee', 'leaveType'])->latest(), $scope);
+            if ($scope['type'] !== 'personal') $query->whereIn('status', ['pending', 'manager_approved']);
+            if ($scope['type'] === 'global' && auth()->user()->employee) {
+                $query->where('employee_id', '!=', auth()->user()->employee->id);
+            }
+            return $query->limit(5)->get();
+        }, collect());
+        $recentJobs = $safe(fn () => $this->applyDepartmentScope(JobPosting::with('department')->where('status', 'open')->latest(), $scope)->limit(5)->get(), collect());
+        $recentReviews = $safe(fn () => $this->applyEmployeeScope(PerformanceReview::with(['employee', 'cycle'])->latest(), $scope)->limit(5)->get()
+            ->each(fn ($review) => $review->setAttribute('due_date', $review->cycle?->manager_review_deadline ?? $review->cycle?->end_date)), collect());
 
         return response()->json([
+            'scope' => $scope['type'],
             'employees' => [
                 'total'                 => $totalEmp,
                 'active'                => $activeEmp,
@@ -117,6 +211,7 @@ class DashboardController extends Controller
                 'new_this_month'        => $newThisMonth,
                 'terminated_this_month' => $terminated,
                 'contracts_expiring'    => $safe(fn () => DB::table('employee_contracts')
+                    ->when($scope['employee_ids'] !== null, fn ($query) => $query->whereIn('employee_id', $scope['employee_ids']))
                     ->where('status', 'active')
                     ->whereNotNull('end_date')
                     ->whereBetween('end_date', [now()->toDateString(), now()->addDays(30)->toDateString()])
@@ -183,6 +278,12 @@ class DashboardController extends Controller
                 'overdue'     => $reqOverdue,
                 'open'        => $reqOpen,
             ],
+            'recent' => [
+                'employees' => $recentEmployees,
+                'leave_requests' => $recentLeaves,
+                'open_jobs' => $recentJobs,
+                'reviews' => $recentReviews,
+            ],
         ]);
     }
 
@@ -191,12 +292,13 @@ class DashboardController extends Controller
     public function charts(): JsonResponse
     {
         $safe = fn (callable $fn, $default = []) => rescue($fn, $default, false);
+        $scope = $this->dashboardScope();
 
         $months = collect(range(5, 0))->map(fn ($i) => now()->subMonths($i));
 
         $hireTrend = $safe(fn () => $months->map(fn ($m) => [
             'month' => $m->format('M'),
-            'count' => DB::table('employees')
+            'count' => $this->applyEmployeeScope(DB::table('employees'), $scope, 'employees.id')
                 ->whereNull('deleted_at')
                 ->whereYear('hire_date', $m->year)
                 ->whereMonth('hire_date', $m->month)->count(),
@@ -204,7 +306,7 @@ class DashboardController extends Controller
 
         $exitTrend = $safe(fn () => $months->map(fn ($m) => [
             'month' => $m->format('M'),
-            'count' => DB::table('employees')
+            'count' => $this->applyEmployeeScope(DB::table('employees'), $scope, 'employees.id')
                 ->whereNull('deleted_at')
                 ->whereYear('termination_date', $m->year)
                 ->whereMonth('termination_date', $m->month)->count(),
@@ -212,18 +314,18 @@ class DashboardController extends Controller
 
         $payrollTrend = $safe(fn () => $months->map(fn ($m) => [
             'month' => $m->format('M'),
-            'total' => (int) (DB::table('payrolls')
+            'total' => (int) ($this->applyEmployeeScope(DB::table('payrolls'), $scope)
                 ->whereYear('created_at', $m->year)
                 ->whereMonth('created_at', $m->month)
                 ->where('status', 'approved')
                 ->sum('total_net') ?? 0),
         ]));
 
-        $deptDist = $safe(fn () => DB::table('departments')
+        $deptDist = $safe(fn () => $this->applyEmployeeScope(DB::table('departments')
             ->whereNull('deleted_at')
             ->join('employees', 'departments.id', '=', 'employees.department_id')
             ->whereNull('employees.deleted_at')
-            ->where('employees.status', 'active')
+            ->where('employees.status', 'active'), $scope, 'employees.id')
             ->selectRaw('departments.name, COUNT(employees.id) as count')
             ->groupBy('departments.id', 'departments.name')
             ->orderByDesc('count')
@@ -231,17 +333,17 @@ class DashboardController extends Controller
             ->get()
             ->map(fn ($r) => ['name' => $r->name, 'count' => $r->count]));
 
-        $leaveByType = $safe(fn () => DB::table('leave_requests')
+        $leaveByType = $safe(fn () => $this->applyEmployeeScope(DB::table('leave_requests')
             ->join('leave_types', 'leave_requests.leave_type_id', '=', 'leave_types.id')
             ->where('leave_requests.status', 'approved')
-            ->whereYear('leave_requests.created_at', now()->year)
+            ->whereYear('leave_requests.created_at', now()->year), $scope, 'leave_requests.employee_id')
             ->selectRaw('leave_types.name as leave_type, COUNT(*) as count')
             ->groupBy('leave_types.id', 'leave_types.name')
             ->get()
             ->map(fn ($r) => ['leave_type' => $r->leave_type, 'count' => $r->count]));
 
-        $perfRatings = $safe(fn () => DB::table('performance_reviews')
-            ->whereNotNull('final_rating')
+        $perfRatings = $safe(fn () => $this->applyEmployeeScope(DB::table('performance_reviews')
+            ->whereNotNull('final_rating'), $scope, 'performance_reviews.employee_id')
             ->selectRaw("
                 CASE
                     WHEN final_rating >= 4.5 THEN 'Excellent'
@@ -258,8 +360,8 @@ class DashboardController extends Controller
         $attTrend = $safe(fn () => collect(range(6, 0))->map(fn ($i) => now()->subDays($i))->map(fn ($day) => [
             'day'     => $day->format('D'),
             'date'    => $day->toDateString(),
-            'present' => DB::table('attendance_logs')->whereDate('date', $day)->whereIn('status', ['present', 'late'])->count(),
-            'absent'  => DB::table('attendance_logs')->whereDate('date', $day)->where('status', 'absent')->count(),
+            'present' => $this->applyEmployeeScope(DB::table('attendance_logs'), $scope)->whereDate('date', $day)->whereIn('status', ['present', 'late'])->count(),
+            'absent'  => $this->applyEmployeeScope(DB::table('attendance_logs'), $scope)->whereDate('date', $day)->where('status', 'absent')->count(),
         ]));
 
         return response()->json([
@@ -278,14 +380,15 @@ class DashboardController extends Controller
     public function recentActivities(): JsonResponse
     {
         $safe = fn (callable $fn) => rescue($fn, [], false);
+        $scope = $this->dashboardScope();
 
-        $activities = $safe(function () {
+        $activities = $safe(function () use ($scope) {
             $items = collect();
 
             // Recent leave requests
-            $leaves = DB::table('leave_requests')
+            $leaves = $this->applyEmployeeScope(DB::table('leave_requests')
                 ->join('employees', 'leave_requests.employee_id', '=', 'employees.id')
-                ->join('leave_types', 'leave_requests.leave_type_id', '=', 'leave_types.id')
+                ->join('leave_types', 'leave_requests.leave_type_id', '=', 'leave_types.id'), $scope, 'leave_requests.employee_id')
                 ->select('leave_requests.created_at', 'leave_requests.status',
                          'employees.first_name', 'employees.last_name', 'leave_types.name as type_name')
                 ->orderByDesc('leave_requests.created_at')->limit(5)->get()
@@ -301,8 +404,7 @@ class DashboardController extends Controller
             $items = $items->merge($leaves);
 
             // Recent hires
-            $hires = DB::table('employees')
-                ->whereNull('deleted_at')
+            $hires = $this->applyEmployeeScope(DB::table('employees')->whereNull('deleted_at'), $scope, 'employees.id')
                 ->orderByDesc('created_at')->limit(3)->get()
                 ->map(fn ($e) => [
                     'action'     => 'joined',
@@ -316,9 +418,9 @@ class DashboardController extends Controller
             $items = $items->merge($hires);
 
             // Recent performance reviews
-            $reviews = DB::table('performance_reviews')
+            $reviews = $this->applyEmployeeScope(DB::table('performance_reviews')
                 ->join('employees', 'performance_reviews.employee_id', '=', 'employees.id')
-                ->join('performance_cycles', 'performance_reviews.cycle_id', '=', 'performance_cycles.id')
+                ->join('performance_cycles', 'performance_reviews.cycle_id', '=', 'performance_cycles.id'), $scope, 'performance_reviews.employee_id')
                 ->select('performance_reviews.updated_at', 'performance_reviews.status',
                          'employees.first_name', 'employees.last_name', 'performance_cycles.name as cycle_name')
                 ->whereNotIn('performance_reviews.status', ['pending'])

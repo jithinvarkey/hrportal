@@ -25,6 +25,12 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
   taskSaving     = false;
   editTaskId: number | null = null;
   activeTab     = 'profile';
+  dependents: any[] = [];
+  dependentForm: any = this.blankDependent();
+  dependentEditId: number | null = null;
+  dependentSaving = false;
+  dependentError = '';
+  showDependentForm = false;
 
   // ── Quick status change ───────────────────────────────────────────────
   statusSaving = false;
@@ -102,6 +108,11 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
           this.loading      = false;
           this.leaveBalance = this.employee?.leave_allocations || [];
           this.onboarding   = this.employee?.onboarding_tasks || [];
+          this.dependents   = this.employee?.dependents || [];
+          const ownEmployeeId = this.auth.getUser()?.employee?.id || this.auth.getUser()?.employee_id;
+          if (!this.isSaudiEmployee && (this.isHR || Number(ownEmployeeId) === Number(this.employeeId)) && !this.tabs.some(t => t.id === 'dependents')) {
+            this.tabs.splice(2, 0, { id: 'dependents', label: 'Dependents', icon: 'family_restroom' });
+          }
           this.loadDocuments();
         },
         error: err => {
@@ -128,6 +139,41 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
     if (tabId === 'onboarding') {
       this.loadOnboarding();
     }
+  }
+
+  get isSaudiEmployee(): boolean {
+    return ['saudi', 'saudi arabian', 'saudi arabia'].includes(String(this.employee?.nationality || '').trim().toLowerCase());
+  }
+
+  private blankDependent(): any {
+    return { full_name: '', relationship: 'spouse', date_of_birth: '', nationality: '', passport_number: '', passport_expiry: '', is_active: true };
+  }
+
+  openDependentForm(dependent?: any): void {
+    this.dependentEditId = dependent?.id || null;
+    this.dependentForm = dependent ? { ...dependent, date_of_birth: dependent.date_of_birth?.substring(0, 10) || '', passport_expiry: dependent.passport_expiry?.substring(0, 10) || '' } : this.blankDependent();
+    this.dependentError = ''; this.showDependentForm = true;
+  }
+
+  saveDependent(): void {
+    if (!this.dependentForm.full_name?.trim()) { this.dependentError = 'Dependent name is required.'; return; }
+    this.dependentSaving = true; this.dependentError = '';
+    const request = this.dependentEditId
+      ? this.http.put<any>(`/api/v1/employees/${this.employeeId}/dependents/${this.dependentEditId}`, this.dependentForm)
+      : this.http.post<any>(`/api/v1/employees/${this.employeeId}/dependents`, this.dependentForm);
+    request.subscribe({
+      next: () => { this.dependentSaving = false; this.showDependentForm = false; this.loadDependents(); },
+      error: err => { this.dependentSaving = false; this.dependentError = err?.error?.message || 'Could not save dependent.'; }
+    });
+  }
+
+  loadDependents(): void {
+    this.http.get<any>(`/api/v1/employees/${this.employeeId}/dependents`).subscribe({ next: r => this.dependents = r.dependents || [] });
+  }
+
+  deleteDependent(dependent: any): void {
+    if (!confirm(`Delete ${dependent.full_name}?`)) return;
+    this.http.delete(`/api/v1/employees/${this.employeeId}/dependents/${dependent.id}`).subscribe({ next: () => this.loadDependents() });
   }
 
   // ── Attendance ────────────────────────────────────────────────────────

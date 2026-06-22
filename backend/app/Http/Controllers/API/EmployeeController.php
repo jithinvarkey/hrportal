@@ -7,6 +7,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\User;
+use App\Models\EmployeeDependent;
 use App\Services\EmployeeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -36,6 +37,38 @@ class EmployeeController extends Controller {
         return (bool) array_intersect($this->userRoles(), $roles);
     }
 
+    public function managerOptions(Request $request): JsonResponse {
+        if (!$this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff'])) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $editingEmployeeId = (int) $request->query('employee_id', 0);
+        $currentManagerId = $editingEmployeeId ? (int) Employee::whereKey($editingEmployeeId)->value('manager_id') : 0;
+        $roleUserIds = DB::table('model_has_roles')
+            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('roles.name', 'department_manager')
+            ->pluck('model_has_roles.model_id');
+        $departmentManagerIds = DB::table('departments')->whereNotNull('manager_id')->pluck('manager_id');
+
+        $managers = Employee::with(['department:id,name', 'designation:id,title,level'])
+            ->where('id', '<>', $editingEmployeeId)
+            ->where(function ($query) use ($roleUserIds, $departmentManagerIds, $currentManagerId) {
+                $query->where(function ($active) use ($roleUserIds, $departmentManagerIds) {
+                    $active->where('status', 'active')->where(function ($candidate) use ($roleUserIds, $departmentManagerIds) {
+                        $candidate->whereIn('user_id', $roleUserIds)
+                            ->orWhereIn('id', $departmentManagerIds)
+                            ->orWhereHas('designation', fn ($designation) => $designation->whereIn('level', ['manager', 'management', 'executive']))
+                            ->orWhereHas('subordinates');
+                    });
+                });
+                if ($currentManagerId) $query->orWhere('id', $currentManagerId);
+            })
+            ->orderBy('first_name')->orderBy('last_name')
+            ->get(['id', 'department_id', 'designation_id', 'employee_code', 'first_name', 'last_name', 'status']);
+
+        return response()->json(['managers' => $managers]);
+    }
+
     // ── Index ─────────────────────────────────────────────────────────────
 
     /**
@@ -59,7 +92,7 @@ class EmployeeController extends Controller {
 
         $query = Employee::with(['department', 'designation', 'manager', 'user'])
                 // ── Role-based filtering ──────────────────────────────
-                ->when(!$isHRAdmin, function ($q) use ($user, $isMgr) {
+                ->when(!$isHRAdmin, function ($q) use ($user, $isMgr, $request) {
 
                     if (!$user->employee) {
                         return;
@@ -68,8 +101,10 @@ class EmployeeController extends Controller {
                     // Department Manager → own department
                     if ($isMgr) {
 
-                        $q->where('department_id', $user->employee->department_id)
-                        ->where('id', '!=', $user->employee->id);
+                        $q->where('department_id', $user->employee->department_id);
+                        if (!$request->boolean('dashboard_scope')) {
+                            $q->where('id', '!=', $user->employee->id);
+                        }
                     } else {
 
                         // Normal Employee → own record only
@@ -111,7 +146,7 @@ class EmployeeController extends Controller {
 
     // ── Stats ─────────────────────────────────────────────────────────────
 
-    public function stats(): JsonResponse {
+    public function stats(Request $request): JsonResponse {
 
         $user = auth()->user();
 
@@ -137,8 +172,10 @@ class EmployeeController extends Controller {
             if ($isMgr && $user->employee) {
 
                 // Manager: employees in same department except himself
-                $baseQuery->where('department_id', $user->employee->department_id)
-                        ->where('id', '!=', $user->employee->id);
+                $baseQuery->where('department_id', $user->employee->department_id);
+                if (!$request->boolean('dashboard_scope')) {
+                    $baseQuery->where('id', '!=', $user->employee->id);
+                }
             } elseif ($user->employee) {
 
                 // Normal employee: only himself
@@ -262,7 +299,12 @@ class EmployeeController extends Controller {
                         'department', 'designation', 'manager',
                         'leaveAllocations.leaveType',
                         'onboardingTasks',
+                        'dependents',
                     ])->findOrFail($id);
+
+            if ($this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff']) || (int) auth()->user()?->employee?->id === $employee->id) {
+                $employee->makeVisible(['national_id', 'bank_account']);
+            }
 
             return response()->json(['employee' => $employee]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
@@ -270,35 +312,105 @@ class EmployeeController extends Controller {
         }
     }
 
+    public function dependents(int $id): JsonResponse {
+        $employee = Employee::findOrFail($id);
+        $user = auth()->user();
+        if (!$this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff']) && (int) $user->employee?->id !== $employee->id) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+        return response()->json(['dependents' => $employee->dependents()->orderBy('full_name')->get()]);
+    }
+
+    public function storeDependent(Request $request, int $id): JsonResponse {
+        if (!$this->canManageDependents($id)) return response()->json(['message' => 'Unauthorized.'], 403);
+        $employee = Employee::findOrFail($id);
+        $data = $this->validateDependent($request);
+        return response()->json(['dependent' => $employee->dependents()->create($data)], 201);
+    }
+
+    public function updateDependent(Request $request, int $id, int $dependentId): JsonResponse {
+        if (!$this->canManageDependents($id)) return response()->json(['message' => 'Unauthorized.'], 403);
+        $dependent = EmployeeDependent::where('employee_id', $id)->findOrFail($dependentId);
+        $dependent->update($this->validateDependent($request));
+        return response()->json(['dependent' => $dependent->fresh()]);
+    }
+
+    public function deleteDependent(int $id, int $dependentId): JsonResponse {
+        if (!$this->canManageDependents($id)) return response()->json(['message' => 'Unauthorized.'], 403);
+        EmployeeDependent::where('employee_id', $id)->findOrFail($dependentId)->delete();
+        return response()->json(['message' => 'Dependent deleted.']);
+    }
+
+    private function validateDependent(Request $request): array {
+        return $request->validate([
+            'full_name' => 'required|string|max:200',
+            'relationship' => 'required|in:spouse,son,daughter,father,mother,other',
+            'date_of_birth' => 'nullable|date|before:today',
+            'nationality' => 'nullable|string|max:100',
+            'passport_number' => 'nullable|string|max:50',
+            'passport_expiry' => 'nullable|date',
+            'is_active' => 'nullable|boolean',
+        ]);
+    }
+
+    private function canManageDependents(int $employeeId): bool {
+        return $this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff'])
+            || (int) auth()->user()->employee?->id === $employeeId;
+    }
+
     // ── Update ────────────────────────────────────────────────────────────
 
     public function update(Request $request, int $id): JsonResponse {
         $employee = Employee::findOrFail($id);
 
-        $request->validate([
-            'email' => 'sometimes|email|unique:employees,email,' . $id,
-            'first_name' => 'sometimes|string|max:100',
-            'last_name' => 'sometimes|string|max:100',
-            'salary' => 'sometimes|numeric|min:0',
-            'status' => 'sometimes|in:active,inactive,terminated,on_leave,probation',
-            'employment_type' => 'sometimes|in:full_time,part_time,contract,intern',
-            'department_id' => 'nullable|exists:departments,id',
-            'designation_id' => 'nullable|exists:designations,id',
-            'manager_id' => 'nullable|exists:employees,id',
+        if (!$this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff']) && (int) auth()->user()?->employee?->id !== $employee->id) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $data = $request->validate([
+            'prefix' => 'sometimes|nullable|string|max:10',
+            'first_name' => 'sometimes|required|string|max:100',
+            'last_name' => 'sometimes|required|string|max:100',
+            'arabic_name' => 'sometimes|nullable|string|max:200',
+            'email' => 'sometimes|required|email|unique:employees,email,' . $id,
+            'phone' => 'sometimes|nullable|string|max:30',
+            'work_phone' => 'sometimes|nullable|string|max:30',
+            'extension' => 'sometimes|nullable|string|max:10',
+            'dob' => 'sometimes|nullable|date|before:today',
+            'gender' => 'sometimes|nullable|in:male,female,other',
+            'marital_status' => 'sometimes|nullable|in:single,married,divorced,widowed',
+            'nationality' => 'sometimes|nullable|string|max:100',
+            'national_id' => 'sometimes|nullable|string|max:50',
+            'address' => 'sometimes|nullable|string|max:255',
+            'city' => 'sometimes|nullable|string|max:100',
+            'country' => 'sometimes|nullable|string|max:100',
+            'department_id' => 'sometimes|nullable|exists:departments,id',
+            'designation_id' => 'sometimes|nullable|exists:designations,id',
+            'manager_id' => 'sometimes|nullable|exists:employees,id',
+            'employment_type' => 'sometimes|required|in:full_time,part_time,contract,intern',
+            'mode_of_employment' => 'sometimes|nullable|in:direct,agency,outsourced,secondment',
+            'role' => 'sometimes|nullable|string|max:50',
+            'status' => 'sometimes|required|in:active,inactive,terminated,on_leave,probation',
+            'hire_date' => 'sometimes|required|date',
+            'confirmation_date' => 'sometimes|nullable|date',
+            'termination_date' => 'sometimes|nullable|date',
+            'probation_period' => 'sometimes|nullable|integer|min:0|max:365',
+            'years_of_experience' => 'sometimes|nullable|integer|min:0|max:60',
+            'salary' => 'sometimes|required|numeric|min:0|max:9999999.99',
+            'housing_allowance' => 'sometimes|nullable|numeric|min:0|max:9999999.99',
+            'transport_allowance' => 'sometimes|nullable|numeric|min:0|max:9999999.99',
+            'mobile_allowance' => 'sometimes|nullable|numeric|min:0|max:9999999.99',
+            'food_allowance' => 'sometimes|nullable|numeric|min:0|max:9999999.99',
+            'other_allowances' => 'sometimes|nullable|numeric|min:0|max:9999999.99',
+            'bank_name' => 'sometimes|nullable|string|max:100',
+            'bank_account' => 'sometimes|nullable|string|max:50',
+            'emergency_contact_name' => 'sometimes|nullable|string|max:100',
+            'emergency_contact_phone' => 'sometimes|nullable|string|max:30',
+            'emergency_contact_relation' => 'sometimes|nullable|string|max:50',
+            'notes' => 'sometimes|nullable|string|max:2000',
         ]);
 
-        $allowed = [
-            'first_name', 'last_name', 'email', 'phone', 'hire_date',
-            'department_id', 'designation_id', 'manager_id', 'employment_type',
-            'status', 'salary', 'confirmation_date', 'termination_date',
-            'probation_period', 'years_of_experience', 'dob',
-            'nationality', 'gender', 'marital_status',
-            'housing_allowance', 'transport_allowance', 'mobile_allowance',
-            'food_allowance', 'other_allowances', 'bank_name', 'bank_account',
-            'national_id', 'iqama_number', 'iqama_expiry', 'mode_of_employment'
-        ];
-
-        $employee->update($request->only($allowed));
+        $employee->update($data);
 
         if ($employee->user && ($request->has('first_name') || $request->has('last_name') || $request->has('email'))) {
             $employee->user->update([

@@ -13,6 +13,7 @@ class BirthdayWishMail extends Mailable
     public function __construct(
         public string $mailSubject,
         public string $mailBody,
+        public string $mailBodyAr = '',
         public ?string $backgroundImagePath = null,
     )
     {

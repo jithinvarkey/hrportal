@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Storage;
 class Announcement extends Model
 {
     protected $fillable = [
-        'category_id', 'title', 'body', 'priority',
+        'category_id', 'title', 'title_ar', 'body', 'body_ar', 'priority',
         'audience_type', 'target_department_ids', 'target_roles',
         'is_pinned', 'is_published', 'published_at', 'scheduled_at', 'expires_at',
         'attachment_path', 'attachment_name', 'attachment_mime', 'attachment_size',
