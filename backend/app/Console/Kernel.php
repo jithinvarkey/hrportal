@@ -24,7 +24,7 @@ class Kernel extends ConsoleKernel
         })->name('mark-overdue-requests')->dailyAt('07:00')->timezone('Asia/Riyadh')->withoutOverlapping();
 
         // Auto-generate contract renewal requests 60 days before expiry
-        $schedule->command('contracts:generate-renewals')
+        $schedule->command('contracts:generate-renewals --days=60')
                  ->dailyAt('06:00')
                  ->timezone('Asia/Riyadh')
                  ->withoutOverlapping()

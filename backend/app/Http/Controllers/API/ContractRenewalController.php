@@ -190,7 +190,18 @@ class ContractRenewalController extends Controller {
             return response()->json(['message' => 'An open renewal request already exists for this contract.'], 422);
         }
 
-        $renewal = ContractRenewalRequest::create([
+        $docData = [];
+        if ($request->hasFile('document')) {
+            $file = $request->file('document');
+            $docData = [
+                'document_path' => $file->store('contracts/renewals', 'public'),
+                'document_name' => $file->getClientOriginalName(),
+                'document_mime' => $file->getMimeType(),
+                'document_size' => $file->getSize(),
+            ];
+        }
+
+        $renewal = ContractRenewalRequest::create(array_merge([
                     'contract_id' => $contract->id,
                     'employee_id' => $contract->employee_id,
                     'reference' => ContractRenewalRequest::generateReference(),
@@ -199,12 +210,11 @@ class ContractRenewalController extends Controller {
                     'proposed_end_date' => $request->proposed_end_date,
                     'proposed_salary' => $request->proposed_salary ?? $contract->salary,
                     'proposed_type' => $request->proposed_type ?? $contract->type,
-                    'manager_id' => $contract->employee?->manager_id,
+                    'manager_id' => optional($contract->employee)->manager_id,
                     'auto_generated' => false,
                     'notified_at' => now(),
                     'notes' => $request->notes,
-                    ...$docData,
-        ]);
+        ], $docData));
 
         return response()->json([
                     'message' => 'Renewal request created.',

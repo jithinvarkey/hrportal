@@ -407,6 +407,17 @@ export class ContractRenewalsComponent implements OnInit, OnDestroy {
     return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
+  formatDateTime(d: string | null): string {
+    if (!d) return 'â€”';
+    return new Date(d).toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
   formatSalary(s: number | null): string {
     if (!s) return '—';
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 }).format(s);

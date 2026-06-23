@@ -150,15 +150,16 @@
             <button class="row-btn" matTooltip="View" (click)="viewDetail(c); $event.stopPropagation()">
               <mat-icon>open_in_new</mat-icon>
             </button>
-            <button class="row-btn" matTooltip="Edit" (click)="openForm(c); $event.stopPropagation()">
+            <button class="row-btn" matTooltip="Edit" *ngIf="isHR" (click)="openForm(c); $event.stopPropagation()">
               <mat-icon>edit</mat-icon>
             </button>
             <button class="row-btn success" matTooltip="Approve"
-                    *ngIf="c.status === 'draft'"
+                    *ngIf="isHR && c.status === 'draft'"
                     (click)="approve(c); $event.stopPropagation()">
               <mat-icon>check_circle</mat-icon>
             </button>
             <button class="row-btn danger" matTooltip="Delete"
+                    *ngIf="isHR"
                     (click)="deleteContract(c.id); $event.stopPropagation()">
               <mat-icon>delete_outline</mat-icon>
             </button>
@@ -342,13 +343,13 @@
         <span class="status-badge" [class]="statusClass(c.status)" style="font-size:13px;padding:5px 14px">
           {{ c.status | titlecase }}
         </span>
-        <button class="btn-sm success" *ngIf="c.status==='draft'" (click)="approve(c)">
+        <button class="btn-sm success" *ngIf="isHR && c.status==='draft'" (click)="approve(c)">
           <mat-icon>check_circle</mat-icon> Approve
         </button>
-        <button class="btn-sm warn" *ngIf="c.status==='active'" (click)="changeStatus(c,'terminated')">
+        <button class="btn-sm warn" *ngIf="isHR && c.status==='active'" (click)="changeStatus(c,'terminated')">
           <mat-icon>cancel</mat-icon> Terminate
         </button>
-        <button class="btn-outline btn-sm" (click)="openForm(c); showDetail=false">
+        <button class="btn-outline btn-sm" *ngIf="isHR" (click)="openForm(c); showDetail=false">
           <mat-icon>edit</mat-icon> Edit
         </button>
       </div>
@@ -399,7 +400,7 @@
         <div *ngIf="!c.has_document" class="doc-row muted">
           <mat-icon>upload_file</mat-icon>
           <span>No document attached</span>
-          <label class="btn-outline sm upload-label">
+          <label class="btn-outline sm upload-label" *ngIf="isHR">
             <mat-icon>{{ uploadingDocId === c.id ? 'hourglass_empty' : 'upload' }}</mat-icon>
             {{ uploadingDocId === c.id ? 'Uploading…' : 'Upload' }}
             <input type="file" accept=".pdf,.doc,.docx" hidden
@@ -412,7 +413,7 @@
 
     <div class="drawer-footer">
       <button class="btn-outline" (click)="showDetail=false">Close</button>
-      <button class="btn-primary" (click)="openForm(c); showDetail=false">
+      <button class="btn-primary" *ngIf="isHR" (click)="openForm(c); showDetail=false">
         <mat-icon>edit</mat-icon> Edit Contract
       </button>
     </div>
