@@ -51,6 +51,8 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
   // ── Attendance tab state ───────────────────────────────────────────────
   attendanceLogs:    any[]    = [];
   attendanceLoading  = false;
+  assetsLoading     = false;
+  employeeAssets:   any[]    = [];
 
   // ── Contracts tab ──────────────────────────────────────────────────────
   contracts:        any[]    = [];
@@ -77,6 +79,7 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
     { id: 'onboarding', label: 'Onboarding',   icon: 'checklist' },
     { id: 'attendance', label: 'Attendance',   icon: 'fingerprint' },
     { id: 'contracts',  label: 'Contracts',    icon: 'description' },
+    { id: 'assets',     label: 'Assets',       icon: 'inventory_2' },
   ];
 
   months = [
@@ -141,6 +144,17 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
     if (tabId === 'onboarding') {
       this.loadOnboarding();
     }
+    if (tabId === 'assets') {
+      this.loadEmployeeAssets();
+    }
+  }
+
+    loadEmployeeAssets(): void {
+    this.assetsLoading = true;
+    this.http.get<any>(`/api/v1/assets/employee/${this.employeeId}`).subscribe({
+      next:  r => { this.employeeAssets = r?.assets || []; this.assetsLoading = false; },
+      error: () => { this.assetsLoading = false; },
+    });
   }
 
   get isSaudiEmployee(): boolean {

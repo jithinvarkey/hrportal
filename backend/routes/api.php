@@ -22,6 +22,7 @@ use App\Http\Controllers\API\ContractRenewalController;
 use App\Http\Controllers\API\RecruitmentController;
 use App\Http\Controllers\API\OnboardingController;
 use App\Http\Controllers\API\PerformanceController;
+use App\Http\Controllers\API\AssetController;
 use App\Http\Controllers\API\OrgChartController;
 use App\Http\Controllers\API\DashboardController;
 use App\Http\Controllers\API\AdminController;
@@ -447,6 +448,38 @@ Route::prefix('v1')->group(function () {
             });
         });
 
+        // â”€â”€ Assets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        Route::prefix('assets')->group(function () {
+            // Categories
+            Route::get('/categories',          [AssetController::class, 'categories']);
+            Route::post('/categories',         [AssetController::class, 'storeCategory']);
+            Route::put('/categories/{id}',     [AssetController::class, 'updateCategory'])->whereNumber('id');
+            Route::delete('/categories/{id}',  [AssetController::class, 'deleteCategory'])->whereNumber('id');
+
+            // Statistics
+            Route::get('/stats',               [AssetController::class, 'stats']);
+            Route::get('/reports/assets',      [AssetController::class, 'assetReport']);
+            Route::get('/reports/assignments', [AssetController::class, 'assignmentReport']);
+            Route::get('/reports/maintenance', [AssetController::class, 'maintenanceReport']);
+
+            // Employee assets (used in employee-detail tab)
+            Route::get('/employee/{empId}',    [AssetController::class, 'forEmployee'])->whereNumber('empId');
+
+            // Asset CRUD
+            Route::get('/',                    [AssetController::class, 'index']);
+            Route::post('/',                   [AssetController::class, 'store']);
+            Route::get('/{id}',                [AssetController::class, 'show'])->whereNumber('id');
+            Route::post('/{id}',               [AssetController::class, 'update'])->whereNumber('id'); // multipart PUT workaround
+            Route::delete('/{id}',             [AssetController::class, 'destroy'])->whereNumber('id');
+            Route::get('/{id}/attachment',     [AssetController::class, 'downloadAttachment'])->whereNumber('id');
+
+            // Assignment (check-out / check-in)
+            Route::post('/{id}/assign',        [AssetController::class, 'assign'])->whereNumber('id');
+            Route::post('/{id}/return',        [AssetController::class, 'return'])->whereNumber('id');
+
+            // Maintenance
+            Route::post('/{id}/maintenance',               [AssetController::class, 'logMaintenance'])->whereNumber('id');
+            Route::put('/{id}/maintenance/{mid}',          [AssetController::class, 'updateMaintenance'])->whereNumber('id')->whereNumber('mid');
     });
 });
-
+});

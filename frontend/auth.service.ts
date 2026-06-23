@@ -115,6 +115,7 @@ export class AuthService {
       { path: '/recruitment', label: 'Recruitment',  icon: 'work',               perms: ['recruitment.view'] },
       { path: '/performance', label: 'Performance',  icon: 'leaderboard',        perms: ['performance.view'] },
       { path: '/admin',       label: 'Admin',        icon: 'admin_panel_settings', perms: ['admin.manage_users','admin.manage_roles'] },
+      { path: '/assets',      label: 'Assets',      icon: 'inventory_2', roles: ['super_admin', 'hr_manager','hr_staff'] },
     ];
 
     const seen = new Set<string>();

@@ -107,7 +107,7 @@ class AuthController extends Controller
 
     protected function userPayload(User $user): array
     {
-        $user->load('employee.department', 'roles');
+        $user->load('employee.department', 'employee.designation', 'roles');
 
         return [
             'id'          => $user->id,
@@ -122,6 +122,8 @@ class AuthController extends Controller
                 'avatar_url' => $user->employee->avatar_url,
                 'department' => optional($user->employee->department)->name,
                 'departmentId'=>optional($user->employee)->department_id,
+                'designation' => optional($user->employee->designation)->title ?? optional($user->employee->designation)->name,
+                'designationId'=>optional($user->employee)->designation_id,
             ] : null,
         ];
     }
