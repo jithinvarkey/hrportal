@@ -7,6 +7,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Contract;
 use App\Models\ContractRenewalRequest;
+use App\Services\ContractRenewalNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -215,6 +216,8 @@ class ContractRenewalController extends Controller {
                     'notified_at' => now(),
                     'notes' => $request->notes,
         ], $docData));
+
+        app(ContractRenewalNotificationService::class)->notifyManagerAndHr($renewal);
 
         return response()->json([
                     'message' => 'Renewal request created.',
