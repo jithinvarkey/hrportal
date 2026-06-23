@@ -93,6 +93,10 @@ class RolesPermissionsSeeder extends Seeder
             'admin.manage_users',
             'admin.manage_roles',
             'admin.view_logs',
+
+            // Assets
+            'assets.view',
+            'assets.manage',
         ];
 
         foreach ($permissions as $perm) {
@@ -119,6 +123,7 @@ class RolesPermissionsSeeder extends Seeder
                 'attendance.view_all','attendance.manage','attendance.manual_entry',
                 'contracts.view_all','contracts.create','contracts.edit','contracts.delete',
                 'orgchart.view',
+                'assets.view','assets.manage',
             ],
 
             'hr_staff' => [
@@ -134,6 +139,28 @@ class RolesPermissionsSeeder extends Seeder
                 'recruitment.view',
                 'performance.view',
                 'orgchart.view',
+                'assets.view','assets.manage',
+            ],
+
+            'it_manager' => [
+                'dashboard.view',
+                'employees.view','employees.view_documents',
+                'orgchart.view',
+                'assets.view','assets.manage',
+            ],
+
+            'it_supervisor' => [
+                'dashboard.view',
+                'employees.view','employees.view_documents',
+                'orgchart.view',
+                'assets.view','assets.manage',
+            ],
+
+            'cybersecurity_officer' => [
+                'dashboard.view',
+                'employees.view','employees.view_documents',
+                'orgchart.view',
+                'assets.view','assets.manage',
             ],
 
             'finance_manager' => [

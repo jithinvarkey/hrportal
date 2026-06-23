@@ -74,5 +74,8 @@ class Employee extends Model
     public function performanceReviews() { return $this->hasMany(PerformanceReview::class); }
     public function kpis()          { return $this->hasMany(Kpi::class); }
 
+    /** Assets currently assigned to this employee. */
+    public function assets()        { return $this->hasMany(\App\Models\Asset::class, 'custodian_employee_id'); }
+
     public function scopeActive($q) { return $q->where('status','active'); }
 }

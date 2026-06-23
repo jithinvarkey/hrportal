@@ -23,6 +23,7 @@ class DatabaseSeeder extends Seeder {
         // ── Roles (dot-notation format — matches Admin module) ─────────────
         $roleNames = [
             'super_admin', 'hr_manager', 'hr_staff',
+            'it_manager', 'it_supervisor', 'cybersecurity_officer',
             'finance_manager', 'department_manager', 'employee',
         ];
         foreach ($roleNames as $role) {

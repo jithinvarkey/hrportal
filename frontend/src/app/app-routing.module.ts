@@ -85,6 +85,23 @@ const routes: Routes = [
       {
         path: 'reports',
         loadChildren: () => import('./modules/reports/reports.module').then(m => m.ReportsModule)
+      },
+      {
+        path: 'assets',
+        loadChildren: () => import('./modules/assets/assets.module').then(m => m.AssetsModule),
+        canActivate: [RoleGuard],
+        data: {
+          roles: [
+            'super_admin',
+            'hr_manager',
+            'hr_staff',
+            'it_manager',
+            'it_supervisor',
+            'cybersecurity_officer',
+            'department_manager',
+            'employee',
+          ]
+        }
       }
     ]
   },

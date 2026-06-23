@@ -39,6 +39,14 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
     this.user       = this.auth.getUser();
     this.portalType = this.auth.getPortalType();
     this.navGroups  = this.buildNavGroups(this.auth.getVisibleNavItems());
+    this.auth.refreshUser().subscribe({
+      next: () => {
+        this.user = this.auth.getUser();
+        this.portalType = this.auth.getPortalType();
+        this.navGroups = this.buildNavGroups(this.auth.getVisibleNavItems());
+      },
+      error: () => {},
+    });
     this.loadNotifications();
     // Poll every 60s for new notifications.
     this.pollHandle = setInterval(() => this.loadNotifications(), 60000);

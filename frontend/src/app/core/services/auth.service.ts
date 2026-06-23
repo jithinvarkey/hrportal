@@ -7,6 +7,9 @@ export const ROLES = {
   SUPER_ADMIN: 'super_admin',
   HR_MANAGER: 'hr_manager',
   HR_STAFF: 'hr_staff',
+  IT_MANAGER: 'it_manager',
+  IT_SUPERVISOR: 'it_supervisor',
+  CYBERSECURITY_OFFICER: 'cybersecurity_officer',
   FINANCE_MANAGER: 'finance_manager',
   DEPT_MANAGER: 'department_manager',
   EMPLOYEE: 'employee',
@@ -114,6 +117,20 @@ export class AuthService {
   isAdminRole(): boolean { return this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.HR_MANAGER]); }
   isManagerRole(): boolean { return this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.HR_MANAGER, ROLES.HR_STAFF, ROLES.DEPT_MANAGER]); }
 
+  hasAssetManagementAccess(): boolean {
+    if (this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.HR_MANAGER, ROLES.HR_STAFF, ROLES.IT_MANAGER, ROLES.IT_SUPERVISOR, ROLES.CYBERSECURITY_OFFICER])) {
+      return true;
+    }
+
+    const employee = this.getUser()?.employee || {};
+    const designation = String(employee.designation || '').trim().toLowerCase();
+    const department = String(employee.department || '').trim().toLowerCase();
+    const isInformationTechnology = department === 'information technology' || department === 'it';
+    const isTechnologyManager = designation.includes('manager') || designation.includes('supervisor');
+
+    return isInformationTechnology && isTechnologyManager;
+  }
+
   getPortalType(): 'admin' | 'hr' | 'finance' | 'manager' | 'employee' {
     if (this.isSuperAdmin()) return 'admin';
     if (this.isHRManager()) return 'hr';
@@ -219,6 +236,18 @@ export class AuthService {
         path: '/admin', label: 'Admin', icon: 'admin_panel_settings',
         perms: ['admin.manage_users', 'admin.manage_roles']
       },
+      {
+        path: '/assets', label: 'Asset Management', icon: 'inventory_2',
+        roles: [
+          ROLES.SUPER_ADMIN,
+          ROLES.HR_MANAGER,
+          ROLES.HR_STAFF,
+          ROLES.IT_MANAGER,
+          ROLES.IT_SUPERVISOR,
+          ROLES.CYBERSECURITY_OFFICER,
+          ROLES.EMPLOYEE,
+        ]
+      },
     ];
 
     const seen = new Set<string>();
@@ -230,7 +259,9 @@ export class AuthService {
       if (item.excludePortal?.includes(portal)) continue;
 
       const noRestriction = !item.perms?.length && !item.roles?.length;
-      const roleMatch = item.roles?.length && this.hasAnyRole(item.roles);
+      const roleMatch = item.path === '/assets'
+        ? this.hasAssetManagementAccess() || this.hasRole(ROLES.EMPLOYEE)
+        : item.roles?.length && this.hasAnyRole(item.roles);
       const permMatch = item.perms?.length && this.canAny(item.perms);
 
       if (noRestriction || roleMatch || permMatch) {

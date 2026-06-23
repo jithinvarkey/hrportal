@@ -484,6 +484,54 @@
     </div>
   </div>
 
+  <!-- ── Assets Tab ─────────────────────────────────────────────────── -->
+  <div *ngIf="activeTab === 'assets'">
+    <div class="detail-card">
+      <div class="section-hdr">
+        <mat-icon>inventory_2</mat-icon>
+        <h3>Assigned Assets</h3>
+      </div>
+
+      <div class="loading-wrap" *ngIf="assetsLoading">
+        <mat-spinner diameter="28"></mat-spinner>
+      </div>
+
+      <div class="empty-state" *ngIf="!assetsLoading && !employeeAssets.length">
+        <mat-icon>inventory_2</mat-icon>
+        <p>No assets currently assigned to this employee.</p>
+      </div>
+
+      <table class="att-table" *ngIf="!assetsLoading && employeeAssets.length">
+        <thead>
+          <tr>
+            <th>Asset</th>
+            <th>Code</th>
+            <th>Category</th>
+            <th>Condition</th>
+            <th>Location</th>
+            <th>Since</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let a of employeeAssets">
+            <td>
+              <div class="fw6">{{ a.name }}</div>
+              <div class="txt-sm" *ngIf="a.brand">{{ a.brand }}{{ a.model ? ' · ' + a.model : '' }}</div>
+            </td>
+            <td class="mono">{{ a.asset_code }}</td>
+            <td>{{ a.category?.name || '—' }}</td>
+            <td>
+              <span class="badge badge-info">{{ a.condition | titlecase }}</span>
+            </td>
+            <td>{{ a.location || '—' }}</td>
+            <td class="mono">{{ a.updated_at | date:'MMM d, y' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+
 </div>
 
 
