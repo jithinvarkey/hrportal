@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Models\Contract;
 use App\Models\ContractRenewalRequest;
+use App\Services\ContractRenewalNotificationService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -67,7 +68,7 @@ class GenerateRenewalRequests extends Command
             // Determine manager_id from the employee's direct manager
             $managerId = $contract->employee?->manager_id ?? null;
 
-            ContractRenewalRequest::create([
+            $renewal = ContractRenewalRequest::create([
                 'contract_id'          => $contract->id,
                 'employee_id'          => $contract->employee_id,
                 'reference'            => ContractRenewalRequest::generateReference(),
@@ -81,6 +82,8 @@ class GenerateRenewalRequests extends Command
                 'notified_at'          => now(),
                 'notes'                => "Auto-generated: contract {$contract->reference} expires on {$expiryDate->toDateString()}. {$days}-day renewal window triggered.",
             ]);
+
+            app(ContractRenewalNotificationService::class)->notifyManagerAndHr($renewal);
 
             $generated++;
 
