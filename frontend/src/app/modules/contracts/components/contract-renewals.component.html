@@ -198,6 +198,52 @@
           </div>
         </div>
 
+        <div class="approval-comments"
+          *ngIf="r.approvals.manager.approved || r.approvals.hr.approved || r.approvals.ceo.approved || r.rejection">
+          <div class="ac-title">
+            <mat-icon>rate_review</mat-icon>
+            Approver Comments
+          </div>
+
+          <div class="ac-item" *ngIf="r.approvals.manager.approved">
+            <div class="ac-meta">
+              <span>Manager</span>
+              <small>{{ r.approvals.manager.approved_by || 'Approved' }} · {{ formatDateTime(r.approvals.manager.approved_at) }}</small>
+            </div>
+            <div class="ac-note" [class.empty]="!r.approvals.manager.notes">
+              {{ r.approvals.manager.notes || 'No comment added.' }}
+            </div>
+          </div>
+
+          <div class="ac-item" *ngIf="r.approvals.hr.approved">
+            <div class="ac-meta">
+              <span>HR</span>
+              <small>{{ r.approvals.hr.approved_by || 'Approved' }} · {{ formatDateTime(r.approvals.hr.approved_at) }}</small>
+            </div>
+            <div class="ac-note" [class.empty]="!r.approvals.hr.notes">
+              {{ r.approvals.hr.notes || 'No comment added.' }}
+            </div>
+          </div>
+
+          <div class="ac-item" *ngIf="r.approvals.ceo.approved">
+            <div class="ac-meta">
+              <span>CEO</span>
+              <small>{{ r.approvals.ceo.approved_by || 'Approved' }} · {{ formatDateTime(r.approvals.ceo.approved_at) }}</small>
+            </div>
+            <div class="ac-note" [class.empty]="!r.approvals.ceo.notes">
+              {{ r.approvals.ceo.notes || 'No comment added.' }}
+            </div>
+          </div>
+
+          <div class="ac-item rejected" *ngIf="r.rejection">
+            <div class="ac-meta">
+              <span>Rejected at {{ r.rejection.stage }}</span>
+              <small>{{ r.rejection.by || 'Rejected' }} · {{ formatDateTime(r.rejection.at) }}</small>
+            </div>
+            <div class="ac-note">{{ r.rejection.reason }}</div>
+          </div>
+        </div>
+
         <!-- Contract expiry + proposed terms -->
         <div class="rc-terms">
           <div class="rc-term">

@@ -60,6 +60,10 @@ class GenerateRenewalRequests extends Command
                 continue;
             }
 
+            $expiryDate = $contract->end_date->copy();
+            $proposedStartDate = $expiryDate->copy()->addDay();
+            $proposedEndDate = $expiryDate->copy()->addYear();
+
             // Determine manager_id from the employee's direct manager
             $managerId = $contract->employee?->manager_id ?? null;
 
@@ -68,25 +72,25 @@ class GenerateRenewalRequests extends Command
                 'employee_id'          => $contract->employee_id,
                 'reference'            => ContractRenewalRequest::generateReference(),
                 'status'               => 'pending',
-                'proposed_start_date'  => $contract->end_date->addDay(),
-                'proposed_end_date'    => $contract->end_date?->addYear(),  // default: 1-year renewal
+                'proposed_start_date'  => $proposedStartDate,
+                'proposed_end_date'    => $proposedEndDate,
                 'proposed_salary'      => $contract->salary,
                 'proposed_type'        => $contract->type,
                 'manager_id'           => $managerId,
                 'auto_generated'       => true,
                 'notified_at'          => now(),
-                'notes'                => "Auto-generated: contract {$contract->reference} expires on {$contract->end_date->toDateString()}. {$days}-day renewal window triggered.",
+                'notes'                => "Auto-generated: contract {$contract->reference} expires on {$expiryDate->toDateString()}. {$days}-day renewal window triggered.",
             ]);
 
             $generated++;
 
             $this->line("  ✓ Created renewal request for {$contract->reference} "
-                      . "(expires {$contract->end_date->toDateString()})");
+                      . "(expires {$expiryDate->toDateString()})");
 
             Log::info('[Contracts] Renewal request auto-generated', [
                 'contract_reference' => $contract->reference,
                 'employee_id'        => $contract->employee_id,
-                'expires_on'         => $contract->end_date->toDateString(),
+                'expires_on'         => $expiryDate->toDateString(),
             ]);
         }
 

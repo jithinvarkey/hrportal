@@ -160,7 +160,17 @@ export class ContractListComponent implements OnInit, OnDestroy {
     });
   }
 
+  private ensureCanManageContracts(): boolean {
+    if (this.isHR) return true;
+    this.errorMsg = 'You do not have permission to manage contracts.';
+    this.showForm = false;
+    this.cdr.markForCheck();
+    return false;
+  }
+
   openForm(contract?: Contract): void {
+    if (!this.ensureCanManageContracts()) return;
+
     this.formError = '';
     this.editId    = contract?.id ?? null;
     this.selectedFile = null;
@@ -221,6 +231,8 @@ export class ContractListComponent implements OnInit, OnDestroy {
   clearSelectedFile(): void { this.selectedFile = null; this.cdr.markForCheck(); }
 
   saveContract(): void {
+    if (!this.ensureCanManageContracts()) return;
+
     if (this.contractForm.invalid) {
       this.contractForm.markAllAsTouched();
       this.formError = 'Please fill in all required fields.';
@@ -289,6 +301,8 @@ export class ContractListComponent implements OnInit, OnDestroy {
 
   /** Upload a document directly from the contract list row. */
   onRowFileSelected(event: Event, contract: Contract): void {
+    if (!this.ensureCanManageContracts()) return;
+
     const input = event.target as HTMLInputElement;
     const file  = input.files?.[0];
     if (!file) return;
@@ -326,6 +340,8 @@ export class ContractListComponent implements OnInit, OnDestroy {
   // ── Actions ───────────────────────────────────────────────────────────
 
   approve(contract: Contract): void {
+    if (!this.ensureCanManageContracts()) return;
+
     if (!confirm(`Approve contract ${contract.reference}? This will set it to Active.`)) return;
     this.http.post<any>(`${this.api}/${contract.id}/approve`, {})
       .pipe(takeUntil(this.destroy$)).subscribe({
@@ -335,6 +351,8 @@ export class ContractListComponent implements OnInit, OnDestroy {
   }
 
   changeStatus(contract: Contract, status: string): void {
+    if (!this.ensureCanManageContracts()) return;
+
     this.http.put<any>(`${this.api}/${contract.id}`, { status })
       .pipe(takeUntil(this.destroy$)).subscribe({
         next: (r) => {
@@ -349,6 +367,8 @@ export class ContractListComponent implements OnInit, OnDestroy {
   }
 
   deleteContract(id: number): void {
+    if (!this.ensureCanManageContracts()) return;
+
     if (!confirm('Delete this contract? This cannot be undone.')) return;
     this.http.delete(`${this.api}/${id}`).pipe(takeUntil(this.destroy$)).subscribe({
       next: () => { this.loadContracts(); this.loadStats(); this.cdr.markForCheck(); },

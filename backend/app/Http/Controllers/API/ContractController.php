@@ -28,6 +28,16 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  *   GET    /api/v1/employees/{id}/contracts — all contracts for one employee
  */
 class ContractController extends Controller {
+    private function canManageContracts(): bool {
+        $user = auth()->user();
+
+        return $user && $user->hasAnyRole([
+                    'super_admin',
+                    'hr_manager',
+                    'hr_staff',
+        ]);
+    }
+
     // ── List ──────────────────────────────────────────────────────────────
 
     /**
@@ -170,6 +180,10 @@ class ContractController extends Controller {
      * @throws \Illuminate\Validation\ValidationException
      */
     public function store(Request $request): JsonResponse {
+        if (!$this->canManageContracts()) {
+            return response()->json(['message' => 'You do not have permission to manage contracts.'], 403);
+        }
+
         $request->validate([
             'employee_id' => 'required|exists:employees,id',
             'type' => 'required|in:full_time,part_time,contract,intern,probation,fixed_term,unlimited',
@@ -232,6 +246,10 @@ class ContractController extends Controller {
      * @return JsonResponse
      */
     public function update(Request $request, int $id): JsonResponse {
+        if (!$this->canManageContracts()) {
+            return response()->json(['message' => 'You do not have permission to manage contracts.'], 403);
+        }
+
         $contract = Contract::findOrFail($id);
 
         $request->validate([
@@ -277,6 +295,10 @@ class ContractController extends Controller {
      * @return JsonResponse
      */
     public function approve(int $id): JsonResponse {
+        if (!$this->canManageContracts()) {
+            return response()->json(['message' => 'You do not have permission to manage contracts.'], 403);
+        }
+
         $contract = Contract::findOrFail($id);
 
         if ($contract->status !== 'draft') {
@@ -304,6 +326,10 @@ class ContractController extends Controller {
      * @return JsonResponse
      */
     public function destroy(int $id): JsonResponse {
+        if (!$this->canManageContracts()) {
+            return response()->json(['message' => 'You do not have permission to manage contracts.'], 403);
+        }
+
         $contract = Contract::findOrFail($id);
         $contract->delete();
         return response()->json(['message' => 'Contract deleted.']);
@@ -322,6 +348,10 @@ class ContractController extends Controller {
      */
     public function uploadDocument(Request $request, int $id): JsonResponse
     {
+        if (!$this->canManageContracts()) {
+            return response()->json(['message' => 'You do not have permission to manage contracts.'], 403);
+        }
+
         $request->validate([
             'document' => 'required|file|mimes:pdf,doc,docx|max:10240',
         ]);
@@ -371,6 +401,10 @@ class ContractController extends Controller {
      */
     public function deleteDocument(int $id): JsonResponse
     {
+        if (!$this->canManageContracts()) {
+            return response()->json(['message' => 'You do not have permission to manage contracts.'], 403);
+        }
+
         $contract = Contract::findOrFail($id);
 
         if ($contract->pdf_path) {
