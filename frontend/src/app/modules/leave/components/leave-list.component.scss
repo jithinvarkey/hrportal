@@ -336,6 +336,7 @@
   padding: 8px 16px; border-radius: 9px; font-size: 13px; font-weight: 600;
   background: var(--danger); color: #fff; border: none; cursor: pointer;
   mat-icon { font-size: 16px !important; width: 16px !important; height: 16px !important; }
+  mat-spinner { width: 18px !important; height: 18px !important; }
   &:disabled { opacity: .5; cursor: default; }
 }
 
@@ -612,6 +613,31 @@
 }
 
 /* Approve / reject row btn colours */
+.row-btn {
+  &:disabled {
+    opacity: .65;
+    cursor: default;
+    pointer-events: none;
+  }
+
+  mat-spinner {
+    width: 18px !important;
+    height: 18px !important;
+  }
+}
+
+.btn-outline {
+  mat-spinner {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  &:disabled {
+    opacity: .6;
+    cursor: default;
+  }
+}
+
 .row-btn.success:hover { background:rgba(16,185,129,.1); color:var(--success); border-color:rgba(16,185,129,.3); }
 .row-btn.danger:hover  { background:rgba(239,68,68,.1);  color:var(--danger);  border-color:rgba(239,68,68,.3); }
 

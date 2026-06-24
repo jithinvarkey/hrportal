@@ -183,15 +183,25 @@
                 <mat-icon>open_in_new</mat-icon>
               </button>
               <button class="row-btn approve-btn" [matTooltip]="approveLabel(r)"
-                      *ngIf="canApprove(r)" (click)="approve(r); $event.stopPropagation()">
-                <mat-icon>{{ approveIcon(r) }}</mat-icon>
+                      *ngIf="canApprove(r)" [disabled]="isActionLoading()"
+                      [attr.aria-busy]="isActionLoading(r, 'approve')"
+                      (click)="approve(r); $event.stopPropagation()">
+                <mat-spinner *ngIf="isActionLoading(r, 'approve')" diameter="18"></mat-spinner>
+                <mat-icon *ngIf="!isActionLoading(r, 'approve')">{{ approveIcon(r) }}</mat-icon>
               </button>
               <button class="row-btn reject-btn" matTooltip="Reject"
-                      *ngIf="canReject(r)" (click)="openReject(r); $event.stopPropagation()">
-                <mat-icon>cancel</mat-icon>
+                      *ngIf="canReject(r)" [disabled]="isActionLoading()"
+                      [attr.aria-busy]="isActionLoading(r, 'reject')"
+                      (click)="openReject(r); $event.stopPropagation()">
+                <mat-spinner *ngIf="isActionLoading(r, 'reject')" diameter="18"></mat-spinner>
+                <mat-icon *ngIf="!isActionLoading(r, 'reject')">cancel</mat-icon>
               </button>
-              <button class="row-btn" matTooltip="Cancel" *ngIf="canCancel(r)" (click)="cancel(r)">
-                <mat-icon style="color:var(--text3)">block</mat-icon>
+              <button class="row-btn" matTooltip="Cancel" *ngIf="canCancel(r)"
+                      [disabled]="isActionLoading()"
+                      [attr.aria-busy]="isActionLoading(r, 'cancel')"
+                      (click)="cancel(r)">
+                <mat-spinner *ngIf="isActionLoading(r, 'cancel')" diameter="18"></mat-spinner>
+                <mat-icon *ngIf="!isActionLoading(r, 'cancel')" style="color:var(--text3)">block</mat-icon>
               </button>
             </div>
           </td>
@@ -683,14 +693,28 @@
 
     <div class="drawer-footer">
       <button class="btn-outline" (click)="showDetail=false">Close</button>
-      <button class="row-btn" [matTooltip]="approveLabel(selectedRequest)" *ngIf="canApprove(selectedRequest)" (click)="approve(selectedRequest)">
-        <mat-icon style="color:var(--success);font-size:22px">check_circle</mat-icon>
+      <button class="row-btn" [matTooltip]="approveLabel(selectedRequest)" *ngIf="canApprove(selectedRequest)"
+              [disabled]="isActionLoading()"
+              [attr.aria-busy]="isActionLoading(selectedRequest, 'approve')"
+              (click)="approve(selectedRequest)">
+        <mat-spinner *ngIf="isActionLoading(selectedRequest, 'approve')" diameter="18"></mat-spinner>
+        <mat-icon *ngIf="!isActionLoading(selectedRequest, 'approve')" style="color:var(--success);font-size:22px">check_circle</mat-icon>
       </button>
-      <button class="btn-outline" style="color:var(--danger)" *ngIf="canReject(selectedRequest)" (click)="openReject(selectedRequest)">
-        <mat-icon>cancel</mat-icon> Reject
+      <button class="btn-outline" style="color:var(--danger)" *ngIf="canReject(selectedRequest)"
+              [disabled]="isActionLoading()"
+              [attr.aria-busy]="isActionLoading(selectedRequest, 'reject')"
+              (click)="openReject(selectedRequest)">
+        <mat-spinner *ngIf="isActionLoading(selectedRequest, 'reject')" diameter="18"></mat-spinner>
+        <mat-icon *ngIf="!isActionLoading(selectedRequest, 'reject')">cancel</mat-icon>
+        {{ isActionLoading(selectedRequest, 'reject') ? 'Rejecting...' : 'Reject' }}
       </button>
-      <button class="btn-outline" style="color:var(--text3)"  *ngIf="canCancel(selectedRequest)"  (click)="cancel(selectedRequest)">
-        <mat-icon>block</mat-icon> Cancel
+      <button class="btn-outline" style="color:var(--text3)"  *ngIf="canCancel(selectedRequest)"
+              [disabled]="isActionLoading()"
+              [attr.aria-busy]="isActionLoading(selectedRequest, 'cancel')"
+              (click)="cancel(selectedRequest)">
+        <mat-spinner *ngIf="isActionLoading(selectedRequest, 'cancel')" diameter="18"></mat-spinner>
+        <mat-icon *ngIf="!isActionLoading(selectedRequest, 'cancel')">block</mat-icon>
+        {{ isActionLoading(selectedRequest, 'cancel') ? 'Cancelling...' : 'Cancel' }}
       </button>
     </div>
   </ng-container>
@@ -995,11 +1019,11 @@
 </div>
 
 <!-- ── Reject Modal ──────────────────────────────────────────────────────── -->
-<div class="modal-backdrop" *ngIf="showReject" (click)="showReject=false"></div>
+<div class="modal-backdrop" *ngIf="showReject" (click)="!isActionLoading(rejectTarget, 'reject') && (showReject=false)"></div>
 <div class="modal-panel" *ngIf="showReject">
   <div class="modal-hdr">
     <h3><mat-icon style="color:var(--danger)">cancel</mat-icon> Reject Leave Request</h3>
-    <button class="row-btn" (click)="showReject=false"><mat-icon>close</mat-icon></button>
+    <button class="row-btn" (click)="showReject=false" [disabled]="isActionLoading(rejectTarget, 'reject')"><mat-icon>close</mat-icon></button>
   </div>
   <div class="modal-body">
     <div class="reject-info" *ngIf="rejectTarget">
@@ -1009,13 +1033,19 @@
     <div class="field-group">
       <label class="field-label">Rejection Reason <span class="req">*</span></label>
       <textarea class="field-textarea" rows="3" [(ngModel)]="rejectReason"
+        [disabled]="isActionLoading(rejectTarget, 'reject')"
         placeholder="Provide a clear reason…"></textarea>
     </div>
+    <div class="form-err" *ngIf="rejectError"><mat-icon>error_outline</mat-icon> {{ rejectError }}</div>
   </div>
   <div class="modal-footer">
-    <button class="btn-outline" (click)="showReject=false">Cancel</button>
-    <button class="btn-danger" (click)="confirmReject()" [disabled]="!rejectReason.trim()">
-      <mat-icon>cancel</mat-icon> Reject Request
+    <button class="btn-outline" (click)="showReject=false" [disabled]="isActionLoading(rejectTarget, 'reject')">Cancel</button>
+    <button class="btn-danger" (click)="confirmReject()"
+            [disabled]="!rejectReason.trim() || isActionLoading(rejectTarget, 'reject')"
+            [attr.aria-busy]="isActionLoading(rejectTarget, 'reject')">
+      <mat-spinner *ngIf="isActionLoading(rejectTarget, 'reject')" diameter="18"></mat-spinner>
+      <mat-icon *ngIf="!isActionLoading(rejectTarget, 'reject')">cancel</mat-icon>
+      {{ isActionLoading(rejectTarget, 'reject') ? 'Rejecting...' : 'Reject Request' }}
     </button>
   </div>
 </div>

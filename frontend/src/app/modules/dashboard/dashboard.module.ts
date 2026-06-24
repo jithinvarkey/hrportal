@@ -5,6 +5,7 @@ import { HttpClientModule } from '@angular/common/http';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { SharedModule } from '../../shared/shared.module';
 import { DashboardComponent } from './dashboard.component';
 
 const routes: Routes = [{ path: '', component: DashboardComponent }];
@@ -18,6 +19,7 @@ const routes: Routes = [{ path: '', component: DashboardComponent }];
     MatIconModule,
     MatButtonModule,
     MatProgressSpinnerModule,
+    SharedModule,
   ]
 })
 export class DashboardModule {}
