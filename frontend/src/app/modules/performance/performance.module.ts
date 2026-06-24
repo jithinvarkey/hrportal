@@ -7,6 +7,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { SharedModule } from '../../shared/shared.module';
 import { PerformanceListComponent } from './components/performance-list.component';
 
 const routes: Routes = [{ path: '', component: PerformanceListComponent }];
@@ -18,6 +19,7 @@ const routes: Routes = [{ path: '', component: PerformanceListComponent }];
     HttpClientModule, ReactiveFormsModule, FormsModule,
     RouterModule.forChild(routes),
     MatIconModule, MatTableModule, MatTooltipModule, MatProgressSpinnerModule,
+    SharedModule,
   ],
 })
 export class PerformanceModule {}

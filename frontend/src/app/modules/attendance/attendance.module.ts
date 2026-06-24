@@ -14,6 +14,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { HttpClientModule } from '@angular/common/http';
+import { SharedModule } from '../../shared/shared.module';
 
 import { AttendanceComponent } from './components/attendance.component';
 import { AttendanceDashboardComponent } from './components/attendance-dashboard.component';
@@ -48,6 +49,7 @@ const routes: Routes = [
     MatProgressSpinnerModule,
     MatDialogModule,
     MatSnackBarModule,
+    SharedModule,
   ],
 })
 export class AttendanceModule {}
