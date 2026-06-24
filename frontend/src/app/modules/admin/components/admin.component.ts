@@ -59,7 +59,14 @@ export class AdminComponent implements OnInit {
 
   loanSettings = { approval_levels: 2 };
   annualTicketSettings = { saudi_employee_tickets: 1, non_saudi_employee_tickets: 1, non_saudi_max_dependents: 3 };
+  monthlyLeaveReminderSettings = {
+    enabled: true,
+    day: 25,
+    subject: 'Reminder: Submit current month leave entries',
+    body: 'Dear {{first_name}},\n\nPlease make sure all leave requests for {{month_name}} {{year}} are submitted in HRMS before payroll processing. Any missing or unsubmitted leave entries may be deducted from salary as per company policy.\n\nRegards,\nHuman Resources',
+  };
   ticketSettingsSaving = false;
+  leaveReminderSaving = false;
   settingsLoading = false;
   settingsSaving = false;
   settingsMessage = '';
@@ -184,7 +191,7 @@ export class AdminComponent implements OnInit {
     if (id === 'permissions')  { this.loadPermissions(); this.loadRoles(); this.loadOverview(); }
     if (id === 'departments')  this.loadDepartments();
     if (id === 'designations') { this.loadDesignations(); this.loadDepartments(); }
-    if (id === 'settings')     { this.loadLoanSettings(); this.loadAnnualTicketSettings(); }
+    if (id === 'settings')     { this.loadLoanSettings(); this.loadAnnualTicketSettings(); this.loadMonthlyLeaveReminderSettings(); }
   }
 
   loadLoanSettings() {
@@ -231,6 +238,28 @@ export class AdminComponent implements OnInit {
     this.http.put<any>('/api/v1/admin/settings/annual-tickets', this.annualTicketSettings).subscribe({
       next: r => { this.annualTicketSettings = r.settings; this.settingsMessage = r.message; this.ticketSettingsSaving = false; },
       error: err => { this.settingsError = this.firstError(err) || 'Failed to save annual ticket settings.'; this.ticketSettingsSaving = false; }
+    });
+  }
+
+  loadMonthlyLeaveReminderSettings() {
+    this.http.get<any>('/api/v1/admin/settings/monthly-leave-reminder').subscribe({
+      next: r => this.monthlyLeaveReminderSettings = { ...this.monthlyLeaveReminderSettings, ...r.settings },
+      error: err => this.settingsError = this.firstError(err) || 'Failed to load monthly leave reminder settings.'
+    });
+  }
+
+  saveMonthlyLeaveReminderSettings() {
+    this.leaveReminderSaving = true; this.settingsMessage = ''; this.settingsError = '';
+    this.http.put<any>('/api/v1/admin/settings/monthly-leave-reminder', this.monthlyLeaveReminderSettings).subscribe({
+      next: r => {
+        this.monthlyLeaveReminderSettings = { ...this.monthlyLeaveReminderSettings, ...r.settings };
+        this.settingsMessage = r.message;
+        this.leaveReminderSaving = false;
+      },
+      error: err => {
+        this.settingsError = this.firstError(err) || 'Failed to save monthly leave reminder settings.';
+        this.leaveReminderSaving = false;
+      }
     });
   }
 

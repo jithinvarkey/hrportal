@@ -446,6 +446,47 @@
       </div>
       <div class="settings-actions"><button class="btn-primary" (click)="saveAnnualTicketSettings()" [disabled]="ticketSettingsSaving"><mat-icon>{{ ticketSettingsSaving ? 'hourglass_empty' : 'save' }}</mat-icon>{{ ticketSettingsSaving ? 'Saving...' : 'Save Ticket Policy' }}</button></div>
     </div>
+
+    <div class="settings-panel">
+      <div class="settings-heading">
+        <div class="settings-icon"><mat-icon>event_note</mat-icon></div>
+        <div>
+          <div class="settings-title">Monthly Leave Entry Reminder</div>
+          <div class="settings-sub">Email all active employees to submit current-month leave entries before payroll.</div>
+        </div>
+      </div>
+
+      <div class="ticket-policy-grid">
+        <div class="policy-group">
+          <strong>Reminder schedule</strong>
+          <label>Enabled
+            <select [(ngModel)]="monthlyLeaveReminderSettings.enabled">
+              <option [ngValue]="true">Yes</option>
+              <option [ngValue]="false">No</option>
+            </select>
+          </label>
+          <label>Send day of month
+            <input type="number" min="1" max="31" [(ngModel)]="monthlyLeaveReminderSettings.day">
+          </label>
+          <span>If the selected day does not exist in a month, the reminder sends on that month's last day.</span>
+        </div>
+        <div class="policy-group">
+          <strong>Email content</strong>
+          <label>Subject <input [(ngModel)]="monthlyLeaveReminderSettings.subject"></label>
+          <label>Body
+            <textarea rows="5" [(ngModel)]="monthlyLeaveReminderSettings.body"></textarea>
+          </label>
+          <span>Available tags: {{ '{{first_name}}' }}, {{ '{{employee_name}}' }}, {{ '{{month_name}}' }}, {{ '{{year}}' }}</span>
+        </div>
+      </div>
+
+      <div class="settings-actions">
+        <button class="btn-primary" (click)="saveMonthlyLeaveReminderSettings()" [disabled]="leaveReminderSaving">
+          <mat-icon>{{ leaveReminderSaving ? 'hourglass_empty' : 'save' }}</mat-icon>
+          {{ leaveReminderSaving ? 'Saving...' : 'Save Leave Reminder' }}
+        </button>
+      </div>
+    </div>
   </ng-container>
 
 </div>

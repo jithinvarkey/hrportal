@@ -18,6 +18,7 @@ use App\Models\Separation;
 use App\Models\User;
 use App\Services\LoanApprovalService;
 use App\Services\AnnualTicketService;
+use App\Services\MonthlyLeaveReminderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
@@ -29,11 +30,45 @@ class AdminController extends Controller
 {
     protected $loanApprovalService;
     protected $annualTicketService;
+    protected $monthlyLeaveReminderService;
 
-    public function __construct(LoanApprovalService $loanApprovalService, AnnualTicketService $annualTicketService)
+    public function __construct(
+        LoanApprovalService $loanApprovalService,
+        AnnualTicketService $annualTicketService,
+        MonthlyLeaveReminderService $monthlyLeaveReminderService
+    )
     {
         $this->loanApprovalService = $loanApprovalService;
         $this->annualTicketService = $annualTicketService;
+        $this->monthlyLeaveReminderService = $monthlyLeaveReminderService;
+    }
+
+    public function monthlyLeaveReminderSettings(): JsonResponse
+    {
+        if (!$this->canManageLeaveReminderSettings()) {
+            return response()->json(['message' => 'Only HR Manager or Super Admin can manage monthly leave reminder settings.'], 403);
+        }
+
+        return response()->json(['settings' => $this->monthlyLeaveReminderService->settings()]);
+    }
+
+    public function updateMonthlyLeaveReminderSettings(Request $request): JsonResponse
+    {
+        if (!$this->canManageLeaveReminderSettings()) {
+            return response()->json(['message' => 'Only HR Manager or Super Admin can manage monthly leave reminder settings.'], 403);
+        }
+
+        $data = $request->validate([
+            'enabled' => 'required|boolean',
+            'day' => 'required|integer|min:1|max:31',
+            'subject' => 'required|string|max:150',
+            'body' => 'required|string|max:2000',
+        ]);
+
+        return response()->json([
+            'message' => 'Monthly leave reminder settings updated.',
+            'settings' => $this->monthlyLeaveReminderService->updateSettings($data),
+        ]);
     }
 
     public function annualTicketSettings(): JsonResponse
@@ -378,6 +413,16 @@ class AdminController extends Controller
             ->where('model_has_roles.model_id', auth()->id())
             ->where('model_has_roles.model_type', get_class(auth()->user()))
             ->where('roles.name', 'super_admin')
+            ->exists();
+    }
+
+    private function canManageLeaveReminderSettings(): bool
+    {
+        return DB::table('model_has_roles')
+            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('model_has_roles.model_id', auth()->id())
+            ->where('model_has_roles.model_type', get_class(auth()->user()))
+            ->whereIn('roles.name', ['super_admin', 'hr_manager'])
             ->exists();
     }
 
