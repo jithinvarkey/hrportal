@@ -1,0 +1,49 @@
+
+> hrms-frontend@1.0.0 start
+> ng serve --proxy-config proxy.conf.json --host 127.0.0.1 --port 4200
+
+[33m>[39m Building...
+[32m√[39m Building...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m               [2m | [22m [1mRaw size[22m
+[32mchunk-4TYLL2NU.js[39m  [2m | [22m[2m-[22m                   [2m | [22m [36m94.59 kB[39m[2m | [22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m                [2m | [22m [36m19.70 kB[39m[2m | [22m
+[32mstyles.css[39m         [2m | [22m[2mstyles[22m              [2m | [22m [36m18.62 kB[39m[2m | [22m
+[32mpolyfills.js[39m       [2m | [22m[2mpolyfills[22m           [2m | [22m [36m95 bytes[39m[2m | [22m
+
+[1m [22m                  [2m | [22m[1mInitial total[22m       [2m | [22m[1m133.00 kB[22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m               [2m | [22m [1mRaw size[22m
+[32mchunk-EE32INAT.js[39m  [2m | [22m[2mleave-module[22m        [2m | [22m[36m463.65 kB[39m[2m | [22m
+[32mchunk-RLGDQTTB.js[39m  [2m | [22m[2memployees-module[22m    [2m | [22m[36m407.19 kB[39m[2m | [22m
+[32mchunk-ZQSN3OVM.js[39m  [2m | [22m[2mattendance-module[22m   [2m | [22m[36m312.97 kB[39m[2m | [22m
+[32mchunk-I4P7CUDL.js[39m  [2m | [22m[2mcontracts-module[22m    [2m | [22m[36m298.78 kB[39m[2m | [22m
+[32mchunk-ELKGUDHT.js[39m  [2m | [22m[2mrecruitment-module[22m  [2m | [22m[36m298.37 kB[39m[2m | [22m
+[32mchunk-7PQKSBGG.js[39m  [2m | [22m[2mrequests-module[22m     [2m | [22m[36m287.97 kB[39m[2m | [22m
+[32mchunk-5V7TP27X.js[39m  [2m | [22m[2mloans-module[22m        [2m | [22m[36m269.27 kB[39m[2m | [22m
+[32mchunk-7K2LZEDJ.js[39m  [2m | [22m[2madmin-module[22m        [2m | [22m[36m254.34 kB[39m[2m | [22m
+[32mchunk-ZZFP6REJ.js[39m  [2m | [22m[2mseparations-module[22m  [2m | [22m[36m228.82 kB[39m[2m | [22m
+[32mchunk-WE5N762C.js[39m  [2m | [22m[2mpayroll-module[22m      [2m | [22m[36m174.68 kB[39m[2m | [22m
+[32mchunk-VZOS4LYN.js[39m  [2m | [22m[2mperformance-module[22m  [2m | [22m[36m173.54 kB[39m[2m | [22m
+[32mchunk-LCJLFTOA.js[39m  [2m | [22m[2mannouncements-module[22m[2m | [22m[36m163.26 kB[39m[2m | [22m
+[32mchunk-Z3MGH7LK.js[39m  [2m | [22m[2massets-module[22m       [2m | [22m[36m157.47 kB[39m[2m | [22m
+[32mchunk-LXGWDXBY.js[39m  [2m | [22m[2mpolicies-module[22m     [2m | [22m[36m154.09 kB[39m[2m | [22m
+[32mchunk-XVSRZYFK.js[39m  [2m | [22m[2morg-chart-module[22m    [2m | [22m[36m146.13 kB[39m[2m | [22m
+[2m...and 5 more lazy chunks files. Use "--verbose" to show all the files.[22m
+
+Application bundle generation complete. [10.554 seconds] - 2026-06-24T11:26:04.742Z
+
+Watch mode enabled. Watching for file changes...
+NOTE: Raw file sizes do not reflect development server per-request transformations.
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m4200[22m/[39m
+[2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
+[33m>[39m Changes detected. Rebuilding...
+[32m√[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m         [2m | [22m [1mRaw size[22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m          [2m | [22m [36m19.70 kB[39m[2m | [22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m         [2m | [22m [1mRaw size[22m
+[32mchunk-HLW4Y2U6.js[39m  [2m | [22m[2mprofile-module[22m[2m | [22m[36m137.06 kB[39m[2m | [22m
+
+Application bundle generation complete. [9.107 seconds] - 2026-06-24T11:58:59.627Z
+
+Page reload sent to client(s).

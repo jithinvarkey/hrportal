@@ -46,11 +46,31 @@ export class ProfileComponent implements OnInit {
   dependentIdFile: File | null = null;
   dependentForm: any = this.blankDependent();
 
+  documents: any[] = [];
+  documentsLoading = false;
+  documentUploading = false;
+  documentError = '';
+  documentSuccess = '';
+  documentFile: File | null = null;
+  documentForm: any = this.blankDocument();
+
   readonly tabs = [
     { id: 'info',     label: 'My Info',        icon: 'person'   },
     { id: 'dependents', label: 'Dependents',   icon: 'family_restroom' },
+    { id: 'documents', label: 'Documents',     icon: 'folder' },
     { id: 'edit',     label: 'Edit Profile',   icon: 'edit'     },
     { id: 'password', label: 'Change Password', icon: 'lock'    },
+  ];
+
+  readonly documentTypes = [
+    { key: 'id_iqama', label: 'ID / Iqama', type: 'id', defaultTitle: 'ID / Iqama' },
+    { key: 'passport', label: 'Passport', type: 'passport', defaultTitle: 'Passport' },
+    { key: 'hdf', label: 'HDF', type: 'medical', defaultTitle: 'HDF' },
+    { key: 'signed_offer_letter', label: 'Signed Offer Letter', type: 'contract', defaultTitle: 'Signed Offer Letter' },
+    { key: 'experience_letter', label: 'Experience Letter', type: 'certificate', defaultTitle: 'Experience Letter' },
+    { key: 'bank_details', label: 'Bank Details', type: 'other', defaultTitle: 'Bank Details' },
+    { key: 'national_address', label: 'National Address', type: 'other', defaultTitle: 'National Address' },
+    { key: 'other', label: 'Other', type: 'other', defaultTitle: '' },
   ];
 
   constructor(
@@ -71,6 +91,7 @@ export class ProfileComponent implements OnInit {
         this.loading  = false;
         this.initEditForm();
         if (this.employee?.id) this.loadDependents();
+        if (this.employee?.id) this.loadDocuments();
         this.cdr.markForCheck();
       },
       error: () => {
@@ -113,6 +134,9 @@ export class ProfileComponent implements OnInit {
     this.activeTab = tabId;
     if (tabId === 'dependents' && this.employee?.id && !this.dependents.length) {
       this.loadDependents();
+    }
+    if (tabId === 'documents' && this.employee?.id && !this.documents.length) {
+      this.loadDocuments();
     }
   }
 
@@ -238,6 +262,14 @@ export class ProfileComponent implements OnInit {
       passport_number: '',
       passport_expiry: '',
       is_active: true,
+    };
+  }
+
+  private blankDocument(): any {
+    return {
+      document_key: 'id_iqama',
+      title: 'ID / Iqama',
+      expiry_date: '',
     };
   }
 
@@ -390,6 +422,143 @@ export class ProfileComponent implements OnInit {
   private toDateInput(value: string | null): string {
     if (!value) return '';
     return String(value).slice(0, 10);
+  }
+
+  // Employee documents
+  onDocumentTypeChange(): void {
+    const selected = this.documentTypes.find(type => type.key === this.documentForm.document_key);
+    if (selected?.defaultTitle) this.documentForm.title = selected.defaultTitle;
+  }
+
+  selectDocumentFile(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0] || null;
+    this.documentError = '';
+    if (!file) {
+      this.documentFile = null;
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      this.documentError = 'Document must be 10 MB or smaller.';
+      this.documentFile = null;
+      return;
+    }
+
+    this.documentFile = file;
+  }
+
+  loadDocuments(): void {
+    if (!this.employee?.id) return;
+    this.documentsLoading = true;
+    this.http.get<any>(`/api/v1/employees/${this.employee.id}/documents`).subscribe({
+      next: r => {
+        this.documents = r?.documents || [];
+        this.documentsLoading = false;
+        this.cdr.markForCheck();
+      },
+      error: e => {
+        this.documentsLoading = false;
+        this.documentError = e?.error?.message || 'Could not load documents.';
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  uploadDocument(): void {
+    if (!this.employee?.id) {
+      this.documentError = 'No employee record linked to this profile.';
+      return;
+    }
+    if (!this.documentForm.title?.trim()) {
+      this.documentError = 'Document title is required.';
+      return;
+    }
+    if (!this.documentFile) {
+      this.documentError = 'Please select a document file.';
+      return;
+    }
+
+    const selected = this.documentTypes.find(type => type.key === this.documentForm.document_key) || this.documentTypes[0];
+    const fd = new FormData();
+    fd.append('title', this.documentForm.title);
+    fd.append('type', selected.type);
+    fd.append('file', this.documentFile);
+    if (this.documentForm.expiry_date) fd.append('expiry_date', this.documentForm.expiry_date);
+
+    this.documentUploading = true;
+    this.documentError = '';
+    this.documentSuccess = '';
+
+    this.http.post<any>(`/api/v1/employees/${this.employee.id}/documents`, fd).subscribe({
+      next: () => {
+        this.documentUploading = false;
+        this.documentSuccess = 'Document uploaded successfully.';
+        this.documentForm = this.blankDocument();
+        this.documentFile = null;
+        this.loadDocuments();
+        this.cdr.markForCheck();
+      },
+      error: e => {
+        this.documentUploading = false;
+        const errors = e?.error?.errors;
+        this.documentError = errors
+          ? String(Object.values(errors).flat().join(' '))
+          : (e?.error?.message || 'Could not upload document.');
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  downloadDocument(doc: any): void {
+    if (!this.employee?.id) return;
+    this.http.get(`/api/v1/employees/${this.employee.id}/documents/${doc.id}/download`, {
+      responseType: 'blob',
+      observe: 'response',
+    }).subscribe({
+      next: response => {
+        const url = URL.createObjectURL(response.body as Blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = doc.file_name || doc.title || 'employee-document';
+        link.click();
+        URL.revokeObjectURL(url);
+      },
+      error: e => {
+        this.documentError = e?.error?.message || 'Could not download document.';
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  deleteDocument(doc: any): void {
+    if (!this.employee?.id || !confirm(`Delete ${doc.title}?`)) return;
+    this.http.delete(`/api/v1/employees/${this.employee.id}/documents/${doc.id}`).subscribe({
+      next: () => this.loadDocuments(),
+      error: e => {
+        this.documentError = e?.error?.message || 'Could not delete document.';
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  documentTypeLabel(type: string): string {
+    const labels: any = {
+      id: 'ID / Iqama',
+      passport: 'Passport',
+      medical: 'Medical / HDF',
+      contract: 'Contract / Offer Letter',
+      certificate: 'Certificate',
+      visa: 'Visa',
+      other: 'Other',
+    };
+    return labels[type] || type;
+  }
+
+  formatFileSize(bytes: number | null): string {
+    if (!bytes) return '-';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   formatEmploymentType(type: string): string {
