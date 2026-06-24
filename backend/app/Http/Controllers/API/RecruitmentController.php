@@ -189,15 +189,30 @@ class RecruitmentController extends Controller {
     // CV BANK
     // ══════════════════════════════════════════════════════════════════════
 
-    /** List all CV bank entries (not linked to a specific job) */
+    /** List CV bank entries and uploaded applicant CVs */
     public function cvBank(Request $request) {
-        $cvs = JobApplication::with('jobPosting')
-            ->where('is_cv_bank', true)
+        $cvs = JobApplication::with(['department', 'jobPosting.department'])
+            ->where(fn($q) => $q->where('is_cv_bank', true)->orWhereNotNull('cv_path'))
             ->when($request->search, fn($q) =>
-                $q->where('applicant_name', 'like', "%{$request->search}%")
-                  ->orWhere('applicant_email', 'like', "%{$request->search}%")
-                  ->orWhere('position_applied', 'like', "%{$request->search}%")
-                  ->orWhere('skills', 'like', "%{$request->search}%")
+                $q->where(fn($s) =>
+                    $s->where('applicant_name', 'like', "%{$request->search}%")
+                      ->orWhere('applicant_email', 'like', "%{$request->search}%")
+                      ->orWhere('position_applied', 'like', "%{$request->search}%")
+                      ->orWhere('skills', 'like', "%{$request->search}%")
+                      ->orWhereHas('jobPosting', fn($job) => $job->where('title', 'like', "%{$request->search}%"))
+                )
+            )
+            ->when($request->department_id, fn($q, $departmentId) =>
+                $q->where(fn($dept) =>
+                    $dept->where('department_id', $departmentId)
+                         ->orWhereHas('jobPosting', fn($job) => $job->where('department_id', $departmentId))
+                )
+            )
+            ->when($request->position, fn($q, $position) =>
+                $q->where(fn($pos) =>
+                    $pos->where('position_applied', $position)
+                        ->orWhereHas('jobPosting', fn($job) => $job->where('title', $position))
+                )
             )
             ->when($request->rating,  fn($q) => $q->where('rating', $request->rating))
             ->when($request->source,  fn($q) => $q->where('source', $request->source))
@@ -212,6 +227,7 @@ class RecruitmentController extends Controller {
             'applicant_name'    => 'required|string|max:150',
             'applicant_email'   => 'required|email|max:191',
             'applicant_phone'   => 'nullable|string|max:20',
+            'department_id'      => 'nullable|exists:departments,id',
             'position_applied'  => 'nullable|string|max:150',
             'nationality'       => 'nullable|string|max:100',
             'experience_years'  => 'nullable|integer|min:0|max:50',
@@ -244,7 +260,7 @@ class RecruitmentController extends Controller {
     /** Update rating/notes for a CV bank entry */
     public function updateCv(Request $request, $id) {
         $cv = JobApplication::where('is_cv_bank', true)->findOrFail($id);
-        $cv->update($request->only(['rating', 'notes', 'skills', 'position_applied',
+        $cv->update($request->only(['rating', 'notes', 'skills', 'department_id', 'position_applied',
                                      'experience_years', 'expected_salary', 'source',
                                      'nationality', 'available_from']));
         return response()->json(['cv' => $cv]);

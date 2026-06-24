@@ -8,7 +8,7 @@ class JobApplication extends Model {
         'cv_path','cover_letter_path','cover_letter_text','stage','hr_notes',
         'expected_salary','available_from',
         // CV Bank fields
-        'is_cv_bank','position_applied','nationality','experience_years',
+        'is_cv_bank','department_id','position_applied','nationality','experience_years',
         'skills','source','rating','notes',
     ];
     protected $casts = [
@@ -18,5 +18,6 @@ class JobApplication extends Model {
         'experience_years' => 'integer',
     ];
     public function jobPosting()  { return $this->belongsTo(JobPosting::class); }
+    public function department()  { return $this->belongsTo(Department::class); }
     public function interviews()  { return $this->hasMany(Interview::class,'application_id'); }
 }

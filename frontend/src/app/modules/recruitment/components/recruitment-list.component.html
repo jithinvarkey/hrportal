@@ -212,6 +212,106 @@
     </div>
   </ng-container>
 
+  <!-- CV BANK TAB -->
+  <ng-container *ngIf="activeTab==='cv_bank'">
+
+    <div class="cv-toolbar">
+      <div class="search-wrap">
+        <mat-icon class="search-ico">search</mat-icon>
+        <input class="search-input" placeholder="Search name, role, skills..."
+               [(ngModel)]="cvBankSearch" (keyup.enter)="loadCvBank()">
+      </div>
+      <div class="cv-filter-group">
+        <select class="cv-filter-select" [(ngModel)]="cvBankRating" (change)="loadCvBank()">
+          <option value="">All Ratings</option>
+          <option *ngFor="let r of ratings" [value]="r.value">{{ r.label }}</option>
+        </select>
+        <select class="cv-filter-select" [(ngModel)]="cvBankSource" (change)="loadCvBank()">
+          <option value="">All Sources</option>
+          <option *ngFor="let s of sources" [value]="s">{{ s }}</option>
+        </select>
+        <select class="cv-filter-select wide" [(ngModel)]="cvBankPosition" (change)="loadCvBank()">
+          <option value="">All Positions</option>
+          <option *ngFor="let p of jobPositionOptions" [value]="p">{{ p }}</option>
+        </select>
+        <select class="cv-filter-select wide" [(ngModel)]="cvBankDepartment" (change)="loadCvBank()">
+          <option value="">All Departments</option>
+          <option *ngFor="let d of departments" [value]="d.id">{{ d.name }}</option>
+        </select>
+      </div>
+      <button class="btn-primary" (click)="openCvForm()">
+        <mat-icon>person_add</mat-icon> Add CV
+      </button>
+    </div>
+
+    <div class="cv-list" *ngIf="!cvBankLoading">
+      <div class="cv-card" *ngFor="let cv of cvBankEntries" (click)="viewCv(cv)">
+        <div class="cv-rating-bar" [style.background]="ratingColor(cv.rating)"></div>
+
+        <div class="cv-card-body">
+          <div class="cv-card-top">
+            <div class="cv-avatar" [style.background]="avatarColor(cv.applicant_name)">
+              {{ initial(cv.applicant_name) }}
+            </div>
+            <div class="cv-info">
+              <div class="cv-name">{{ cv.applicant_name }}</div>
+              <div class="cv-role">{{ cvPositionLabel(cv) }}</div>
+              <div class="cv-meta">{{ cvDepartmentName(cv) }}</div>
+              <div class="cv-meta">
+                <span *ngIf="cv.experience_years">{{ cv.experience_years }}y exp</span>
+                <span *ngIf="cv.nationality"> - {{ cv.nationality }}</span>
+                <span *ngIf="cv.source"> - {{ cv.source }}</span>
+              </div>
+            </div>
+            <span class="cv-rating-badge" [style.background]="ratingColor(cv.rating)+'18'"
+                  [style.color]="ratingColor(cv.rating)">
+              {{ ratingLabel(cv.rating) }}
+            </span>
+          </div>
+
+          <div class="cv-skills" *ngIf="cv.skills">
+            <span class="skill-tag" *ngFor="let s of cv.skills.split(',').slice(0,4)">{{ s.trim() }}</span>
+            <span class="skill-more" *ngIf="cv.skills.split(',').length > 4">
+              +{{ cv.skills.split(',').length - 4 }}
+            </span>
+          </div>
+
+          <div class="cv-card-footer">
+            <div class="cv-date">{{ cv.cv_path ? 'CV uploaded' : 'No file uploaded' }} - {{ cv.created_at | date:'dd MMM yyyy' }}</div>
+            <div class="cv-actions" (click)="$event.stopPropagation()">
+              <a *ngIf="cv.cv_path" [href]="'/storage/'+cv.cv_path" target="_blank"
+                 class="cv-action-btn" matTooltip="View CV">
+                <mat-icon>description</mat-icon>
+              </a>
+              <button class="cv-action-btn" matTooltip="Link to Job" *ngIf="isHR"
+                      (click)="openLinkModal(cv)">
+                <mat-icon>link</mat-icon>
+              </button>
+              <button class="cv-action-btn danger" matTooltip="Remove" *ngIf="canDeleteCv(cv)"
+                      (click)="deleteCv(cv)">
+                <mat-icon>delete_outline</mat-icon>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cv-empty" *ngIf="!cvBankEntries.length">
+        <mat-icon>folder_open</mat-icon>
+        <div>No CVs in the bank yet</div>
+        <div class="cv-empty-sub">Add candidates even without an open position</div>
+        <button class="btn-primary" (click)="openCvForm()">
+          <mat-icon>person_add</mat-icon> Add First CV
+        </button>
+      </div>
+    </div>
+
+    <div class="cv-loading" *ngIf="cvBankLoading">
+      <mat-spinner diameter="28"></mat-spinner>
+    </div>
+
+  </ng-container>
+
 </div>
 
 <!-- ═══ APPLICANT DETAIL DRAWER ═══ -->
@@ -322,8 +422,14 @@
   <div class="modal-body">
     <div class="two-col">
       <div class="field-group">
-        <label class="field-label">Job Title <span class="req">*</span></label>
-        <input class="field-input" placeholder="e.g. Senior Engineer" formControlName="title">
+        <label class="field-label">Job Position <span class="req">*</span></label>
+        <select class="field-select-full" formControlName="designation_id" (change)="onJobPositionChange()">
+          <option value="">Select job position</option>
+          <option *ngFor="let p of jobPositionList" [value]="p.id">
+            {{ p.title }}{{ p.department?.name ? ' - ' + p.department.name : '' }}
+          </option>
+        </select>
+        <input type="hidden" formControlName="title">
       </div>
       <div class="field-group">
         <label class="field-label">Employment Type <span class="req">*</span></label>
@@ -335,7 +441,7 @@
     <div class="two-col">
       <div class="field-group">
         <label class="field-label">Department</label>
-        <select class="field-select-full" formControlName="department_id">
+        <select class="field-select-full" formControlName="department_id" (change)="onJobDepartmentChange()">
           <option value="">— Select —</option>
           <option *ngFor="let d of departments" [value]="d.id">{{ d.name }}</option>
         </select>
@@ -391,7 +497,7 @@
   <!-- ══════════════════════════════════════════════════════════════════
        CV BANK TAB
   ══════════════════════════════════════════════════════════════════ -->
-  <ng-container *ngIf="activeTab==='cv_bank'">
+  <ng-container *ngIf="false">
 
     <!-- Toolbar -->
     <div class="cv-toolbar">
@@ -407,6 +513,10 @@
       <select class="field-select" [(ngModel)]="cvBankSource" (change)="loadCvBank()">
         <option value="">All Sources</option>
         <option *ngFor="let s of sources" [value]="s">{{ s }}</option>
+      </select>
+      <select class="field-select" [(ngModel)]="cvBankDepartment" (change)="loadCvBank()">
+        <option value="">All Departments</option>
+        <option *ngFor="let d of departments" [value]="d.id">{{ d.name }}</option>
       </select>
       <button class="btn-primary" (click)="openCvForm()">
         <mat-icon>person_add</mat-icon> Add CV
@@ -427,7 +537,8 @@
             </div>
             <div class="cv-info">
               <div class="cv-name">{{ cv.applicant_name }}</div>
-              <div class="cv-role">{{ cv.position_applied || 'Position not specified' }}</div>
+              <div class="cv-role">{{ cvPositionLabel(cv) }}</div>
+              <div class="cv-meta">{{ cvDepartmentName(cv) }}</div>
               <div class="cv-meta">
                 <span *ngIf="cv.experience_years">{{ cv.experience_years }}y exp</span>
                 <span *ngIf="cv.nationality"> · {{ cv.nationality }}</span>
@@ -448,7 +559,7 @@
           </div>
 
           <div class="cv-card-footer">
-            <div class="cv-date">Added {{ cv.created_at | date:'dd MMM yyyy' }}</div>
+            <div class="cv-date">{{ cv.cv_path ? 'CV uploaded' : 'No file uploaded' }} - {{ cv.created_at | date:'dd MMM yyyy' }}</div>
             <div class="cv-actions" (click)="$event.stopPropagation()">
               <a *ngIf="cv.cv_path" [href]="'/storage/'+cv.cv_path" target="_blank"
                  class="cv-action-btn" matTooltip="View CV">
@@ -458,7 +569,7 @@
                       (click)="openLinkModal(cv)">
                 <mat-icon>link</mat-icon>
               </button>
-              <button class="cv-action-btn danger" matTooltip="Remove" *ngIf="isHR"
+              <button class="cv-action-btn danger" matTooltip="Remove" *ngIf="canDeleteCv(cv)"
                       (click)="deleteCv(cv)">
                 <mat-icon>delete_outline</mat-icon>
               </button>
@@ -663,8 +774,11 @@
         <input class="field-input" [(ngModel)]="cvForm.applicant_phone" placeholder="+966 5x xxx xxxx">
       </div>
       <div class="field-group">
-        <label class="field-label">Position Applied For</label>
-        <input class="field-input" [(ngModel)]="cvForm.position_applied" placeholder="e.g. Software Engineer">
+        <label class="field-label">Job Position</label>
+        <input class="field-input" [(ngModel)]="cvForm.position_applied" list="cv-position-options" placeholder="e.g. Software Engineer">
+        <datalist id="cv-position-options">
+          <option *ngFor="let p of jobPositionOptions" [value]="p"></option>
+        </datalist>
       </div>
     </div>
     <div class="two-col">
@@ -676,6 +790,13 @@
         <label class="field-label">Experience (years)</label>
         <input class="field-input" type="number" [(ngModel)]="cvForm.experience_years" min="0" max="50">
       </div>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Department</label>
+      <select class="field-select-full" [(ngModel)]="cvForm.department_id">
+        <option value="">No department</option>
+        <option *ngFor="let d of departments" [value]="d.id">{{ d.name }}</option>
+      </select>
     </div>
     <div class="two-col">
       <div class="field-group">

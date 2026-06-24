@@ -17,7 +17,7 @@ import { AuthService } from '../../../core/services/auth.service';
 })
 export class RecruitmentListComponent implements OnInit, OnDestroy {
 
-  jobs: any[] = []; applications: any[] = []; departments: any[] = [];
+  jobs: any[] = []; applications: any[] = []; departments: any[] = []; designations: any[] = [];
   stats: any = {}; pagination: any = null; currentPage = 1;
   activeTab = 'jobs'; loading = false; appsLoading = false;
   statsLoading = true; submitting = false;
@@ -68,6 +68,8 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   cvBankSearch   = '';
   cvBankRating   = '';
   cvBankSource   = '';
+  cvBankPosition = '';
+  cvBankDepartment = '';
   showCvForm     = false;
   cvFormSubmitting = false;
   selectedCv: any = null;
@@ -102,7 +104,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   cvForm: any = {
     applicant_name: '', applicant_email: '', applicant_phone: '',
     position_applied: '', nationality: '', experience_years: null,
-    skills: '', source: 'LinkedIn', expected_salary: null,
+    department_id: '', skills: '', source: 'LinkedIn', expected_salary: null,
     available_from: '', notes: '', rating: 'hold',
   };
   cvFile: File | null = null;
@@ -133,7 +135,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
       status:          ['open'],
       vacancies:       [1],
       department_id:   [''],
-      designation_id:  [''],
+      designation_id:  ['', Validators.required],
       location:        [''],
       salary_min:      [null],
       salary_max:      [null],
@@ -152,7 +154,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
       probation_period: [90],
       custom_tasks:     [''],
     });
-    this.loadStats(); this.loadJobs(); this.loadDepartments();
+    this.loadStats(); this.loadJobs(); this.loadDepartments(); this.loadDesignations();
     this.searchControl.valueChanges.pipe(debounceTime(400), distinctUntilChanged(), takeUntil(this.destroy$))
       .subscribe(() => this.loadJobs(1));
   }
@@ -178,6 +180,17 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   loadDepartments(): void {
     this.http.get<any>('/api/v1/departments').pipe(takeUntil(this.destroy$)).subscribe({
       next: r => { this.departments = r?.data ?? r ?? []; this.cdr.markForCheck(); },
+      error: () => {},
+    });
+  }
+
+  loadDesignations(): void {
+    this.http.get<any>('/api/v1/designations').pipe(takeUntil(this.destroy$)).subscribe({
+      next: r => {
+        this.designations = (Array.isArray(r) ? r : (r?.data ?? []))
+          .filter((d: any) => d?.is_active !== false);
+        this.cdr.markForCheck();
+      },
       error: () => {},
     });
   }
@@ -352,6 +365,27 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     this.showJobForm = true; this.cdr.markForCheck();
   }
 
+  onJobDepartmentChange(): void {
+    const selected = this.selectedJobPosition;
+    if (selected?.department_id && String(selected.department_id) !== String(this.jobForm.value.department_id || '')) {
+      this.jobForm.patchValue({ designation_id: '', title: '' });
+    }
+  }
+
+  onJobPositionChange(): void {
+    const selected = this.selectedJobPosition;
+    if (!selected) {
+      this.jobForm.patchValue({ title: '' });
+      return;
+    }
+    this.jobForm.patchValue({
+      title: selected.title,
+      department_id: this.jobForm.value.department_id || selected.department_id || '',
+      salary_min: this.jobForm.value.salary_min ?? selected.min_salary ?? null,
+      salary_max: this.jobForm.value.salary_max ?? selected.max_salary ?? null,
+    });
+  }
+
   saveJob(): void {
     if (this.jobForm.invalid) { this.jobForm.markAllAsTouched(); return; }
     this.submitting = true;
@@ -402,6 +436,8 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     if (this.cvBankSearch) params.search = this.cvBankSearch;
     if (this.cvBankRating) params.rating = this.cvBankRating;
     if (this.cvBankSource) params.source = this.cvBankSource;
+    if (this.cvBankPosition) params.position = this.cvBankPosition;
+    if (this.cvBankDepartment) params.department_id = this.cvBankDepartment;
     this.http.get<any>(`${this.api}/cv-bank`, { params }).pipe(takeUntil(this.destroy$)).subscribe({
       next: r => { this.cvBankEntries = r.data ?? []; this.cvBankLoading = false; this.cdr.markForCheck(); },
       error: () => { this.cvBankLoading = false; this.cdr.markForCheck(); },
@@ -412,7 +448,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     this.cvForm = {
       applicant_name: '', applicant_email: '', applicant_phone: '',
       position_applied: '', nationality: '', experience_years: null,
-      skills: '', source: 'LinkedIn', expected_salary: null,
+      department_id: '', skills: '', source: 'LinkedIn', expected_salary: null,
       available_from: '', notes: '', rating: 'hold',
     };
     this.cvFile = null;
@@ -498,6 +534,34 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   }
   ratingLabel(r: string): string {
     return ({ shortlist:'Shortlist', hold:'Hold', reject:'Reject' } as any)[r] ?? r;
+  }
+  cvDepartmentName(cv: any): string {
+    return cv?.department?.name || cv?.job_posting?.department?.name || 'No department';
+  }
+  cvPositionLabel(cv: any): string {
+    return cv?.position_applied || cv?.job_posting?.title || 'Position not specified';
+  }
+  get jobPositionOptions(): string[] {
+    const values = [
+      ...this.designations.map(d => d?.title),
+      ...this.jobs.map(j => j?.title),
+      ...this.cvBankEntries.map(cv => cv?.position_applied || cv?.job_posting?.title),
+    ].filter(Boolean).map(v => String(v).trim()).filter(Boolean);
+    return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
+  }
+  get jobPositionList(): any[] {
+    const departmentId = this.jobForm?.value?.department_id;
+    return this.designations
+      .filter(d => !departmentId || !d.department_id || String(d.department_id) === String(departmentId))
+      .sort((a, b) => String(a.title).localeCompare(String(b.title)));
+  }
+  get selectedJobPosition(): any {
+    const id = this.jobForm?.value?.designation_id;
+    if (!id) return null;
+    return this.designations.find(d => String(d.id) === String(id)) ?? null;
+  }
+  canDeleteCv(cv: any): boolean {
+    return this.isHR && !!cv?.is_cv_bank;
   }
 
   appsByStage(stage: string): any[] { return this.applications.filter(a => a.stage === stage); }
