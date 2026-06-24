@@ -6,8 +6,10 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
+use App\Models\EmployeeDocument;
 use App\Models\User;
 use App\Models\EmployeeDependent;
+use App\Mail\EmployeeDocumentUploadedMail;
 use App\Services\EmployeeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class EmployeeController extends Controller {
 
@@ -483,9 +486,10 @@ class EmployeeController extends Controller {
     }
 
     public function uploadDocument(Request $request, int $id): JsonResponse {
+        if (!$this->canManageDependents($id)) return response()->json(['message' => 'Unauthorized.'], 403);
         $request->validate([
             'title' => 'required|string|max:100',
-            'type' => 'required|in:contract,id,certificate,other',
+            'type' => 'required|in:contract,id,certificate,visa,passport,medical,other',
             'file' => 'required|file|max:10240',
             'expiry_date' => 'nullable|date',
         ]);
@@ -505,14 +509,47 @@ class EmployeeController extends Controller {
             'verified_by' => $isHrUpload ? auth()->id() : null,
             'verified_at' => $isHrUpload ? now() : null,
         ]);
+
+        if (!$isHrUpload) {
+            $this->notifyHrDocumentUploaded($employee, $doc);
+        }
+
         return response()->json(['document' => $doc], 201);
     }
 
+    private function notifyHrDocumentUploaded(Employee $employee, EmployeeDocument $document): void {
+        try {
+            $hrEmails = User::whereHas('roles', fn ($query) => $query->whereIn('name', ['super_admin', 'hr_manager', 'hr_staff']))
+                ->whereNotNull('email')
+                ->pluck('email')
+                ->filter()
+                ->unique()
+                ->values();
+
+            if ($hrEmails->isEmpty()) {
+                return;
+            }
+
+            $primaryEmail = $hrEmails->shift();
+            Mail::to($primaryEmail)
+                ->cc($hrEmails->all())
+                ->send(new EmployeeDocumentUploadedMail($employee, $document));
+        } catch (\Throwable $e) {
+            Log::warning('Employee document verification email failed.', [
+                'employee_id' => $employee->id,
+                'document_id' => $document->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
     public function listDocuments(int $id): JsonResponse {
-        return response()->json(['documents' => Employee::findOrFail($id)->documents]);
+        if (!$this->canManageDependents($id)) return response()->json(['message' => 'Unauthorized.'], 403);
+        return response()->json(['documents' => Employee::findOrFail($id)->documents()->latest()->get()]);
     }
 
     public function deleteDocument(int $id, int $docId): JsonResponse {
+        if (!$this->canManageDependents($id)) return response()->json(['message' => 'Unauthorized.'], 403);
         $doc = Employee::findOrFail($id)->documents()->findOrFail($docId);
         Storage::delete($doc->file_path);
         $doc->delete();
@@ -533,6 +570,7 @@ class EmployeeController extends Controller {
     }
 
     public function downloadDocument(int $id, int $docId) {
+        if (!$this->canManageDependents($id)) return response()->json(['message' => 'Unauthorized.'], 403);
         $doc = Employee::findOrFail($id)->documents()->findOrFail($docId);
         if (!Storage::exists($doc->file_path)) {
             return response()->json(['message' => 'File not found'], 404);

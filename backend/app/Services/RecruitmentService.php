@@ -54,7 +54,14 @@ class RecruitmentService
         // Prevent duplicate employee records
         $existingEmployee = Employee::where('user_id', $user->id)->first();
         if ($existingEmployee) {
-            return ['employee' => $existingEmployee, 'is_new' => false, 'temp_password' => null];
+            return [
+                'employee'         => $existingEmployee->load('department','designation'),
+                'employee_code'    => $existingEmployee->employee_code,
+                'temp_password'    => null,
+                'is_new'           => false,
+                'onboarding_tasks' => $existingEmployee->onboardingTasks()->count(),
+                'login_email'      => $user->email,
+            ];
         }
 
         $empCode = $this->generateEmployeeCode();
@@ -99,16 +106,18 @@ class RecruitmentService
         $tasks = [];
 
         $defaultTasks = [
-            ['title' => 'Submit copy of National ID / Iqama',         'category' => 'hr_documents', 'days' => 1],
-            ['title' => 'Submit educational certificates',            'category' => 'hr_documents', 'days' => 3],
-            ['title' => 'Submit bank account details for payroll',    'category' => 'hr_documents', 'days' => 3],
+            ['title' => 'Provide company laptop and accessories',     'category' => 'it_setup',     'days' => 1],
+            ['title' => 'Create email and system accounts',           'category' => 'it_setup',     'days' => 1],
+            ['title' => 'Prepare ID badge and access card',           'category' => 'hr_documents', 'days' => 1],
+            ['title' => 'Set up workstation and desk allocation',      'category' => 'it_setup',     'days' => 1],
             ['title' => 'Sign employment contract',                   'category' => 'hr_documents', 'days' => 1],
-            ['title' => 'Complete HR policy acknowledgement form',    'category' => 'hr_documents', 'days' => 7],
-            ['title' => 'IT: Set up workstation & email',             'category' => 'it_setup',     'days' => 1],
-            ['title' => 'IT: Configure VPN & system access',          'category' => 'it_setup',     'days' => 2],
-            ['title' => 'Complete system orientation / training',     'category' => 'training',     'days' => 14],
-            ['title' => 'Meet department manager & team introduction','category' => 'introduction', 'days' => 1],
-            ['title' => 'Complete probation review at 90 days',       'category' => 'probation',    'days' => (int)($data['probation_period'] ?? 90)],
+            ['title' => 'Collect required personal documents',        'category' => 'hr_documents', 'days' => 3],
+            ['title' => 'Register bank and payroll details',          'category' => 'hr_documents', 'days' => 3],
+            ['title' => 'Complete mandatory compliance training',     'category' => 'training',     'days' => 7],
+            ['title' => 'Introduce to team and department',           'category' => 'introduction', 'days' => 1],
+            ['title' => 'Set up buddy or mentor',                     'category' => 'introduction', 'days' => 3],
+            ['title' => '30-day probation check-in',                  'category' => 'probation',    'days' => 30],
+            ['title' => '90-day probation review',                    'category' => 'probation',    'days' => (int)($data['probation_period'] ?? 90)],
         ];
 
         foreach ($defaultTasks as $i => $t) {
@@ -118,7 +127,7 @@ class RecruitmentService
                 'category'    => $t['category'],
                 'status'      => 'pending',
                 'due_date'    => $hireDate->copy()->addDays($t['days'])->toDateString(),
-                'sort_order'  => $i,
+                'sort_order'  => $i + 1,
             ]);
             $tasks[] = $task;
         }
@@ -131,7 +140,7 @@ class RecruitmentService
                     'title'       => $ct,
                     'category'    => 'hr_documents',
                     'status'      => 'pending',
-                    'sort_order'  => count($defaultTasks) + $j,
+                    'sort_order'  => count($defaultTasks) + $j + 1,
                 ]);
             }
         }
