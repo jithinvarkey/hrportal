@@ -53,7 +53,7 @@ export class AdminComponent implements OnInit {
     { id:'roles',        label:'Roles',        icon:'security'           },
     { id:'permissions',  label:'Permissions',  icon:'lock'               },
     { id:'departments',  label:'Departments',  icon:'corporate_fare'     },
-    { id:'designations', label:'Designations', icon:'badge'              },
+    { id:'designations', label:'Job Positions', icon:'badge'             },
     { id:'settings',     label:'Settings',     icon:'settings'           },
   ];
 

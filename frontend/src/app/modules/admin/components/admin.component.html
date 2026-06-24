@@ -339,10 +339,10 @@
   <ng-container *ngIf="activeTab==='designations'">
     <div class="section-head">
       <div>
-        <h2 class="section-title">Designations</h2>
-        <p class="section-sub">Job titles and seniority levels, optionally scoped to a department with salary bands.</p>
+        <h2 class="section-title">Job Positions</h2>
+        <p class="section-sub">Positions available for recruitment and employee records, optionally scoped to a department with salary bands.</p>
       </div>
-      <button class="btn-primary" (click)="openDesigForm()"><mat-icon>add</mat-icon> Add Designation</button>
+      <button class="btn-primary" (click)="openDesigForm()"><mat-icon>add</mat-icon> Add Job Position</button>
     </div>
 
     <div class="data-card">
@@ -382,7 +382,7 @@
         <tr mat-row *matRowDef="let row; columns: desigColumns;"></tr>
       </table>
       <div class="empty-state" *ngIf="!loading && !designations.length">
-        <mat-icon>badge</mat-icon><span>No designations yet</span>
+        <mat-icon>badge</mat-icon><span>No job positions yet</span>
       </div>
       <div class="empty-state" *ngIf="loading"><mat-spinner diameter="28"></mat-spinner></div>
     </div>
@@ -671,14 +671,14 @@
 <div class="modal-backdrop" *ngIf="showDesigForm" (click)="showDesigForm=false"></div>
 <div class="modal-panel" *ngIf="showDesigForm">
   <div class="modal-hdr">
-    <h3><mat-icon>{{ desigEditId ? 'edit' : 'badge' }}</mat-icon> {{ desigEditId ? 'Edit Designation' : 'Add Designation' }}</h3>
+    <h3><mat-icon>{{ desigEditId ? 'edit' : 'badge' }}</mat-icon> {{ desigEditId ? 'Edit Job Position' : 'Add Job Position' }}</h3>
     <button class="row-btn" (click)="showDesigForm=false"><mat-icon>close</mat-icon></button>
   </div>
   <div class="modal-body">
     <div class="two-col">
       <div class="field-group">
-        <label class="field-label">Title <span class="req">*</span></label>
-        <input class="field-input" [(ngModel)]="desigForm.title" placeholder="e.g. Software Engineer">
+        <label class="field-label">Job Position <span class="req">*</span></label>
+        <input class="field-input" [(ngModel)]="desigForm.title" placeholder="e.g. IT Developer">
       </div>
       <div class="field-group">
         <label class="field-label">Level</label>
@@ -718,7 +718,7 @@
     <button class="btn-outline" (click)="showDesigForm=false">Cancel</button>
     <button class="btn-primary" (click)="saveDesig()" [disabled]="submitting">
       <mat-icon>{{ submitting ? 'hourglass_empty' : 'save' }}</mat-icon>
-      {{ submitting ? 'Saving…' : (desigEditId ? 'Update Designation' : 'Create Designation') }}
+      {{ submitting ? 'Saving...' : (desigEditId ? 'Update Job Position' : 'Create Job Position') }}
     </button>
   </div>
 </div>
