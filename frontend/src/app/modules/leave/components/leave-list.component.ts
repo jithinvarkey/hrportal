@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { finalize } from 'rxjs/operators';
 import { AuthService } from '../../../core/services/auth.service';
 
 @Component({
@@ -15,6 +16,8 @@ export class LeaveListComponent implements OnInit {
   activeStatus = 'needs_action';
   loading = false;
   submitting = false;
+  actionLoadingId: number | null = null;
+  actionLoadingType: 'approve' | 'reject' | 'cancel' | null = null;
 
   // Data
   requests: any[] = [];
@@ -40,6 +43,7 @@ export class LeaveListComponent implements OnInit {
   selectedRequest: any = null;
   rejectTarget: any = null;
   rejectReason = '';
+  rejectError = '';
 
   // Filters
   filterSearch = '';
@@ -200,26 +204,63 @@ export class LeaveListComponent implements OnInit {
   }
 
   approve(r: any) {
+    if (this.isActionLoading()) return;
     if (!confirm(`Approve ${r.total_days} day(s) leave for ${r.employee?.first_name}?`)) return;
-    this.http.post(`/api/v1/leave/requests/${r.id}/approve`, {}).subscribe({
-      next: () => { console.log('after the approve action'); this.load(this.currentPage); this.loadStats(); this.loadMyBalance(); if (this.showDetail) this.showDetail = false; }
-    });
+    this.setActionLoading(r.id, 'approve');
+    this.http.post(`/api/v1/leave/requests/${r.id}/approve`, {})
+      .pipe(finalize(() => this.clearActionLoading()))
+      .subscribe({
+        next: () => { this.load(this.currentPage); this.loadStats(); this.loadMyBalance(); if (this.showDetail) this.showDetail = false; }
+      });
   }
 
-  openReject(r: any) { this.rejectTarget = r; this.rejectReason = ''; this.showReject = true; }
+  openReject(r: any) {
+    if (this.isActionLoading()) return;
+    this.rejectTarget = r;
+    this.rejectReason = '';
+    this.rejectError = '';
+    this.showReject = true;
+  }
 
   confirmReject() {
-    if (!this.rejectReason.trim()) return;
-    this.http.post(`/api/v1/leave/requests/${this.rejectTarget.id}/reject`, { reason: this.rejectReason }).subscribe({
-      next: () => { this.showReject = false; this.load(this.currentPage); this.loadStats(); if (this.showDetail) this.showDetail = false; }
-    });
+    if (!this.rejectReason.trim() || !this.rejectTarget || this.isActionLoading()) return;
+    this.rejectError = '';
+    this.setActionLoading(this.rejectTarget.id, 'reject');
+    this.http.post(`/api/v1/leave/requests/${this.rejectTarget.id}/reject`, { reason: this.rejectReason })
+      .pipe(finalize(() => this.clearActionLoading()))
+      .subscribe({
+        next: () => { this.showReject = false; this.load(this.currentPage); this.loadStats(); if (this.showDetail) this.showDetail = false; },
+        error: err => { this.rejectError = err?.error?.message || 'Rejection failed. Please try again.'; }
+      });
   }
 
   cancel(r: any) {
+    if (this.isActionLoading()) return;
     if (!confirm('Cancel this leave request?')) return;
-    this.http.delete(`/api/v1/leave/requests/${r.id}`).subscribe({
-      next: () => { this.load(this.currentPage); this.loadStats(); this.loadMyBalance(); if (this.showDetail) this.showDetail = false; }
-    });
+    this.setActionLoading(r.id, 'cancel');
+    this.http.delete(`/api/v1/leave/requests/${r.id}`)
+      .pipe(finalize(() => this.clearActionLoading()))
+      .subscribe({
+        next: () => { this.load(this.currentPage); this.loadStats(); this.loadMyBalance(); if (this.showDetail) this.showDetail = false; }
+      });
+  }
+
+  setActionLoading(id: number, type: 'approve' | 'reject' | 'cancel'): void {
+    this.actionLoadingId = id;
+    this.actionLoadingType = type;
+  }
+
+  clearActionLoading(): void {
+    this.actionLoadingId = null;
+    this.actionLoadingType = null;
+  }
+
+  isActionLoading(r?: any, type?: 'approve' | 'reject' | 'cancel'): boolean {
+    if (this.actionLoadingId === null) return false;
+    if (!r && !type) return true;
+    const matchesRow = !r || this.actionLoadingId === r.id;
+    const matchesType = !type || this.actionLoadingType === type;
+    return matchesRow && matchesType;
   }
 
   // ── New Request ───────────────────────────────────────────────────────────

@@ -8,6 +8,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTableModule } from '@angular/material/table';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { SharedModule } from '../../shared/shared.module';
 
 import { ContractListComponent } from './components/contract-list.component';
 import { ContractRenewalsComponent } from './components/contract-renewals.component';
@@ -39,6 +40,7 @@ const routes: Routes = [
     MatTooltipModule,
     MatTableModule,
     MatProgressSpinnerModule,
+    SharedModule,
   ],
 })
 export class ContractsModule {}

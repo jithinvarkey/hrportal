@@ -27,6 +27,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MainLayoutComponent } from './components/main-layout/main-layout.component';
+import { ButtonClickLoadingDirective } from './directives/button-click-loading.directive';
 
 const MATERIAL = [
   MatButtonModule, MatCardModule, MatFormFieldModule, MatInputModule,
@@ -40,7 +41,7 @@ const MATERIAL = [
 
 @NgModule({
   declarations: [MainLayoutComponent],
-  imports: [CommonModule, RouterModule, ReactiveFormsModule, FormsModule, ...MATERIAL],
-  exports: [CommonModule, RouterModule, ReactiveFormsModule, FormsModule, MainLayoutComponent, ...MATERIAL]
+  imports: [CommonModule, RouterModule, ReactiveFormsModule, FormsModule, ButtonClickLoadingDirective, ...MATERIAL],
+  exports: [CommonModule, RouterModule, ReactiveFormsModule, FormsModule, MainLayoutComponent, ButtonClickLoadingDirective, ...MATERIAL]
 })
 export class SharedModule {}
