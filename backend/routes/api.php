@@ -432,6 +432,8 @@ Route::prefix('v1')->group(function () {
               Route::put('/settings/loans',                   [AdminController::class, 'updateLoanSettings']);
               Route::get('/settings/annual-tickets',          [AdminController::class, 'annualTicketSettings']);
               Route::put('/settings/annual-tickets',          [AdminController::class, 'updateAnnualTicketSettings']);
+              Route::get('/settings/monthly-leave-reminder',   [AdminController::class, 'monthlyLeaveReminderSettings']);
+              Route::put('/settings/monthly-leave-reminder',   [AdminController::class, 'updateMonthlyLeaveReminderSettings']);
 
             Route::prefix('users')->group(function () {
                 Route::get('/',         [AdminController::class, 'users']);

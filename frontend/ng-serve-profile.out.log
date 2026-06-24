@@ -278,3 +278,36 @@ Component update sent to client(s).
 Application bundle generation complete. [1.421 seconds] - 2026-06-24T12:42:07.535Z
 
 Component update sent to client(s).
+[33m>[39m Changes detected. Rebuilding...
+[32m√[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m       [2m | [22m [1mRaw size[22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m        [2m | [22m [36m19.70 kB[39m[2m | [22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m       [2m | [22m [1mRaw size[22m
+[32mchunk-5GWDTIP2.js[39m  [2m | [22m[2madmin-module[22m[2m | [22m[36m255.96 kB[39m[2m | [22m
+
+Application bundle generation complete. [1.417 seconds] - 2026-06-24T13:12:23.104Z
+
+Page reload sent to client(s).
+[33m>[39m Changes detected. Rebuilding...
+[32m√[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m       [2m | [22m [1mRaw size[22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m        [2m | [22m [36m19.70 kB[39m[2m | [22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m       [2m | [22m [1mRaw size[22m
+[32mchunk-4UNXIVZ5.js[39m  [2m | [22m[2madmin-module[22m[2m | [22m[36m263.46 kB[39m[2m | [22m
+
+Application bundle generation complete. [1.696 seconds] - 2026-06-24T13:12:39.112Z
+
+Component update sent to client(s).
+[33m>[39m Changes detected. Rebuilding...
+[32m√[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m       [2m | [22m [1mRaw size[22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m        [2m | [22m [36m19.70 kB[39m[2m | [22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m       [2m | [22m [1mRaw size[22m
+[32mchunk-YYSAELD5.js[39m  [2m | [22m[2madmin-module[22m[2m | [22m[36m264.30 kB[39m[2m | [22m
+
+Application bundle generation complete. [1.897 seconds] - 2026-06-24T13:13:09.871Z
+
+Component update sent to client(s).
