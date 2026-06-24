@@ -36,8 +36,19 @@ export class ProfileComponent implements OnInit {
   avatarUploading    = false;
   avatarError        = '';
 
+  dependents: any[] = [];
+  dependentsLoading = false;
+  dependentSaving = false;
+  dependentError = '';
+  showDependentForm = false;
+  dependentEditId: number | null = null;
+  dependentPassportFile: File | null = null;
+  dependentIdFile: File | null = null;
+  dependentForm: any = this.blankDependent();
+
   readonly tabs = [
     { id: 'info',     label: 'My Info',        icon: 'person'   },
+    { id: 'dependents', label: 'Dependents',   icon: 'family_restroom' },
     { id: 'edit',     label: 'Edit Profile',   icon: 'edit'     },
     { id: 'password', label: 'Change Password', icon: 'lock'    },
   ];
@@ -59,6 +70,7 @@ export class ProfileComponent implements OnInit {
         this.employee = r.employee || null;
         this.loading  = false;
         this.initEditForm();
+        if (this.employee?.id) this.loadDependents();
         this.cdr.markForCheck();
       },
       error: () => {
@@ -89,6 +101,19 @@ export class ProfileComponent implements OnInit {
 
   avatarUrl(): string | null {
     return this.employee?.avatar_url || null;
+  }
+
+  displayText(value: any, fallback = '-'): string {
+    if (value === null || value === undefined) return fallback;
+    const text = String(value).trim();
+    return text ? text : fallback;
+  }
+
+  switchTab(tabId: string): void {
+    this.activeTab = tabId;
+    if (tabId === 'dependents' && this.employee?.id && !this.dependents.length) {
+      this.loadDependents();
+    }
   }
 
   // ── Edit Profile ──────────────────────────────────────────────────────
@@ -199,6 +224,172 @@ export class ProfileComponent implements OnInit {
         this.cdr.markForCheck();
       },
     });
+  }
+
+  // Dependents
+  private blankDependent(): any {
+    return {
+      full_name: '',
+      relationship: 'spouse',
+      date_of_birth: '',
+      nationality: '',
+      id_number: '',
+      id_expiry: '',
+      passport_number: '',
+      passport_expiry: '',
+      is_active: true,
+    };
+  }
+
+  loadDependents(): void {
+    if (!this.employee?.id) return;
+    this.dependentsLoading = true;
+    this.http.get<any>(`/api/v1/employees/${this.employee.id}/dependents`).subscribe({
+      next: r => {
+        this.dependents = r?.dependents || [];
+        this.dependentsLoading = false;
+        this.cdr.markForCheck();
+      },
+      error: e => {
+        this.dependentsLoading = false;
+        this.dependentError = e?.error?.message || 'Could not load dependents.';
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  openDependentForm(dependent?: any): void {
+    this.dependentEditId = dependent?.id || null;
+    this.dependentForm = dependent ? {
+      ...dependent,
+      date_of_birth: this.toDateInput(dependent.date_of_birth),
+      id_expiry: this.toDateInput(dependent.id_expiry),
+      passport_expiry: this.toDateInput(dependent.passport_expiry),
+      is_active: dependent.is_active ?? true,
+    } : this.blankDependent();
+    this.dependentPassportFile = null;
+    this.dependentIdFile = null;
+    this.dependentError = '';
+    this.showDependentForm = true;
+  }
+
+  cancelDependentForm(): void {
+    this.showDependentForm = false;
+    this.dependentEditId = null;
+    this.dependentForm = this.blankDependent();
+    this.dependentPassportFile = null;
+    this.dependentIdFile = null;
+    this.dependentError = '';
+  }
+
+  selectDependentFile(type: 'passport' | 'id', event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0] || null;
+    if (!file) {
+      if (type === 'passport') this.dependentPassportFile = null;
+      else this.dependentIdFile = null;
+      return;
+    }
+
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png'];
+    if (!allowed.includes(file.type)) {
+      this.dependentError = 'Dependent documents must be PDF, JPG, or PNG.';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      this.dependentError = 'Dependent documents must be 5 MB or smaller.';
+      return;
+    }
+
+    this.dependentError = '';
+    if (type === 'passport') this.dependentPassportFile = file;
+    else this.dependentIdFile = file;
+  }
+
+  saveDependent(): void {
+    if (!this.employee?.id) {
+      this.dependentError = 'No employee record linked to this profile.';
+      return;
+    }
+    if (!this.dependentForm.full_name?.trim()) {
+      this.dependentError = 'Dependent full name is required.';
+      return;
+    }
+    if (!this.dependentForm.id_number?.trim()) {
+      this.dependentError = 'Iqama / ID number is required.';
+      return;
+    }
+
+    this.dependentSaving = true;
+    this.dependentError = '';
+
+    const fd = new FormData();
+    Object.entries(this.dependentForm).forEach(([key, value]) => {
+      if (value === null || value === undefined || value === '') return;
+      fd.append(key, typeof value === 'boolean' ? (value ? '1' : '0') : String(value));
+    });
+    if (this.dependentPassportFile) fd.append('passport_file', this.dependentPassportFile);
+    if (this.dependentIdFile) fd.append('id_file', this.dependentIdFile);
+
+    let request = this.http.post<any>(`/api/v1/employees/${this.employee.id}/dependents`, fd);
+    if (this.dependentEditId) {
+      fd.append('_method', 'PUT');
+      request = this.http.post<any>(`/api/v1/employees/${this.employee.id}/dependents/${this.dependentEditId}`, fd);
+    }
+
+    request.subscribe({
+      next: () => {
+        this.dependentSaving = false;
+        this.cancelDependentForm();
+        this.loadDependents();
+      },
+      error: e => {
+        this.dependentSaving = false;
+        const errors = e?.error?.errors;
+        this.dependentError = errors
+          ? String(Object.values(errors).flat().join(' '))
+          : (e?.error?.message || 'Could not save dependent.');
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  deleteDependent(dependent: any): void {
+    if (!this.employee?.id || !confirm(`Delete ${dependent.full_name}?`)) return;
+    this.http.delete(`/api/v1/employees/${this.employee.id}/dependents/${dependent.id}`).subscribe({
+      next: () => this.loadDependents(),
+      error: e => {
+        this.dependentError = e?.error?.message || 'Could not delete dependent.';
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  downloadDependentDocument(dependent: any, type: 'passport' | 'id'): void {
+    if (!this.employee?.id) return;
+    this.http.get(`/api/v1/employees/${this.employee.id}/dependents/${dependent.id}/documents/${type}`, {
+      responseType: 'blob',
+      observe: 'response',
+    }).subscribe({
+      next: response => {
+        const url = URL.createObjectURL(response.body as Blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = type === 'passport'
+          ? (dependent.passport_file_name || 'passport-document')
+          : (dependent.id_file_name || 'id-document');
+        link.click();
+        URL.revokeObjectURL(url);
+      },
+      error: e => {
+        this.dependentError = e?.error?.message || 'Could not download the document.';
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  private toDateInput(value: string | null): string {
+    if (!value) return '';
+    return String(value).slice(0, 10);
   }
 
   formatEmploymentType(type: string): string {

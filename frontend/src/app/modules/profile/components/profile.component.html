@@ -65,10 +65,12 @@
       <div class="tab-bar">
         <button *ngFor="let t of tabs"
                 class="tab-btn"
+                [hidden]="t.id === 'dependents' && !employee"
                 [class.active]="activeTab === t.id"
-                (click)="activeTab = t.id">
+                (click)="switchTab(t.id)">
           <span class="material-icons">{{ t.icon }}</span>
           {{ t.label }}
+          <span *ngIf="t.id === 'dependents' && dependents.length" class="tab-count">{{ dependents.length }}</span>
         </button>
       </div>
 
@@ -109,6 +111,125 @@
             <div class="info-row"><span class="info-label">Phone</span><span class="info-val">{{ employee.phone || '—' }}</span></div>
             <div class="info-row"><span class="info-label">Work Phone</span><span class="info-val">{{ employee.work_phone || '—' }}</span></div>
             <div class="info-row"><span class="info-label">Nationality</span><span class="info-val">{{ employee.nationality || '—' }}</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Dependents -->
+      <div *ngIf="activeTab === 'dependents'" class="tab-panel">
+        <div class="form-section">
+          <div class="section-head">
+            <div>
+              <div class="section-title">Dependents</div>
+              <p class="section-hint">Add family member details and upload passport or ID/Iqama documents.</p>
+            </div>
+            <button class="btn-primary no-margin" type="button" (click)="openDependentForm()">
+              <span class="material-icons">person_add</span>
+              Add Dependent
+            </button>
+          </div>
+
+          <p *ngIf="dependentError" class="form-error">{{ dependentError }}</p>
+
+          <div *ngIf="showDependentForm" class="dependent-form-card">
+            <div class="section-title small">{{ dependentEditId ? 'Edit Dependent' : 'New Dependent' }}</div>
+            <div class="form-grid">
+              <div class="form-field">
+                <label>Full Name *</label>
+                <input class="inp" [(ngModel)]="dependentForm.full_name" placeholder="Dependent full name">
+              </div>
+              <div class="form-field">
+                <label>Relationship *</label>
+                <select class="inp" [(ngModel)]="dependentForm.relationship">
+                  <option value="spouse">Spouse</option>
+                  <option value="son">Son</option>
+                  <option value="daughter">Daughter</option>
+                  <option value="father">Father</option>
+                  <option value="mother">Mother</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label>Date of Birth</label>
+                <input class="inp" type="date" [(ngModel)]="dependentForm.date_of_birth">
+              </div>
+              <div class="form-field">
+                <label>Nationality</label>
+                <input class="inp" [(ngModel)]="dependentForm.nationality" placeholder="Nationality">
+              </div>
+              <div class="form-field">
+                <label>Iqama / ID Number *</label>
+                <input class="inp" [(ngModel)]="dependentForm.id_number" placeholder="ID number">
+              </div>
+              <div class="form-field">
+                <label>Iqama / ID Expiry</label>
+                <input class="inp" type="date" [(ngModel)]="dependentForm.id_expiry">
+              </div>
+              <div class="form-field">
+                <label>Passport Number</label>
+                <input class="inp" [(ngModel)]="dependentForm.passport_number" placeholder="Passport number">
+              </div>
+              <div class="form-field">
+                <label>Passport Expiry</label>
+                <input class="inp" type="date" [(ngModel)]="dependentForm.passport_expiry">
+              </div>
+              <div class="form-field">
+                <label>Passport Copy</label>
+                <input class="inp file-inp" type="file" accept=".pdf,.jpg,.jpeg,.png" (change)="selectDependentFile('passport', $event)">
+                <small>{{ dependentPassportFile?.name || dependentForm.passport_file_name || 'PDF, JPG, or PNG up to 5 MB' }}</small>
+              </div>
+              <div class="form-field">
+                <label>ID / Iqama Copy</label>
+                <input class="inp file-inp" type="file" accept=".pdf,.jpg,.jpeg,.png" (change)="selectDependentFile('id', $event)">
+                <small>{{ dependentIdFile?.name || dependentForm.id_file_name || 'PDF, JPG, or PNG up to 5 MB' }}</small>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="btn-secondary" type="button" (click)="cancelDependentForm()">Cancel</button>
+              <button class="btn-primary no-margin" type="button" (click)="saveDependent()" [disabled]="dependentSaving">
+                {{ dependentSaving ? 'Saving...' : (dependentEditId ? 'Update Dependent' : 'Save Dependent') }}
+              </button>
+            </div>
+          </div>
+
+          <div *ngIf="dependentsLoading" class="dependent-empty">
+            <div class="spinner sm"></div>
+            <span>Loading dependents...</span>
+          </div>
+
+          <div *ngIf="!dependentsLoading && !dependents.length && !showDependentForm" class="dependent-empty">
+            <span class="material-icons">family_restroom</span>
+            <strong>No dependents added yet</strong>
+            <p>Add spouse, child, or family member information and attach their documents.</p>
+          </div>
+
+          <div class="dependent-list" *ngIf="!dependentsLoading && dependents.length">
+            <div class="dependent-card" *ngFor="let d of dependents">
+              <div class="dependent-main">
+                <div class="dependent-icon"><span class="material-icons">person</span></div>
+                <div>
+                  <div class="dependent-name">{{ d.full_name }}</div>
+                  <div class="dependent-meta">{{ d.relationship | titlecase }} - ID: {{ displayText(d.id_number) }}</div>
+                  <div class="dependent-meta">Nationality: {{ displayText(d.nationality) }} - Passport: {{ displayText(d.passport_number) }}</div>
+                  <div class="doc-actions">
+                    <button *ngIf="d.passport_file_path" type="button" (click)="downloadDependentDocument(d, 'passport')">
+                      <span class="material-icons">description</span> Passport
+                    </button>
+                    <button *ngIf="d.id_file_path" type="button" (click)="downloadDependentDocument(d, 'id')">
+                      <span class="material-icons">badge</span> ID / Iqama
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="dependent-actions">
+                <button type="button" class="icon-action" title="Edit" (click)="openDependentForm(d)">
+                  <span class="material-icons">edit</span>
+                </button>
+                <button type="button" class="icon-action danger" title="Delete" (click)="deleteDependent(d)">
+                  <span class="material-icons">delete_outline</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

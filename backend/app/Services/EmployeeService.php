@@ -17,16 +17,18 @@ class EmployeeService
 {
     /** @var array<int,array<string,mixed>> */
     private const ONBOARDING_TASKS = [
-        ['title' => 'Issue company laptop and equipment',      'category' => 'it_setup',     'sort_order' => 1],
-        ['title' => 'Create email and system accounts',        'category' => 'it_setup',     'sort_order' => 2],
-        ['title' => 'Sign employment contract',                'category' => 'hr_documents', 'sort_order' => 3],
-        ['title' => 'Sign NDA and confidentiality agreement',  'category' => 'hr_documents', 'sort_order' => 4],
-        ['title' => 'Complete mandatory compliance training',  'category' => 'training',     'sort_order' => 5],
-        ['title' => 'Introduce to team and department',        'category' => 'introduction', 'sort_order' => 6],
-        ['title' => 'Set up buddy / mentor',                   'category' => 'introduction', 'sort_order' => 7],
-        ['title' => '30-day probation check-in',               'category' => 'probation',    'sort_order' => 8],
-        ['title' => '60-day probation check-in',               'category' => 'probation',    'sort_order' => 9],
-        ['title' => '90-day probation review',                 'category' => 'probation',    'sort_order' => 10],
+        ['title' => 'Provide company laptop and accessories',       'category' => 'it_setup',     'sort_order' => 1],
+        ['title' => 'Create email and system accounts',             'category' => 'it_setup',     'sort_order' => 2],
+        ['title' => 'Prepare ID badge and access card',             'category' => 'hr_documents', 'sort_order' => 3],
+        ['title' => 'Set up workstation and desk allocation',        'category' => 'it_setup',     'sort_order' => 4],
+        ['title' => 'Sign employment contract',                     'category' => 'hr_documents', 'sort_order' => 5],
+        ['title' => 'Collect required personal documents',          'category' => 'hr_documents', 'sort_order' => 6],
+        ['title' => 'Register bank and payroll details',            'category' => 'hr_documents', 'sort_order' => 7],
+        ['title' => 'Complete mandatory compliance training',       'category' => 'training',     'sort_order' => 8],
+        ['title' => 'Introduce to team and department',             'category' => 'introduction', 'sort_order' => 9],
+        ['title' => 'Set up buddy or mentor',                       'category' => 'introduction', 'sort_order' => 10],
+        ['title' => '30-day probation check-in',                    'category' => 'probation',    'sort_order' => 11],
+        ['title' => '90-day probation review',                      'category' => 'probation',    'sort_order' => 12],
     ];
 
     public function __construct(
@@ -86,7 +88,7 @@ class EmployeeService
                 'category'    => $task['category'],
                 'sort_order'  => $task['sort_order'],
                 'status'      => 'pending',
-                'due_date'    => $employee->hire_date->addDays($task['sort_order'] * 7),
+                'due_date'    => $employee->hire_date?->copy()->addDays($task['sort_order'] * 7),
             ]);
         }
     }

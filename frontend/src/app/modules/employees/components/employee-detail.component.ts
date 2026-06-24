@@ -566,5 +566,70 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
     return ({pending:'var(--text3)',in_progress:'var(--accent)',completed:'var(--success)',skipped:'var(--text3)'} as any)[s] ?? 'var(--text3)';
   }
 
+  displayText(value: any, fallback = '-'): string {
+    if (value === null || value === undefined) return fallback;
+    const text = String(value).trim();
+    if (!text || this.isBrokenPlaceholder(text)) return fallback;
+    return text;
+  }
+
+  displayLabel(value: any): string {
+    const text = this.displayText(value);
+    return text === '-' ? text : text.replace(/_/g, ' ');
+  }
+
+  addressText(): string {
+    const parts = [this.employee?.address, this.employee?.city, this.employee?.country]
+      .map(v => this.displayText(v, ''))
+      .filter(Boolean);
+    return parts.length ? parts.join(', ') : '-';
+  }
+
+  maskedBankAccount(): string {
+    const account = this.displayText(this.employee?.bank_account, '');
+    if (!account) return '-';
+    const tail = account.slice(-4);
+    return tail ? `**** **** ${tail}` : '**** ****';
+  }
+
+  taskTitle(task: any, index: number): string {
+    const title = this.displayText(task?.title, '');
+    if (title) return title;
+
+    const fallbackTitles = [
+      'Provide company laptop and accessories',
+      'Create email and system accounts',
+      'Prepare ID badge and access card',
+      'Set up workstation and desk allocation',
+      'Sign employment contract',
+      'Collect required personal documents',
+      'Register bank and payroll details',
+      'Complete mandatory compliance training',
+      'Introduce to team and department',
+      'Set up buddy or mentor',
+      '30-day probation check-in',
+      '90-day probation review',
+    ];
+
+    return fallbackTitles[index] ?? 'Onboarding task';
+  }
+
+  taskDescription(task: any): string {
+    return this.displayText(task?.description, '');
+  }
+
+  isOD(date: string | null): boolean {
+    if (!date) return false;
+    const due = new Date(date);
+    if (Number.isNaN(due.getTime())) return false;
+    due.setHours(23, 59, 59, 999);
+    return due.getTime() < Date.now();
+  }
+
+  private isBrokenPlaceholder(text: string): boolean {
+    return ['â€”', 'Ã¢â‚¬â€', 'Ã¢â‚¬â€�', 'Â·', 'Ã‚Â·', 'â—â—â—â—'].includes(text)
+      || /^[ÂÃâ€�â€”“—\s]+$/.test(text);
+  }
+
   ngOnDestroy(): void { this.destroy$.next(); this.destroy$.complete(); }
 }
