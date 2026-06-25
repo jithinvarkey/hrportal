@@ -27,6 +27,8 @@ use App\Http\Controllers\API\OrgChartController;
 use App\Http\Controllers\API\DashboardController;
 use App\Http\Controllers\API\AdminController;
 use App\Http\Controllers\API\PublicOnboardingController;
+use App\Http\Controllers\API\LegacyMigrationController;
+use App\Http\Controllers\API\UnitController;
 
 /*
 |--------------------------------------------------------------------------
@@ -154,6 +156,9 @@ Route::prefix('v1')->group(function () {
             Route::delete('/{id}',        [DepartmentController::class, 'destroy']);
             Route::get('/{id}/headcount', [DepartmentController::class, 'headcount']);
         });
+
+        // Units / Branches
+        Route::apiResource('units', UnitController::class);
 
         // Designations
         Route::apiResource('designations', DesignationController::class);
@@ -437,6 +442,7 @@ Route::prefix('v1')->group(function () {
               Route::put('/settings/annual-tickets',          [AdminController::class, 'updateAnnualTicketSettings']);
               Route::get('/settings/monthly-leave-reminder',   [AdminController::class, 'monthlyLeaveReminderSettings']);
               Route::put('/settings/monthly-leave-reminder',   [AdminController::class, 'updateMonthlyLeaveReminderSettings']);
+              Route::post('/legacy-migration/import',           [LegacyMigrationController::class, 'import']);
 
             Route::prefix('users')->group(function () {
                 Route::get('/',         [AdminController::class, 'users']);

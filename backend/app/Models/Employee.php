@@ -17,7 +17,7 @@ class Employee extends Model
     }
 
     protected $fillable = [
-        'user_id','department_id','designation_id','manager_id',
+        'user_id','department_id','unit_id','designation_id','manager_id',
         'employee_code','prefix','first_name','last_name','arabic_name','email',
         'phone','work_phone','extension',
         'dob','gender','marital_status','nationality','hire_date','confirmation_date',
@@ -63,6 +63,7 @@ class Employee extends Model
 
     public function user()          { return $this->belongsTo(User::class); }
     public function department()    { return $this->belongsTo(Department::class); }
+    public function unit()          { return $this->belongsTo(Unit::class); }
     public function designation()   { return $this->belongsTo(Designation::class); }
     public function manager()       { return $this->belongsTo(Employee::class, 'manager_id'); }
     public function subordinates()  { return $this->hasMany(Employee::class, 'manager_id'); }

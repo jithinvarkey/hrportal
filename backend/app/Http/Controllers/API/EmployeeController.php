@@ -67,7 +67,7 @@ class EmployeeController extends Controller {
                 if ($currentManagerId) $query->orWhere('id', $currentManagerId);
             })
             ->orderBy('first_name')->orderBy('last_name')
-            ->get(['id', 'department_id', 'designation_id', 'employee_code', 'first_name', 'last_name', 'status']);
+            ->get(['id', 'department_id', 'unit_id', 'designation_id', 'employee_code', 'first_name', 'last_name', 'status']);
 
         return response()->json(['managers' => $managers]);
     }
@@ -93,7 +93,7 @@ class EmployeeController extends Controller {
         $isHRAdmin = (bool) array_intersect($userRoles, ['super_admin', 'hr_manager', 'hr_staff']);
         $isMgr = in_array('department_manager', $userRoles);
 
-        $query = Employee::with(['department', 'designation', 'manager', 'user'])
+        $query = Employee::with(['department', 'unit', 'designation', 'manager', 'user'])
                 // ── Role-based filtering ──────────────────────────────
                 ->when(!$isHRAdmin, function ($q) use ($user, $isMgr, $request) {
 
@@ -118,6 +118,7 @@ class EmployeeController extends Controller {
                     }
                 })
                 ->when($request->department_id, fn($q) => $q->where('department_id', $request->department_id))
+                ->when($request->unit_id, fn($q) => $q->where('unit_id', $request->unit_id))
                 ->when($request->status, fn($q) => $q->where('status', $request->status))
                 ->when($request->employment_type, fn($q) => $q->where('employment_type', $request->employment_type))
                 ->when($request->search, fn($q) => $q->where(function ($sub) use ($request) {
@@ -243,6 +244,7 @@ class EmployeeController extends Controller {
             'email' => 'required|email|unique:employees,email',
             'hire_date' => 'required|date',
             'department_id' => 'nullable|exists:departments,id',
+            'unit_id' => 'nullable|exists:units,id',
             'designation_id' => 'nullable|exists:designations,id',
             'manager_id' => 'nullable|exists:employees,id',
             'employment_type' => 'required|in:full_time,part_time,contract,intern',
@@ -270,7 +272,7 @@ class EmployeeController extends Controller {
 
                     $employeeData = $request->only([
                         'first_name', 'last_name', 'email', 'phone', 'hire_date',
-                        'department_id', 'designation_id', 'manager_id', 'employment_type',
+                        'department_id', 'unit_id', 'designation_id', 'manager_id', 'employment_type',
                         'status', 'salary', 'confirmation_date', 'termination_date',
                         'probation_period', 'years_of_experience', 'dob',
                         'nationality', 'gender', 'marital_status',
@@ -299,7 +301,7 @@ class EmployeeController extends Controller {
     public function show(int $id): JsonResponse {
         try {
             $employee = Employee::with([
-                        'department', 'designation', 'manager',
+                        'department', 'unit', 'designation', 'manager',
                         'leaveAllocations.leaveType',
                         'onboardingTasks',
                         'dependents',
@@ -419,6 +421,7 @@ class EmployeeController extends Controller {
             'city' => 'sometimes|nullable|string|max:100',
             'country' => 'sometimes|nullable|string|max:100',
             'department_id' => 'sometimes|nullable|exists:departments,id',
+            'unit_id' => 'sometimes|nullable|exists:units,id',
             'designation_id' => 'sometimes|nullable|exists:designations,id',
             'manager_id' => 'sometimes|nullable|exists:employees,id',
             'employment_type' => 'sometimes|required|in:full_time,part_time,contract,intern',
@@ -455,7 +458,7 @@ class EmployeeController extends Controller {
 
         return response()->json([
                     'message' => 'Employee updated successfully.',
-                    'employee' => $employee->load(['department', 'designation']),
+                    'employee' => $employee->load(['department', 'unit', 'designation']),
         ]);
     }
 

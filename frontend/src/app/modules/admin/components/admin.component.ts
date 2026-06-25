@@ -52,10 +52,28 @@ export class AdminComponent implements OnInit {
     { id:'users',        label:'Users',        icon:'people'             },
     { id:'roles',        label:'Roles',        icon:'security'           },
     { id:'permissions',  label:'Permissions',  icon:'lock'               },
+    { id:'units',        label:'Units',        icon:'business'           },
     { id:'departments',  label:'Departments',  icon:'corporate_fare'     },
     { id:'designations', label:'Job Positions', icon:'badge'             },
+    { id:'migration',    label:'Data Migration', icon:'upload_file'       },
     { id:'settings',     label:'Settings',     icon:'settings'           },
   ];
+
+  migrationScopes = [
+    { id: 'all', label: 'All Modules' },
+    { id: 'departments', label: 'Departments' },
+    { id: 'job_positions', label: 'Job Positions' },
+    { id: 'employees', label: 'Employees' },
+    { id: 'leave_records', label: 'Leave Records' },
+    { id: 'loan_records', label: 'Loan Records' },
+  ];
+  migrationOrder = ['Departments', 'Job Positions', 'Employees', 'Leave Records', 'Loan Records'];
+  migrationScope = 'all';
+  migrationFile: File | null = null;
+  migrationSummary: any = null;
+  migrationRunning = false;
+  migrationMessage = '';
+  migrationError = '';
 
   loanSettings = { approval_levels: 2 };
   annualTicketSettings = { saudi_employee_tickets: 1, non_saudi_employee_tickets: 1, non_saudi_max_dependents: 3 };
@@ -73,6 +91,13 @@ export class AdminComponent implements OnInit {
   settingsError = '';
 
   // ── Departments ───────────────────────────────────────────────────────
+  units: any[] = [];
+  unitColumns = ['name','code','legacy','counts','status','actions'];
+  showUnitForm = false;
+  unitForm: any = { name:'', code:'', legacy_unitid:'', description:'', is_active:true };
+  unitEditId: number | null = null;
+  unitError = '';
+
   departments: any[]   = [];
   deptColumns          = ['name','code','manager','parent','headcount','status','actions'];
   showDeptForm         = false;
@@ -189,9 +214,49 @@ export class AdminComponent implements OnInit {
     if (id === 'users')        { this.loadUsers(); this.loadRoles(); }
     if (id === 'roles')        { this.loadRoles(); this.loadPermissions(); }
     if (id === 'permissions')  { this.loadPermissions(); this.loadRoles(); this.loadOverview(); }
+    if (id === 'units')        this.loadUnits();
     if (id === 'departments')  this.loadDepartments();
     if (id === 'designations') { this.loadDesignations(); this.loadDepartments(); }
     if (id === 'settings')     { this.loadLoanSettings(); this.loadAnnualTicketSettings(); this.loadMonthlyLeaveReminderSettings(); }
+  }
+
+  onMigrationFile(event: Event) {
+    const input = event.target as HTMLInputElement;
+    this.migrationFile = input.files?.[0] || null;
+    this.migrationSummary = null;
+    this.migrationMessage = '';
+    this.migrationError = '';
+  }
+
+  runMigration(dryRun: boolean) {
+    if (!this.migrationFile) {
+      this.migrationError = 'Please choose a CSV or Excel file.';
+      return;
+    }
+    const payload = new FormData();
+    payload.append('file', this.migrationFile);
+    payload.append('scope', this.migrationScope);
+    payload.append('dry_run', dryRun ? '1' : '0');
+    this.migrationRunning = true;
+    this.migrationMessage = '';
+    this.migrationError = '';
+    this.http.post<any>('/api/v1/admin/legacy-migration/import', payload).subscribe({
+      next: r => {
+        this.migrationSummary = r.summary;
+        this.migrationMessage = r.message || (dryRun ? 'Migration file validated.' : 'Migration completed.');
+        this.migrationRunning = false;
+        if (!dryRun) {
+          this.loadDepartments();
+          this.loadDesignations();
+          this.loadEmployees();
+          this.loadOverview();
+        }
+      },
+      error: err => {
+        this.migrationError = this.firstError(err) || 'Migration failed. Please check the file and try again.';
+        this.migrationRunning = false;
+      }
+    });
   }
 
   loadLoanSettings() {
@@ -393,6 +458,60 @@ export class AdminComponent implements OnInit {
   }
 
   // ── Department CRUD ─────────────────────────────────────────────────
+  loadUnits() {
+    this.loading = true;
+    this.http.get<any>('/api/v1/units').subscribe({
+      next: r => { this.units = Array.isArray(r) ? r : (r?.data || []); this.loading = false; },
+      error: err => { this.loading = false; console.error('[Admin] units error:', err?.status, err?.error); }
+    });
+  }
+
+  openUnitForm(unit?: any) {
+    if (unit) {
+      this.unitEditId = unit.id;
+      this.unitForm = {
+        name: unit.name,
+        code: unit.code,
+        legacy_unitid: unit.legacy_unitid || '',
+        description: unit.description || '',
+        is_active: unit.is_active ?? true,
+      };
+    } else {
+      this.unitEditId = null;
+      this.unitForm = { name:'', code:'', legacy_unitid:'', description:'', is_active:true };
+    }
+    this.unitError = ''; this.showUnitForm = true;
+  }
+
+  saveUnit() {
+    if (!this.unitForm.name?.trim() || !this.unitForm.code?.trim()) {
+      this.unitError = 'Name and code are required.'; return;
+    }
+    this.submitting = true; this.unitError = '';
+    const payload = {
+      name: this.unitForm.name.trim(),
+      code: this.unitForm.code.trim(),
+      legacy_unitid: this.unitForm.legacy_unitid?.trim() || null,
+      description: this.unitForm.description?.trim() || null,
+      is_active: !!this.unitForm.is_active,
+    };
+    const req = this.unitEditId
+      ? this.http.put<any>(`/api/v1/units/${this.unitEditId}`, payload)
+      : this.http.post<any>('/api/v1/units', payload);
+    req.subscribe({
+      next: () => { this.submitting = false; this.showUnitForm = false; this.loadUnits(); },
+      error: err => { this.submitting = false; this.unitError = this.firstError(err) || 'Failed to save unit.'; }
+    });
+  }
+
+  deleteUnit(unit: any) {
+    if (!confirm(`Delete unit "${unit.name}"?`)) return;
+    this.http.delete(`/api/v1/units/${unit.id}`).subscribe({
+      next: () => this.loadUnits(),
+      error: err => alert(this.firstError(err) || 'Failed to delete unit.')
+    });
+  }
+
   /** Fetch all departments (with manager + parent eager-loaded). */
   loadDepartments() {
     this.loading = true;

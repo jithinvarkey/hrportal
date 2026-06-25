@@ -16,6 +16,7 @@ export class EmployeeFormComponent implements OnInit {
   saving        = false;
   loadingData   = false;
   departments:   any[] = [];
+  units:         any[] = [];
   designations:  any[] = [];
   managers:      any[] = [];
   activeTab     = 'personal';
@@ -64,6 +65,7 @@ export class EmployeeFormComponent implements OnInit {
               // IDs: option [value] renders as a string but the form value is a
               // number; coerce so Angular's strict-equality match selects it.
               department_id: this.toId(e.department_id),
+              unit_id: this.toId(e.unit_id),
               designation_id: this.toId(e.designation_id),
               manager_id: this.toId(e.manager_id),
               employment_type: e.employment_type,
@@ -120,6 +122,7 @@ export class EmployeeFormComponent implements OnInit {
       country:         [''],
       // Employment
       department_id:      [''],
+      unit_id:            [''],
       designation_id:     [''],
       manager_id:         [''],
       employment_type:    ['full_time', Validators.required],
@@ -150,6 +153,7 @@ export class EmployeeFormComponent implements OnInit {
 
   loadLookups() {
     this.http.get<any>('/api/v1/departments').subscribe(r => this.departments = r?.data || r || []);
+    this.http.get<any>('/api/v1/units').subscribe(r => this.units = r?.data || r || []);
 
     const params: any = {};
     if (this.isEdit) params.employee_id = this.employeeId;
@@ -229,7 +233,7 @@ export class EmployeeFormComponent implements OnInit {
       // Switch to first tab that has an error
       const tabFields: Record<string, string[]> = {
         personal:   ['first_name','last_name','email','phone','dob','gender','marital_status','nationality','national_id','address','city','country'],
-        employment: ['department_id','designation_id','manager_id','employment_type','status','hire_date','confirmation_date','probation_period'],
+        employment: ['department_id','unit_id','designation_id','manager_id','employment_type','status','hire_date','confirmation_date','probation_period'],
         financial:  ['salary','bank_name','bank_account'],
         emergency:  ['emergency_contact_name','emergency_contact_phone','emergency_contact_relation'],
       };
@@ -271,7 +275,7 @@ export class EmployeeFormComponent implements OnInit {
     ['dob', 'hire_date', 'confirmation_date', 'termination_date'].forEach(field => {
       payload[field] = this.toDateInput(payload[field]) || null;
     });
-    ['department_id', 'designation_id', 'manager_id'].forEach(field => {
+    ['department_id', 'unit_id', 'designation_id', 'manager_id'].forEach(field => {
       payload[field] = payload[field] === '' || payload[field] === null ? null : Number(payload[field]);
     });
     ['housing_allowance', 'transport_allowance', 'years_of_experience'].forEach(field => {
@@ -283,7 +287,7 @@ export class EmployeeFormComponent implements OnInit {
   tabHasError(tabId: string): boolean {
     const tabFields: Record<string, string[]> = {
       personal:   ['first_name','last_name','email','phone','dob','gender','marital_status','nationality','national_id','address','city','country'],
-      employment: ['department_id','designation_id','manager_id','employment_type','status','hire_date','confirmation_date','probation_period'],
+      employment: ['department_id','unit_id','designation_id','manager_id','employment_type','status','hire_date','confirmation_date','probation_period'],
       financial:  ['salary','bank_name','bank_account'],
       emergency:  ['emergency_contact_name','emergency_contact_phone','emergency_contact_relation'],
     };

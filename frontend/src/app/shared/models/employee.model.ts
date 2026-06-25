@@ -22,6 +22,11 @@ export interface DepartmentRef {
   name: string;
 }
 
+export interface UnitRef {
+  id:   number;
+  name: string;
+}
+
 export interface DesignationRef {
   id:    number;
   title: string;
@@ -73,6 +78,7 @@ export interface Employee {
 
   // Employment
   department_id:        number | null;
+  unit_id:              number | null;
   designation_id:       number | null;
   manager_id:           number | null;
   employment_type:      EmploymentType;
@@ -100,6 +106,7 @@ export interface Employee {
 
   // Conditionally loaded relations
   department?:          DepartmentRef;
+  unit?:                UnitRef;
   designation?:         DesignationRef;
   manager?:             ManagerRef | null;
   leave_allocations?:   LeaveAllocationSummary[];
@@ -126,6 +133,7 @@ export interface EmployeeFilters {
   search?:          string;
   status?:          EmployeeStatus | '';
   department_id?:   number | '';
+  unit_id?:         number | '';
   employment_type?: EmploymentType | '';
   sort_by?:         string;
   sort_dir?:        'asc' | 'desc';

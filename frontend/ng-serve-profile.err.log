@@ -5,3 +5,108 @@
           ╵                              [32m~~~~~~~~~~[0m
 
 [39m[22m
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2353: Object literal may only specify known properties, and 'unit_id' does not exist in type 'EmployeeFilters'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/modules/employees/components/employee-list.component.ts:232:8:
+[37m      232 │         [32munit_id[37m:         this.unitFilter.value     ?? '',
+          ╵         [32m~~~~~~~[0m
+
+  The expected type comes from property 'params' which is declared here on type '{ params?: EmployeeFilters; }'
+
+    src/app/modules/employees/store/employee.actions.ts:22:10:
+[37m      22 │   props<{ [32mparams[37m?: EmployeeFilters }>()
+         ╵           [32m~~~~~~[0m
+
+[39m[22m
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2353: Object literal may only specify known properties, and 'unit_id' does not exist in type 'EmployeeFilters'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/modules/employees/components/employee-list.component.ts:232:8:
+[37m      232 │         [32munit_id[37m:         this.unitFilter.value     ?? '',
+          ╵         [32m~~~~~~~[0m
+
+  The expected type comes from property 'params' which is declared here on type '{ params?: EmployeeFilters; }'
+
+    src/app/modules/employees/store/employee.actions.ts:22:10:
+[37m      22 │   props<{ [32mparams[37m?: EmployeeFilters }>()
+         ╵           [32m~~~~~~[0m
+
+[39m[22m
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'loadUnits' does not exist on type 'AdminComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/modules/admin/components/admin.component.ts:217:36:
+[37m      217 │     if (id === 'units')        this.[32mloadUnits[37m();
+          ╵                                     [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'loadUnits' does not exist on type 'AdminComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/modules/admin/components/admin.component.ts:218:62:
+[37m      218 │ ...=== 'departments')  { this.loadDepartments(); this.[32mloadUnits[37m(); }
+          ╵                                                       [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2353: Object literal may only specify known properties, and 'unit_id' does not exist in type 'EmployeeFilters'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/modules/employees/components/employee-list.component.ts:232:8:
+[37m      232 │         [32munit_id[37m:         this.unitFilter.value     ?? '',
+          ╵         [32m~~~~~~~[0m
+
+  The expected type comes from property 'params' which is declared here on type '{ params?: EmployeeFilters; }'
+
+    src/app/modules/employees/store/employee.actions.ts:22:10:
+[37m      22 │   props<{ [32mparams[37m?: EmployeeFilters }>()
+         ╵           [32m~~~~~~[0m
+
+[39m[22m
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2353: Object literal may only specify known properties, and 'unit_id' does not exist in type 'EmployeeFilters'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/modules/employees/components/employee-list.component.ts:232:8:
+[37m      232 │         [32munit_id[37m:         this.unitFilter.value     ?? '',
+          ╵         [32m~~~~~~~[0m
+
+  The expected type comes from property 'params' which is declared here on type '{ params?: EmployeeFilters; }'
+
+    src/app/modules/employees/store/employee.actions.ts:22:10:
+[37m      22 │   props<{ [32mparams[37m?: EmployeeFilters }>()
+         ╵           [32m~~~~~~[0m
+
+[39m[22m
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2353: Object literal may only specify known properties, and 'unit_id' does not exist in type 'EmployeeFilters'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/modules/employees/components/employee-list.component.ts:232:8:
+[37m      232 │         [32munit_id[37m:         this.unitFilter.value     ?? '',
+          ╵         [32m~~~~~~~[0m
+
+  The expected type comes from property 'params' which is declared here on type '{ params?: EmployeeFilters; }'
+
+    src/app/modules/employees/store/employee.actions.ts:22:10:
+[37m      22 │   props<{ [32mparams[37m?: EmployeeFilters }>()
+         ╵           [32m~~~~~~[0m
+
+[39m[22m
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2353: Object literal may only specify known properties, and 'unit_id' does not exist in type 'EmployeeFilters'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/modules/employees/components/employee-list.component.ts:232:8:
+[37m      232 │         [32munit_id[37m:         this.unitFilter.value     ?? '',
+          ╵         [32m~~~~~~~[0m
+
+  The expected type comes from property 'params' which is declared here on type '{ params?: EmployeeFilters; }'
+
+    src/app/modules/employees/store/employee.actions.ts:22:10:
+[37m      22 │   props<{ [32mparams[37m?: EmployeeFilters }>()
+         ╵           [32m~~~~~~[0m
+
+[39m[22m
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2353: Object literal may only specify known properties, and 'unit_id' does not exist in type 'EmployeeFilters'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/modules/employees/components/employee-list.component.ts:232:8:
+[37m      232 │         [32munit_id[37m:         this.unitFilter.value     ?? '',
+          ╵         [32m~~~~~~~[0m
+
+  The expected type comes from property 'params' which is declared here on type '{ params?: EmployeeFilters; }'
+
+    src/app/modules/employees/store/employee.actions.ts:22:10:
+[37m      22 │   props<{ [32mparams[37m?: EmployeeFilters }>()
+         ╵           [32m~~~~~~[0m
+
+[39m[22m

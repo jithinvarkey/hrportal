@@ -66,6 +66,9 @@ class RecruitmentService
 
         $empCode = $this->generateEmployeeCode();
 
+        $departmentId = $data['department_id'] ?? $app->jobPosting?->department_id;
+        $unitId = $data['unit_id'] ?? null;
+
         $employee = Employee::create([
             'user_id'          => $user->id,
             'first_name'       => $firstName,
@@ -75,7 +78,8 @@ class RecruitmentService
             'hire_date'        => $data['hire_date']        ?? now()->toDateString(),
             'employment_type'  => $data['employment_type']  ?? $app->jobPosting?->employment_type ?? 'full_time',
             'salary'           => $data['salary']           ?? 0,
-            'department_id'    => $data['department_id']    ?? $app->jobPosting?->department_id,
+            'department_id'    => $departmentId,
+            'unit_id'          => $unitId,
             'designation_id'   => $data['designation_id']   ?? $app->jobPosting?->designation_id,
             'manager_id'       => $data['manager_id']       ?? null,
             'probation_period' => $data['probation_period'] ?? 90,
