@@ -474,7 +474,7 @@
       </div>
     </div>
     <div class="field-group">
-      <label class="field-label">Description <span class="req">*</span></label>
+      <label class="field-label">Description</label>
       <textarea class="field-textarea" rows="4" placeholder="Role overview and responsibilities…" formControlName="description"></textarea>
     </div>
     <div class="field-group">
@@ -487,6 +487,7 @@
     </div>
   </div>
   <div class="modal-footer">
+    <div class="field-err" *ngIf="errorMsg" style="margin-right:auto">{{ errorMsg }}</div>
     <button class="btn-outline" (click)="showJobForm=false">Cancel</button>
     <button class="btn-primary" (click)="saveJob()" [disabled]="submitting">
       <mat-icon>{{ submitting ? 'hourglass_empty' : 'save' }}</mat-icon>
@@ -770,7 +771,7 @@
     </div>
     <div class="two-col">
       <div class="field-group">
-        <label class="field-label">Phone</label>
+        <label class="field-label">Phone <span class="req">*</span></label>
         <input class="field-input" [(ngModel)]="cvForm.applicant_phone" placeholder="+966 5x xxx xxxx">
       </div>
       <div class="field-group">
@@ -841,7 +842,7 @@
   <div class="modal-footer">
     <button class="btn-outline" (click)="showCvForm=false">Cancel</button>
     <button class="btn-primary" (click)="submitCv()"
-            [disabled]="cvFormSubmitting || !cvForm.applicant_name || !cvForm.applicant_email">
+            [disabled]="cvFormSubmitting || !cvForm.applicant_name || !cvForm.applicant_email || !cvForm.applicant_phone">
       <mat-icon>{{ cvFormSubmitting ? 'hourglass_empty' : 'save' }}</mat-icon>
       {{ cvFormSubmitting ? 'Saving…' : 'Save to CV Bank' }}
     </button>
@@ -1045,7 +1046,7 @@
   <div class="modal-footer">
     <button class="btn-outline" (click)="showAddApplicant=false">Cancel</button>
     <button class="btn-primary" (click)="submitApplicant()"
-            [disabled]="addApplicantBusy || !applicantForm.job_posting_id || !applicantForm.applicant_name || !applicantForm.applicant_email">
+            [disabled]="addApplicantBusy || !applicantForm.job_posting_id || !applicantForm.applicant_name || !applicantForm.applicant_email || !applicantForm.applicant_phone">
       <mat-icon>{{ addApplicantBusy ? 'hourglass_empty' : 'person_add' }}</mat-icon>
       {{ addApplicantBusy ? 'Adding…' : 'Add to Pipeline' }}
     </button>

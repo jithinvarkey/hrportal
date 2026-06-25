@@ -2,13 +2,14 @@
 namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\{JobPosting, JobApplication, Interview};
+use App\Services\NewHireOnboardingService;
 use App\Services\RecruitmentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class RecruitmentController extends Controller {
     protected $service;
-    public function __construct(RecruitmentService $service) { $this->service = $service; }
+    public function __construct(RecruitmentService $service, private NewHireOnboardingService $onboardingLinks) { $this->service = $service; }
 
     public function jobs(Request $request) {
         $jobs = JobPosting::with(['department','designation'])
@@ -45,7 +46,7 @@ class RecruitmentController extends Controller {
         $request->validate([
             'title'           => 'required|string|max:150',
             'employment_type' => 'required|in:full_time,part_time,contract,intern',
-            'description'     => 'required|string',
+            'description'     => 'nullable|string',
             'status'          => 'sometimes|in:draft,open,closed,on_hold',
             'vacancies'       => 'sometimes|integer|min:1',
             'department_id'   => 'nullable|exists:departments,id',
@@ -54,7 +55,10 @@ class RecruitmentController extends Controller {
             'salary_max'      => 'nullable|numeric|min:0',
             'closing_date'    => 'nullable|date|after:today',
         ]);
-        $job = JobPosting::create(array_merge($request->all(), [
+        $data = $request->all();
+        $data['description'] = trim((string) ($data['description'] ?? '')) ?: ($data['title'] . ' position');
+
+        $job = JobPosting::create(array_merge($data, [
             'created_by' => auth()->id(),
             'status'     => $request->status ?? 'open',
         ]));
@@ -76,7 +80,7 @@ class RecruitmentController extends Controller {
         $request->validate([
             'applicant_name'  => 'required|string|max:150',
             'applicant_email' => 'required|email|max:191',
-            'applicant_phone' => 'nullable|string|max:20',
+            'applicant_phone' => 'required|string|max:20',
             'cv_path'         => 'nullable|file|mimes:pdf,doc,docx|max:5120',
             'expected_salary' => 'nullable|numeric',
             'available_from'  => 'nullable|date',
@@ -174,6 +178,12 @@ class RecruitmentController extends Controller {
             $app->jobPosting->update(['status' => 'closed']);
         }
 
+        $onboardingUrl = $this->onboardingLinks->createAndEmailLink(
+            $result['employee'],
+            $result['login_email'] ?? null,
+            $result['temp_password'] ?? null
+        );
+
         return response()->json([
             'message'          => 'Employee record created successfully.',
             'employee'         => $result['employee'],
@@ -182,6 +192,7 @@ class RecruitmentController extends Controller {
             'temp_password'    => $result['temp_password'],
             'is_new_account'   => $result['is_new'],
             'onboarding_tasks' => $result['onboarding_tasks'],
+            'onboarding_url'   => $onboardingUrl,
         ], 201);
     }
 
@@ -226,7 +237,7 @@ class RecruitmentController extends Controller {
         $request->validate([
             'applicant_name'    => 'required|string|max:150',
             'applicant_email'   => 'required|email|max:191',
-            'applicant_phone'   => 'nullable|string|max:20',
+            'applicant_phone'   => 'required|string|max:20',
             'department_id'      => 'nullable|exists:departments,id',
             'position_applied'  => 'nullable|string|max:150',
             'nationality'       => 'nullable|string|max:100',

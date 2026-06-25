@@ -1,0 +1,7 @@
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'firstError' does not exist on type 'RecruitmentListComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/modules/recruitment/components/recruitment-list.component.ts:422:29:
+[37m      422 │         this.errorMsg = this.[32mfirstError[37m(err) || err?.error?.messa...
+          ╵                              [32m~~~~~~~~~~[0m
+
+[39m[22m
