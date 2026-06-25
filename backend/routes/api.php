@@ -26,6 +26,7 @@ use App\Http\Controllers\API\AssetController;
 use App\Http\Controllers\API\OrgChartController;
 use App\Http\Controllers\API\DashboardController;
 use App\Http\Controllers\API\AdminController;
+use App\Http\Controllers\API\PublicOnboardingController;
 
 /*
 |--------------------------------------------------------------------------
@@ -46,6 +47,8 @@ Route::prefix('v1')->group(function () {
     // ── Public Job Listings ──────────────────────────────────────────────
     Route::get('jobs',                    [RecruitmentController::class, 'publicJobs']);
     Route::post('jobs/{jobId}/apply',     [RecruitmentController::class, 'publicApply']);
+    Route::get('public/onboarding/{token}', [PublicOnboardingController::class, 'show']);
+    Route::post('public/onboarding/{token}', [PublicOnboardingController::class, 'submit']);
 
     // ── Protected Routes ─────────────────────────────────────────────────
 

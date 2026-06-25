@@ -140,7 +140,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
       salary_min:      [null],
       salary_max:      [null],
       closing_date:    [''],
-      description:     ['', Validators.required],
+      description:     [''],
       requirements:    [''],
       benefits:        [''],
     });
@@ -387,11 +387,28 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   }
 
   saveJob(): void {
-    if (this.jobForm.invalid) { this.jobForm.markAllAsTouched(); return; }
+    const selected = this.selectedJobPosition;
+    if (selected && !this.jobForm.value.title) {
+      this.jobForm.patchValue({ title: selected.title });
+    }
+    if (this.jobForm.invalid) {
+      this.jobForm.markAllAsTouched();
+      this.errorMsg = this.jobForm.get('designation_id')?.invalid
+        ? 'Please select a job position.'
+        : 'Please complete the required fields.';
+      this.cdr.markForCheck();
+      return;
+    }
     this.submitting = true;
+    this.errorMsg = '';
+    const body = { ...this.jobForm.value };
+    body.description = String(body.description || '').trim() || `${body.title} position`;
+    ['department_id', 'designation_id', 'salary_min', 'salary_max', 'closing_date'].forEach(key => {
+      if (body[key] === '') body[key] = null;
+    });
     const req = this.editJobId
-      ? this.http.put(`${this.api}/jobs/${this.editJobId}`, this.jobForm.value)
-      : this.http.post(`${this.api}/jobs`, this.jobForm.value);
+      ? this.http.put(`${this.api}/jobs/${this.editJobId}`, body)
+      : this.http.post(`${this.api}/jobs`, body);
     req.pipe(takeUntil(this.destroy$)).subscribe({
       next: () => {
         this.submitting = false; this.showJobForm = false;
@@ -400,7 +417,11 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
         setTimeout(() => { this.successMsg = ''; this.cdr.markForCheck(); }, 3000);
         this.cdr.markForCheck();
       },
-      error: (err: any) => { this.submitting = false; this.errorMsg = err?.error?.message ?? 'Save failed.'; this.cdr.markForCheck(); },
+      error: (err: any) => {
+        this.submitting = false;
+        this.errorMsg = this.firstError(err) || err?.error?.message || 'Save failed.';
+        this.cdr.markForCheck();
+      },
     });
   }
 
@@ -466,7 +487,11 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   }
 
   submitCv(): void {
-    if (!this.cvForm.applicant_name || !this.cvForm.applicant_email) return;
+    if (!this.cvForm.applicant_name || !this.cvForm.applicant_email || !this.cvForm.applicant_phone) {
+      this.errorMsg = 'Full name, email, and phone are required.';
+      this.cdr.markForCheck();
+      return;
+    }
     this.cvFormSubmitting = true;
     const fd = new FormData();
     Object.entries(this.cvForm).forEach(([k, v]) => { if (v !== null && v !== '') fd.append(k, String(v)); });
@@ -571,6 +596,15 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   formatDate(d: string|null): string { if(!d) return '—'; return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
   get pages(): number[] { if(!this.pagination?.last_page) return []; return Array.from({length:Math.min(this.pagination.last_page,8)},(_,i)=>i+1); }
   get f() { return this.jobForm.controls; }
+
+  private firstError(err: any): string {
+    if (err?.error?.errors) {
+      const first = Object.values(err.error.errors)[0];
+      if (Array.isArray(first) && first.length) return String(first[0]);
+    }
+    return err?.error?.message || '';
+  }
+
   openAddApplicantForm(): void {
     this.applicantForm = {
       job_posting_id: this.selectedJobFilter ?? '',
@@ -594,7 +628,11 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   }
 
   submitApplicant(): void {
-    if (!this.applicantForm.job_posting_id || !this.applicantForm.applicant_name || !this.applicantForm.applicant_email) return;
+    if (!this.applicantForm.job_posting_id || !this.applicantForm.applicant_name || !this.applicantForm.applicant_email || !this.applicantForm.applicant_phone) {
+      this.errorMsg = 'Job posting, full name, email, and phone are required.';
+      this.cdr.markForCheck();
+      return;
+    }
     this.addApplicantBusy = true;
     this.errorMsg = '';
 

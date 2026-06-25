@@ -25,7 +25,7 @@ class Employee extends Model
         'status','probation_period','years_of_experience',
         'salary','housing_allowance','transport_allowance','other_allowances','mobile_allowance','food_allowance',
         'avatar','address','city','country',
-        'national_id','bank_name','bank_account',
+        'national_id','id_expiry_date','passport_number','passport_expiry_date','bank_name','bank_account',
         'emergency_contact_name','emergency_contact_phone','emergency_contact_relation',
         'notes',
     ];
@@ -37,6 +37,8 @@ class Employee extends Model
         'hire_date'         => 'date:Y-m-d',
         'confirmation_date' => 'date:Y-m-d',
         'termination_date'  => 'date:Y-m-d',
+        'id_expiry_date'    => 'date:Y-m-d',
+        'passport_expiry_date' => 'date:Y-m-d',
         'salary'             => 'decimal:2',
         'housing_allowance'  => 'decimal:2',
         'transport_allowance'=> 'decimal:2',
