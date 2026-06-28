@@ -138,6 +138,8 @@ class EmployeeController extends Controller {
                         'per_page' => $paginator->perPage(),
                         'current_page' => $paginator->currentPage(),
                         'last_page' => $paginator->lastPage(),
+                        'from' => $paginator->firstItem(),
+                        'to' => $paginator->lastItem(),
                     ],
                     'links' => [
                         'first' => $paginator->url(1),

@@ -23,9 +23,15 @@ class AuthController extends Controller
         ]);
 
         if (!Auth::attempt($request->only('email', 'password'))) {
-            throw ValidationException::withMessages([
-                'email' => ['The provided credentials are incorrect.'],
-            ]);
+            $user = User::where('email', strtolower($request->email))->first();
+
+            if (!$user || !$this->attemptLegacyMd5Login($user, $request->password)) {
+                throw ValidationException::withMessages([
+                    'email' => ['The provided credentials are incorrect.'],
+                ]);
+            }
+
+            Auth::login($user);
         }
 
         $user  = $request->user();
@@ -126,5 +132,21 @@ class AuthController extends Controller
                 'designationId'=>optional($user->employee)->designation_id,
             ] : null,
         ];
+    }
+
+    private function attemptLegacyMd5Login(User $user, string $password): bool
+    {
+        $legacyHash = strtolower((string) $user->legacy_password_md5);
+
+        if ($legacyHash === '' || !hash_equals($legacyHash, md5($password))) {
+            return false;
+        }
+
+        $user->forceFill([
+            'password' => Hash::make($password),
+            'legacy_password_md5' => null,
+        ])->save();
+
+        return true;
     }
 }

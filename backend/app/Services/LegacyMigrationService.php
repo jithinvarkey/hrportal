@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\Loan;
+use App\Models\LoanInstallment;
 use App\Models\LoanType;
 use App\Models\Unit;
 use App\Models\User;
@@ -20,7 +21,7 @@ use ZipArchive;
 
 class LegacyMigrationService
 {
-    private const MODULE_ORDER = ['departments', 'job_positions', 'employees', 'leave_records', 'loan_records'];
+    private const MODULE_ORDER = ['departments', 'job_positions', 'employees', 'employee_managers', 'leave_records', 'loan_records'];
     private array $departmentAliases = [];
     private array $unitAliases = [];
 
@@ -55,13 +56,21 @@ class LegacyMigrationService
                         continue;
                     }
 
+                    $result = 'success';
                     if ($dryRun) {
                         $this->validateRow($module, $row);
+                        if ($module === 'employee_managers') {
+                            $result = $this->employeeManager($row, true);
+                        }
                     } else {
-                        DB::transaction(fn () => $this->migrateRow($module, $row));
+                        $result = DB::transaction(fn () => $this->migrateRow($module, $row));
                     }
 
-                    $moduleSummary['success']++;
+                    if ($result === 'skipped') {
+                        $moduleSummary['skipped']++;
+                    } else {
+                        $moduleSummary['success']++;
+                    }
                 } catch (\Throwable $e) {
                     $moduleSummary['failed']++;
                     $moduleSummary['errors'][] = [
@@ -287,13 +296,14 @@ class LegacyMigrationService
         return $rowsByModule;
     }
 
-    private function migrateRow(string $module, array $row): void
+    private function migrateRow(string $module, array $row): string
     {
         $this->validateRow($module, $row);
-        match ($module) {
+        return match ($module) {
             'departments' => $this->department($row),
             'job_positions' => $this->jobPosition($row),
             'employees' => $this->employee($row),
+            'employee_managers' => $this->employeeManager($row),
             'leave_records' => $this->leaveRecord($row),
             'loan_records' => $this->loanRecord($row),
             default => throw new \InvalidArgumentException('Unknown migration module.'),
@@ -307,8 +317,9 @@ class LegacyMigrationService
             'departments' => ['name'],
             'job_positions' => ['title'],
             'employees' => ['first_name', 'last_name', 'email', 'hire_date'],
-            'leave_records' => ['employee_code', 'leave_type', 'start_date', 'end_date'],
-            'loan_records' => ['employee_code', 'loan_type', 'amount', 'installments'],
+            'employee_managers' => [],
+            'leave_records' => ['employee_code', 'leave_type', 'start_date'],
+            'loan_records' => ['employee_code', 'loan_type', 'amount'],
             default => [],
         };
         foreach ($required as $field) {
@@ -318,7 +329,7 @@ class LegacyMigrationService
         }
     }
 
-    private function department(array $row): void
+    private function department(array $row): string
     {
         $row = $this->normalizeLegacyAliases($row);
         $name = trim($row['name']);
@@ -354,9 +365,10 @@ class LegacyMigrationService
         }
 
         $this->rememberDepartmentAlias($department, $legacyCode, $name);
+        return 'success';
     }
 
-    private function jobPosition(array $row): void
+    private function jobPosition(array $row): string
     {
         $row = $this->normalizeLegacyAliases($row);
         $department = $this->findDepartment($row['department_code'] ?? null, $row['department'] ?? null);
@@ -369,27 +381,36 @@ class LegacyMigrationService
                 'is_active' => $this->bool($row['is_active'] ?? true),
             ]
         );
+        return 'success';
     }
 
-    private function employee(array $row): void
+    private function employee(array $row): string
     {
         $row = $this->normalizeLegacyAliases($row);
         $email = strtolower($row['email']);
+        $legacyPasswordMd5 = $this->legacyPasswordMd5($row['legacy_password_md5'] ?? $row['password'] ?? null);
         $user = User::firstOrCreate(
             ['email' => $email],
             [
                 'name' => trim($row['first_name'] . ' ' . $row['last_name']),
-                'password' => Hash::make(($row['password'] ?? '') ?: 'Password@123'),
+                'password' => $legacyPasswordMd5
+                    ? Hash::make(Str::random(40))
+                    : Hash::make(($row['password'] ?? '') ?: 'Password@123'),
+                'legacy_password_md5' => $legacyPasswordMd5,
             ]
         );
+        if ($legacyPasswordMd5 && !$user->legacy_password_md5) {
+            $user->forceFill(['legacy_password_md5' => $legacyPasswordMd5])->save();
+        }
         if (!$user->hasRole('employee')) {
             $user->assignRole('employee');
         }
 
         $department = $this->findDepartment($row['department_code'] ?? null, $row['department'] ?? null);
         $unit = $this->findOrCreateUnit($row['unitid'] ?? $row['unit_id'] ?? null, $row['unit_name'] ?? $row['branch_name'] ?? null);
-        $designation = $this->findDesignation($row['job_position'] ?? $row['designation'] ?? null, $department?->id);
-        $code = $row['employee_code'] ?: $this->nextEmployeeCode();
+        $designation = $this->findDesignation($row['job_position'] ?? $row['designation'] ?? $row['title'] ?? null, $department?->id);
+        $code = $this->employeeCode($row['employee_code'] ?? null) ?: $this->nextEmployeeCode();
+        $isActive = $this->bool($row['is_active'] ?? true);
 
         Employee::updateOrCreate(
             ['email' => $email],
@@ -403,8 +424,10 @@ class LegacyMigrationService
                 'gender' => $this->enum($row['gender'] ?? null, ['male', 'female', 'other']),
                 'marital_status' => $this->enum($row['marital_status'] ?? null, ['single', 'married', 'divorced', 'widowed']),
                 'hire_date' => $this->date($row['hire_date']) ?: now()->toDateString(),
+                'confirmation_date' => $this->date($row['confirmation_date'] ?? null),
+                'termination_date' => $this->date($row['termination_date'] ?? null),
                 'employment_type' => $this->enum($row['employment_type'] ?? null, ['full_time', 'part_time', 'contract', 'intern']) ?: 'full_time',
-                'status' => $this->enum($row['status'] ?? null, ['active', 'inactive', 'terminated', 'on_leave', 'probation']) ?: 'active',
+                'status' => $this->enum($row['status'] ?? null, ['active', 'inactive', 'terminated', 'on_leave', 'probation']) ?: ($isActive ? 'active' : 'inactive'),
                 'salary' => $this->nullableDecimal($row['salary'] ?? null) ?? 0,
                 'department_id' => $department?->id,
                 'unit_id' => $unit?->id,
@@ -419,62 +442,327 @@ class LegacyMigrationService
                 'emergency_contact_phone' => $row['emergency_contact_phone'] ?? null,
             ]
         );
+        return 'success';
     }
 
-    private function leaveRecord(array $row): void
+    private function employeeManager(array $row, bool $dryRun = false): string
+    {
+        $row = $this->normalizeLegacyAliases($row);
+        $employee = $this->findEmployeeForManagerMigration(
+            $this->firstLegacyValue($row, ['employee_code', 'empnum', 'empcode', 'employee_number', 'employee_no']),
+            $this->firstLegacyValue($row, ['email', 'emailaddress', 'email_address', 'employee_email']),
+            'employee'
+        );
+
+        $managerCode = $this->firstLegacyValue($row, [
+            'manager_empnum',
+            'manager_employee_code',
+            'manager_empcode',
+            'manager_employee_number',
+            'manager_employee_no',
+            'direct_manager_empnum',
+            'direct_manager_employee_code',
+            'directmanager_empnum',
+            'directmanagerempnum',
+            'reporting_manager_empnum',
+            'reportingmanager_empnum',
+        ]);
+        $managerEmail = $this->firstLegacyValue($row, [
+            'manager_email',
+            'manager_emailaddress',
+            'manager_email_address',
+            'direct_manager_email',
+            'direct_manager_emailaddress',
+            'directmanager_email',
+            'directmanageremail',
+            'reporting_manager_email',
+            'reportingmanager_email',
+        ]);
+        $managerName = $this->firstLegacyValue($row, [
+            'manager_name',
+            'manager_full_name',
+            'direct_manager_name',
+            'direct_manager_full_name',
+            'directmanager_name',
+            'directmanagername',
+            'reporting_manager_name',
+            'reportingmanager_name',
+            'reportingmanagername',
+        ]);
+
+        if (!$managerCode && !$managerEmail && !$managerName) {
+            return 'skipped';
+        }
+
+        $manager = $this->findEmployeeForManagerMigration($managerCode, $managerEmail, 'manager', $managerName, true);
+        if (!$manager) {
+            return 'skipped';
+        }
+
+        if ((int) $employee->id === (int) $manager->id) {
+            throw new \InvalidArgumentException('Employee cannot be their own manager.');
+        }
+
+        if ($this->managerAssignmentCreatesCycle($employee, $manager)) {
+            throw new \InvalidArgumentException('Manager assignment would create a reporting cycle.');
+        }
+
+        if ((int) $employee->manager_id === (int) $manager->id) {
+            return 'skipped';
+        }
+
+        if (!$dryRun) {
+            $employee->forceFill(['manager_id' => $manager->id])->save();
+        }
+
+        return 'success';
+    }
+
+    private function leaveRecord(array $row): string
     {
         $row = $this->normalizeLegacyAliases($row);
         $employee = $this->employeeByCode($row['employee_code']);
-        $leaveType = LeaveType::firstOrCreate(
-            ['code' => Str::upper(Str::slug($row['leave_type'], '_'))],
-            ['name' => $row['leave_type'], 'days_allowed' => 0, 'is_paid' => true, 'is_active' => true]
-        );
+        $leaveType = $this->findOrCreateLeaveType($row['leave_type']);
+        $startDate = $this->legacyDate($row['start_date'] ?? null);
+        $endDate = $this->legacyDate($row['end_date'] ?? null);
 
-        LeaveRequest::updateOrCreate(
-            [
-                'employee_id' => $employee->id,
-                'leave_type_id' => $leaveType->id,
-                'start_date' => $this->date($row['start_date']),
-                'end_date' => $this->date($row['end_date']),
-            ],
-            [
-                'total_days' => $this->nullableDecimal($row['total_days'] ?? null) ?? 1,
-                'status' => $this->enum($row['status'] ?? null, ['pending', 'approved', 'rejected', 'cancelled']) ?: 'approved',
-                'reason' => ($row['reason'] ?? '') ?: 'Legacy migration',
-                'approved_at' => ($row['status'] ?? 'approved') === 'approved' ? now() : null,
-            ]
-        );
+        if (!$startDate && $endDate) {
+            $startDate = $endDate;
+        }
+        if (!$startDate) {
+            throw new \InvalidArgumentException('Missing from/start date.');
+        }
+        if (!$endDate || strcmp($endDate, $startDate) < 0) {
+            $endDate = $startDate;
+        }
+
+        $startTime = $this->legacyTime($row['start_time'] ?? $row['from_time'] ?? null);
+        $endTime = $this->legacyTime($row['end_time'] ?? $row['to_time'] ?? null);
+        $totalDays = $this->nullableDecimal($row['total_days'] ?? null);
+        if ($totalDays === null) {
+            $totalDays = ((strtotime($endDate) - strtotime($startDate)) / 86400) + 1;
+        }
+
+        $leaveDay = strtolower((string) ($row['leaveday'] ?? $row['leave_day'] ?? ''));
+        $isHalfDay = str_contains($leaveDay, 'half') || (float) $totalDays === 0.5;
+        $managerStatus = $this->key($row['manager_status'] ?? $row['status'] ?? null);
+        $hrStatus = $this->key($row['hr_status'] ?? null);
+        $status = $this->leaveMigrationStatus($row['manager_status'] ?? $row['status'] ?? null, $row['hr_status'] ?? null);
+        $comments = $this->cleanLegacyValue($row['approver_comments'] ?? $row['comments'] ?? null);
+        $reason = $this->cleanLegacyValue($row['reason'] ?? null) ?: 'Legacy migration';
+        $createdAt = $this->legacyDateTime($row['created_at'] ?? $row['createddate'] ?? null) ?: now();
+        $updatedAt = $this->legacyDateTime($row['updated_at'] ?? $row['modifieddate'] ?? null) ?: $createdAt;
+        $ticketCount = (int) ($this->nullableDecimal($row['ticket_count'] ?? null) ?? 0);
+
+        $lookup = [
+            'employee_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'start_date' => $startDate,
+            'start_time' => $startTime,
+            'end_date' => $endDate,
+            'end_time' => $endTime,
+            'total_days' => (float) $totalDays,
+            'reason' => $reason,
+        ];
+
+        $values = [
+            ...$lookup,
+            'total_hours' => $this->legacyHours($startTime, $endTime),
+            'is_half_day' => $isHalfDay,
+            'half_day_period' => $isHalfDay && str_contains($leaveDay, 'second') ? 'afternoon' : ($isHalfDay ? 'morning' : null),
+            'requires_exit_reentry' => $this->bool($row['exit_entry_flag'] ?? $row['requires_exit_reentry'] ?? false),
+            'requires_ticket' => $ticketCount > 0,
+            'ticket_year' => $ticketCount > 0 ? (int) substr($startDate, 0, 4) : null,
+            'ticket_count' => $ticketCount,
+            'status' => $status,
+            'rejection_reason' => $status === 'rejected' ? $comments : null,
+            'manager_approved_at' => $managerStatus === 'approved' ? $updatedAt : null,
+            'manager_notes' => $comments,
+            'hr_notes' => $this->cleanLegacyValue($row['hr_status'] ?? null),
+            'rejected_stage' => $status === 'rejected' ? ($managerStatus === 'rejected' ? 'manager' : 'hr') : null,
+            'approved_at' => $hrStatus === 'approved' ? $updatedAt : null,
+            'created_at' => $createdAt,
+            'updated_at' => $updatedAt,
+        ];
+
+        $leave = LeaveRequest::where($lookup)->first();
+        if (!$leave) {
+            $leave = new LeaveRequest();
+        }
+        $leave->forceFill($values)->save();
+
+        return 'success';
     }
 
-    private function loanRecord(array $row): void
+    private function loanRecord(array $row): string
     {
         $row = $this->normalizeLegacyAliases($row);
         $employee = $this->employeeByCode($row['employee_code']);
         $amount = $this->nullableDecimal($row['amount']) ?? 0;
-        $installments = max(1, (int) $row['installments']);
+        $installments = max(1, (int) ($row['installments'] ?? $row['installmentnumber'] ?? 1));
+        $emiAmount = $this->nullableDecimal($row['emi_amount'] ?? null);
+        $emiDate = $this->date($row['emi_date'] ?? null);
+        $reference = $this->legacyLoanReference($row);
         $loanType = LoanType::firstOrCreate(
             ['code' => Str::upper(Str::slug($row['loan_type'], '_'))],
             ['name' => $row['loan_type'], 'max_amount' => 0, 'max_installments' => max(12, $installments), 'is_active' => true]
         );
 
-        Loan::updateOrCreate(
-            ['reference' => ($row['reference'] ?? '') ?: $this->nextLoanReference()],
+        $loan = Loan::updateOrCreate(
+            ['reference' => $reference],
             [
                 'employee_id' => $employee->id,
                 'loan_type_id' => $loanType->id,
                 'requested_amount' => $amount,
                 'approved_amount' => $this->nullableDecimal($row['approved_amount'] ?? null) ?? $amount,
                 'installments' => $installments,
-                'monthly_installment' => round($amount / $installments, 2),
+                'monthly_installment' => $emiAmount ?: round($amount / $installments, 2),
                 'purpose' => ($row['purpose'] ?? '') ?: 'Legacy migration',
                 'notes' => $row['notes'] ?? null,
-                'status' => $this->enum($row['status'] ?? null, ['pending_manager', 'pending_hr', 'pending_finance', 'approved', 'disbursed', 'completed', 'rejected', 'cancelled']) ?: 'approved',
+                'status' => $this->legacyLoanStatus($row),
                 'disbursed_date' => $this->date($row['disbursed_date'] ?? null),
-                'first_installment_date' => $this->date($row['first_installment_date'] ?? null),
+                'first_installment_date' => $this->date($row['first_installment_date'] ?? null) ?: $emiDate,
                 'total_paid' => $this->nullableDecimal($row['total_paid'] ?? null) ?? 0,
                 'balance_remaining' => $this->nullableDecimal($row['balance_remaining'] ?? null) ?? $amount,
             ]
         );
+
+        if ($emiDate && $emiAmount !== null) {
+            $installment = LoanInstallment::updateOrCreate(
+                [
+                    'loan_id' => $loan->id,
+                    'due_date' => $emiDate,
+                ],
+                [
+                    'installment_no' => 1,
+                    'amount' => $emiAmount,
+                    'paid_amount' => $this->legacyInstallmentIsPaid($row, $emiDate) ? $emiAmount : 0,
+                    'status' => $this->legacyInstallmentStatus($row, $emiDate),
+                    'paid_date' => $this->legacyInstallmentIsPaid($row, $emiDate) ? $emiDate : null,
+                    'notes' => $this->legacyLoanInstallmentNotes($row),
+                ]
+            );
+
+            $this->renumberLoanInstallments($loan);
+            $this->refreshLoanTotals($loan);
+        }
+
+        return 'success';
+    }
+
+    private function legacyLoanReference(array $row): string
+    {
+        $legacyLoanId = $this->cleanLegacyValue($row['loan_id'] ?? $row['loanid'] ?? null);
+        if ($legacyLoanId) {
+            return 'LEG-LOAN-' . Str::upper(Str::slug($legacyLoanId, '-'));
+        }
+
+        return ($this->cleanLegacyValue($row['reference'] ?? null)) ?: $this->nextLoanReference();
+    }
+
+    private function legacyLoanStatus(array $row): string
+    {
+        $explicit = $this->enum($row['status'] ?? null, ['pending_manager', 'pending_hr', 'pending_finance', 'approved', 'disbursed', 'completed', 'rejected', 'cancelled']);
+        if ($explicit) {
+            return $explicit;
+        }
+
+        $financeStatus = $this->key($row['financemanagerstatus'] ?? $row['finance_status'] ?? null);
+        $managerStatus = $this->key($row['reportingmanagerstatus'] ?? $row['manager_status'] ?? null);
+
+        if (in_array('rejected', [$financeStatus, $managerStatus], true)) {
+            return 'rejected';
+        }
+        if (in_array('cancelled', [$financeStatus, $managerStatus], true) || in_array('canceled', [$financeStatus, $managerStatus], true)) {
+            return 'cancelled';
+        }
+        if ($financeStatus === 'approved') {
+            return 'disbursed';
+        }
+        if ($managerStatus === 'approved') {
+            return 'pending_finance';
+        }
+
+        return 'pending_manager';
+    }
+
+    private function legacyInstallmentStatus(array $row, string $emiDate): string
+    {
+        if ($this->legacyInstallmentIsPaid($row, $emiDate)) {
+            return 'paid';
+        }
+
+        return strtotime($emiDate) < strtotime(now()->toDateString()) ? 'overdue' : 'pending';
+    }
+
+    private function legacyInstallmentIsPaid(array $row, string $emiDate): bool
+    {
+        $financeStatus = $this->key($row['financemanagerstatus'] ?? $row['finance_status'] ?? null);
+        $managerStatus = $this->key($row['reportingmanagerstatus'] ?? $row['manager_status'] ?? null);
+        $paidStatus = $this->key($row['installment_status'] ?? $row['emi_status'] ?? $row['payment_status'] ?? null);
+
+        if (in_array($paidStatus, ['paid', 'completed', 'settled'], true)) {
+            return true;
+        }
+        if (in_array($paidStatus, ['pending', 'unpaid', 'overdue', 'skipped'], true)) {
+            return false;
+        }
+
+        return $financeStatus === 'approved'
+            && $managerStatus === 'approved'
+            && strtotime($emiDate) <= strtotime(now()->toDateString());
+    }
+
+    private function legacyLoanInstallmentNotes(array $row): ?string
+    {
+        $parts = array_filter([
+            $this->cleanLegacyValue($row['finance_manager_comment'] ?? null),
+            $this->cleanLegacyValue($row['rep_manager_comment'] ?? null),
+            $this->cleanLegacyValue($row['purpose'] ?? null),
+        ]);
+
+        return $parts ? implode("\n", array_unique($parts)) : null;
+    }
+
+    private function renumberLoanInstallments(Loan $loan): void
+    {
+        $loan->installments()
+            ->orderBy('due_date')
+            ->orderBy('id')
+            ->get()
+            ->values()
+            ->each(function (LoanInstallment $installment, int $index) {
+                $number = $index + 1;
+                if ((int) $installment->installment_no !== $number) {
+                    $installment->forceFill(['installment_no' => $number])->save();
+                }
+            });
+    }
+
+    private function refreshLoanTotals(Loan $loan): void
+    {
+        $loan->load('installments');
+
+        $totalPaid = (float) $loan->installments->sum('paid_amount');
+        $paidCount = $loan->installments->where('status', 'paid')->count();
+        $skippedCount = $loan->installments->where('status', 'skipped')->count();
+        $approvedAmount = (float) ($loan->approved_amount ?: $loan->requested_amount);
+        $balance = max(0, round($approvedAmount - $totalPaid, 2));
+        $status = $loan->status;
+
+        if (!in_array($status, ['rejected', 'cancelled'], true)) {
+            $status = $balance <= 0 && $loan->installments->count() > 0 ? 'completed' : $status;
+        }
+
+        $loan->forceFill([
+            'installments' => max((int) $loan->getAttribute('installments'), $loan->installments->count()),
+            'total_paid' => $totalPaid,
+            'balance_remaining' => $balance,
+            'installments_paid' => $paidCount,
+            'installments_skipped' => $skippedCount,
+            'first_installment_date' => $loan->first_installment_date ?: optional($loan->installments->sortBy('due_date')->first())->due_date,
+            'status' => $status,
+        ])->save();
     }
 
     private function findDepartment(?string $code, ?string $name): ?Department
@@ -522,8 +810,31 @@ class LegacyMigrationService
     private function findOrCreateUnit($unitId, ?string $name = null): ?Unit
     {
         $unitId = trim((string) $unitId);
+        $label = $this->legacyUnitName($name);
+
         if ($unitId === '') {
-            return null;
+            if (!$label) {
+                return null;
+            }
+
+            $key = $this->key('unitname_' . $label);
+            if (isset($this->unitAliases[$key])) {
+                return Unit::find($this->unitAliases[$key]);
+            }
+
+            $unit = Unit::whereRaw('LOWER(name) = ?', [strtolower($label)])->first();
+            if ($unit && $unit->name !== $label) {
+                $unit->forceFill(['name' => $label])->save();
+            }
+            if (!$unit) {
+                $unit = Unit::firstOrCreate(
+                    ['code' => $this->uniqueUnitCode($label)],
+                    ['name' => $label, 'is_active' => true]
+                );
+            }
+
+            $this->unitAliases[$key] = $unit->id;
+            return $unit;
         }
 
         $key = $this->key('unitid_' . $unitId);
@@ -533,7 +844,7 @@ class LegacyMigrationService
 
         $unit = Unit::where('legacy_unitid', $unitId)->first();
         if (!$unit) {
-            $label = trim((string) $name) ?: ('Unit ' . $unitId);
+            $label = $label ?: ('Unit ' . $unitId);
             $unit = Unit::firstOrCreate(
                 ['code' => $this->uniqueUnitCode('UNIT_' . $unitId)],
                 ['name' => $label, 'legacy_unitid' => $unitId, 'is_active' => true]
@@ -542,6 +853,16 @@ class LegacyMigrationService
 
         $this->unitAliases[$key] = $unit->id;
         return $unit;
+    }
+
+    private function legacyUnitName(?string $name): ?string
+    {
+        $name = $this->cleanLegacyValue($name);
+        if (!$name) {
+            return null;
+        }
+
+        return $this->key($name) === 'riyadh' ? 'Head Office' : $name;
     }
 
     private function uniqueUnitCode(string $code): string
@@ -553,6 +874,40 @@ class LegacyMigrationService
 
         $i = 2;
         while (Unit::where('code', "{$base}_{$i}")->exists()) {
+            $i++;
+        }
+        return "{$base}_{$i}";
+    }
+
+    private function findOrCreateLeaveType(string $name): LeaveType
+    {
+        $name = trim($name);
+        $existing = LeaveType::whereRaw('LOWER(name) = ?', [strtolower($name)])->first();
+        if ($existing) {
+            return $existing;
+        }
+
+        return LeaveType::firstOrCreate(
+            ['code' => $this->uniqueLeaveTypeCode($name)],
+            [
+                'name' => $name,
+                'days_allowed' => 0,
+                'is_paid' => true,
+                'is_active' => true,
+                'is_annual' => str_contains(strtolower($name), 'annual'),
+            ]
+        );
+    }
+
+    private function uniqueLeaveTypeCode(string $name): string
+    {
+        $base = Str::upper(Str::slug($name ?: 'LEAVE', '_'));
+        if (!LeaveType::where('code', $base)->exists()) {
+            return $base;
+        }
+
+        $i = 2;
+        while (LeaveType::where('code', "{$base}_{$i}")->exists()) {
             $i++;
         }
         return "{$base}_{$i}";
@@ -615,7 +970,93 @@ class LegacyMigrationService
 
     private function employeeByCode(string $code): Employee
     {
-        return Employee::where('employee_code', $code)->orWhere('email', $code)->firstOrFail();
+        $formattedCode = $this->employeeCode($code);
+
+        return Employee::where(function ($query) use ($code, $formattedCode) {
+                $query->where('employee_code', $formattedCode ?: $code)
+                    ->orWhere('employee_code', $code)
+                    ->orWhere('email', $code);
+            })
+            ->firstOrFail();
+    }
+
+    private function findEmployeeForManagerMigration(?string $code, ?string $email, string $label, ?string $name = null, bool $allowMissing = false): ?Employee
+    {
+        $code = $this->cleanLegacyValue($code);
+        $formattedCode = $this->employeeCode($code);
+        $email = strtolower((string) $this->cleanLegacyValue($email));
+        $name = $this->cleanLegacyValue($name);
+
+        if (!$code && !$email && !$name) {
+            throw new \InvalidArgumentException("Missing {$label} empnum/email/name.");
+        }
+
+        $byCode = $code ? Employee::whereIn('employee_code', array_values(array_unique(array_filter([$formattedCode, $code]))))->first() : null;
+        $byEmail = $email ? Employee::whereRaw('LOWER(email) = ?', [$email])->first() : null;
+        $byName = $name ? $this->findEmployeeByLegacyName($name, $label) : null;
+
+        if ($byCode && $byEmail && (int) $byCode->id !== (int) $byEmail->id) {
+            throw new \InvalidArgumentException("Conflicting {$label} empnum/email identify different employees.");
+        }
+        if ($byCode && $byName && (int) $byCode->id !== (int) $byName->id) {
+            throw new \InvalidArgumentException("Conflicting {$label} empnum/name identify different employees.");
+        }
+        if ($byEmail && $byName && (int) $byEmail->id !== (int) $byName->id) {
+            throw new \InvalidArgumentException("Conflicting {$label} email/name identify different employees.");
+        }
+
+        $employee = $byCode ?: $byEmail ?: $byName;
+
+        if (!$employee && !$allowMissing) {
+            $identifier = $code ?: $email ?: $name;
+            throw new \InvalidArgumentException(ucfirst($label) . " not found: {$identifier}");
+        }
+
+        return $employee;
+    }
+
+    private function findEmployeeByLegacyName(string $name, string $label): ?Employee
+    {
+        $needle = $this->nameKey($name);
+        $matches = Employee::query()
+            ->select(['id', 'manager_id', 'first_name', 'last_name'])
+            ->get()
+            ->filter(fn (Employee $employee) => $this->nameKey($employee->full_name) === $needle)
+            ->values();
+
+        if ($matches->count() > 1) {
+            throw new \InvalidArgumentException("Ambiguous {$label} name: {$name}");
+        }
+
+        return $matches->first();
+    }
+
+    private function managerAssignmentCreatesCycle(Employee $employee, Employee $manager): bool
+    {
+        $seen = [(int) $employee->id => true];
+        $current = $manager;
+
+        while ($current) {
+            if (isset($seen[(int) $current->id])) {
+                return true;
+            }
+
+            $seen[(int) $current->id] = true;
+            $current = $current->manager_id ? Employee::find($current->manager_id) : null;
+        }
+
+        return false;
+    }
+
+    private function firstLegacyValue(array $row, array $keys): ?string
+    {
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $row) && !$this->isBlankLegacyValue($row[$key])) {
+                return trim((string) $row[$key]);
+            }
+        }
+
+        return null;
     }
 
     private function nextEmployeeCode(): string
@@ -623,6 +1064,16 @@ class LegacyMigrationService
         $last = Employee::withTrashed()->orderByDesc('id')->value('employee_code');
         $next = $last ? ((int) preg_replace('/\D/', '', $last) + 1) : 1;
         return 'EMP' . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+    }
+
+    private function employeeCode($value): ?string
+    {
+        $value = $this->cleanLegacyValue($value);
+        if (!$value) {
+            return null;
+        }
+
+        return str_starts_with(strtoupper($value), 'EMP') ? strtoupper($value) : 'EMP' . $value;
     }
 
     private function nextLoanReference(): string
@@ -642,6 +1093,14 @@ class LegacyMigrationService
             'designations' => 'job_positions',
             'employee' => 'employees',
             'employees' => 'employees',
+            'employee_manager' => 'employee_managers',
+            'employee_managers' => 'employee_managers',
+            'manager' => 'employee_managers',
+            'managers' => 'employee_managers',
+            'manager_mapping' => 'employee_managers',
+            'manager_mappings' => 'employee_managers',
+            'reporting_manager' => 'employee_managers',
+            'reporting_managers' => 'employee_managers',
             'leave_record' => 'leave_records',
             'leave_records' => 'leave_records',
             'loan_record' => 'loan_records',
@@ -664,12 +1123,42 @@ class LegacyMigrationService
             'modifieddate' => 'updated_at',
             'positionname' => 'title',
             'position_name' => 'title',
+            'firstname' => 'first_name',
+            'lastname' => 'last_name',
+            'userfullname' => 'full_name',
+            'arabicname' => 'arabic_name',
+            'emailaddress' => 'email',
+            'emppassword' => 'legacy_password_md5',
+            'empnum' => 'employee_code',
+            'contactnumber' => 'phone',
+            'businessunit_name' => 'unit_name',
+            'department_name' => 'department',
+            'emp_status_name' => 'employment_type',
+            'emprole_name' => 'role',
+            'accountnumber' => 'bank_account',
+            'bankname' => 'bank_name',
+            'date_of_joining' => 'hire_date',
+            'date_of_confirmation' => 'confirmation_date',
+            'date_of_leaving' => 'termination_date',
             'designation' => 'job_position',
             'position' => 'job_position',
             'empcode' => 'employee_code',
             'employeecode' => 'employee_code',
+            'employeeid' => 'employee_code',
+            'employee_id' => 'employee_code',
+            'leavetype_name' => 'leave_type',
             'leavetype' => 'leave_type',
+            'appliedleavescount' => 'total_days',
+            'from_date' => 'start_date',
+            'to_date' => 'end_date',
+            'from_time' => 'start_time',
+            'to_time' => 'end_time',
+            'leavestatus' => 'manager_status',
             'loantype' => 'loan_type',
+            'loantype_name' => 'loan_type',
+            'loanid' => 'loan_id',
+            'installmentnumber' => 'installments',
+            'reason' => 'purpose',
         ];
 
         foreach ($aliases as $legacy => $canonical) {
@@ -704,7 +1193,7 @@ class LegacyMigrationService
 
     private function nullableInt($value): ?int
     {
-        return $value === null || $value === '' ? null : (int) $value;
+        return $this->isBlankLegacyValue($value) ? null : (int) $value;
     }
 
     private function departmentHeadcountBudget($value): int
@@ -720,7 +1209,7 @@ class LegacyMigrationService
 
     private function nullableDecimal($value): ?float
     {
-        return $value === null || $value === '' ? null : (float) str_replace(',', '', (string) $value);
+        return $this->isBlankLegacyValue($value) ? null : (float) str_replace(',', '', (string) $value);
     }
 
     private function bool($value): bool
@@ -736,12 +1225,105 @@ class LegacyMigrationService
 
     private function date($value): ?string
     {
-        if ($value === null || $value === '') {
+        if ($this->isBlankLegacyValue($value)) {
             return null;
         }
         if (is_numeric($value)) {
             return gmdate('Y-m-d', ((int) $value - 25569) * 86400);
         }
         return date('Y-m-d', strtotime((string) $value));
+    }
+
+    private function legacyDate($value): ?string
+    {
+        if ($this->isBlankLegacyValue($value)) {
+            return null;
+        }
+
+        $timestamp = strtotime((string) $value);
+        if (!$timestamp) {
+            return null;
+        }
+
+        $date = date('Y-m-d', $timestamp);
+        return ((int) substr($date, 0, 4)) < 1990 ? null : $date;
+    }
+
+    private function legacyDateTime($value)
+    {
+        if ($this->isBlankLegacyValue($value)) {
+            return null;
+        }
+
+        $timestamp = strtotime((string) $value);
+        return $timestamp ? date('Y-m-d H:i:s', $timestamp) : null;
+    }
+
+    private function legacyTime($value): ?string
+    {
+        if ($this->isBlankLegacyValue($value) || trim((string) $value) === '00:00:00') {
+            return null;
+        }
+
+        $timestamp = strtotime((string) $value);
+        return $timestamp ? date('H:i:s', $timestamp) : null;
+    }
+
+    private function legacyHours(?string $startTime, ?string $endTime): ?float
+    {
+        if (!$startTime || !$endTime) {
+            return null;
+        }
+
+        $start = strtotime($startTime);
+        $end = strtotime($endTime);
+        if (!$start || !$end || $end <= $start) {
+            return null;
+        }
+
+        return round(($end - $start) / 3600, 2);
+    }
+
+    private function leaveMigrationStatus($managerStatus, $hrStatus): string
+    {
+        $managerStatus = $this->key($managerStatus);
+        $hrStatus = $this->key($hrStatus);
+
+        if (in_array($managerStatus, ['cancel', 'cancelled', 'canceled'], true) || in_array($hrStatus, ['cancel', 'cancelled', 'canceled'], true)) {
+            return 'cancelled';
+        }
+        if ($managerStatus === 'rejected' || $hrStatus === 'rejected') {
+            return 'rejected';
+        }
+        if ($hrStatus === 'approved') {
+            return 'approved';
+        }
+        if ($managerStatus === 'approved') {
+            return 'manager_approved';
+        }
+
+        return 'pending';
+    }
+
+    private function legacyPasswordMd5($value): ?string
+    {
+        $value = strtolower(trim((string) $value));
+
+        return preg_match('/^[a-f0-9]{32}$/', $value) ? $value : null;
+    }
+
+    private function cleanLegacyValue($value): ?string
+    {
+        return $this->isBlankLegacyValue($value) ? null : trim((string) $value);
+    }
+
+    private function nameKey(string $value): string
+    {
+        return Str::of($value)->lower()->replaceMatches('/[^a-z0-9]+/', ' ')->squish()->toString();
+    }
+
+    private function isBlankLegacyValue($value): bool
+    {
+        return $value === null || trim((string) $value) === '' || strtolower(trim((string) $value)) === 'null';
     }
 }

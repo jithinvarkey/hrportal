@@ -485,6 +485,65 @@
   </div>
 
   <!-- ── Assets Tab ─────────────────────────────────────────────────── -->
+  <!-- Contracts Tab -->
+  <div *ngIf="activeTab === 'contracts'">
+    <div class="detail-card">
+      <div class="dc-title"><mat-icon>description</mat-icon> Contracts ({{ contracts.length }})</div>
+
+      <div class="loading-wrap" *ngIf="contractsLoading">
+        <mat-spinner diameter="28"></mat-spinner>
+      </div>
+
+      <div class="empty-state" *ngIf="!contractsLoading && !contracts.length">
+        <mat-icon>description</mat-icon>
+        <p>No contracts found for this employee.</p>
+      </div>
+
+      <div class="contracts-list" *ngIf="!contractsLoading && contracts.length">
+        <div class="contract-card" *ngFor="let c of contracts" (click)="viewContract(c)">
+          <div class="cc-top">
+            <div class="cc-ref-wrap">
+              <span class="cc-ref">{{ c.reference }}</span>
+              <span class="cc-type">{{ contractTypeLabel(c.type) }}</span>
+            </div>
+            <span class="badge" [class]="contractStatusClass(c.status)">
+              {{ (c.status || '').replace('_', ' ') | titlecase }}
+            </span>
+          </div>
+
+          <div class="cc-body">
+            <div class="cc-field">
+              <mat-icon>event</mat-icon>
+              <span>{{ formatDate(c.start_date) }} - {{ formatDate(c.end_date) }}</span>
+              <span class="cc-expired" *ngIf="c.is_expired">Expired</span>
+            </div>
+            <div class="cc-field">
+              <mat-icon>work_outline</mat-icon>
+              <span>{{ displayText(c.position || employee?.designation?.title) }}</span>
+            </div>
+            <div class="cc-field">
+              <mat-icon>payments</mat-icon>
+              <span>{{ formatSalary(c.salary, c.currency || 'SAR') }}</span>
+            </div>
+            <div class="cc-field" *ngIf="c.approved_at">
+              <mat-icon>verified</mat-icon>
+              <span>Approved {{ formatDate(c.approved_at) }}</span>
+            </div>
+            <a class="cc-field" *ngIf="c.pdf_url" [href]="c.pdf_url" target="_blank" rel="noopener" (click)="$event.stopPropagation()">
+              <mat-icon>attach_file</mat-icon>
+              <span>View document</span>
+            </a>
+          </div>
+
+          <div class="cc-active-bar" *ngIf="c.status === 'active'">
+            <mat-icon>check_circle</mat-icon>
+            Current active contract
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div *ngIf="activeTab === 'assets'">
     <div class="detail-card">
       <div class="section-hdr">

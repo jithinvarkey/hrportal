@@ -495,9 +495,10 @@
         <div class="template-list">
           <div><strong>Departments</strong><span>deptname/name, deptcode/code, unitid, description, isactive/is_active</span></div>
           <div><strong>Job Positions</strong><span>positionname/title, department_code, department, level, min_salary, max_salary, is_active</span></div>
-          <div><strong>Employees</strong><span>employee_code, first_name, last_name, email, phone, hire_date, department_code, unitid, job_position, salary</span></div>
-          <div><strong>Leave Records</strong><span>employee_code, leave_type, start_date, end_date, total_days, status, reason</span></div>
-          <div><strong>Loan Records</strong><span>employee_code, loan_type, amount, installments, reference, status, disbursed_date</span></div>
+          <div><strong>Employees</strong><span>employee_code/empnum, first_name/firstname, last_name/lastname, email/emailaddress, emppassword, phone/contactnumber, hire_date/date_of_joining, department_name, businessunit_name, position_name, salary</span></div>
+          <div><strong>Employee Managers</strong><span>employee_code/empnum, email/emailaddress, manager_empnum, manager_email, reporting_manager_name</span></div>
+          <div><strong>Leave Records</strong><span>employeeId/employee_code, leavetype_name/leave_type, appliedleavescount/total_days, from_date/start_date, to_date/end_date, leavestatus, hr_status, reason</span></div>
+          <div><strong>Loan Records</strong><span>emailaddress/employee_code, empnum, loanId/reference, amount, loantype_name/loan_type, installmentnumber, emi_amount, emi_date, finance/reporting manager status</span></div>
         </div>
       </div>
     </div>

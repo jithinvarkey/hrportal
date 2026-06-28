@@ -61,18 +61,27 @@ export const employeeReducer = createReducer(
     (state): EmployeeState => ({ ...state, loading: true, error: null })
   ),
   on(EmployeeActions.loadEmployeesSuccess,
-    (state, { data }): EmployeeState => adapter.setAll(data.data, {
-      ...state,
-      loading: false,
-      pagination: {
-        currentPage: data.current_page,
-        lastPage:    data.last_page,
-        perPage:     data.per_page,
-        total:       data.total,
-        from:        data.from,
-        to:          data.to,
-      },
-    })
+    (state, { data }): EmployeeState => {
+      const meta = data.meta ?? data;
+      const currentPage = meta.current_page ?? 1;
+      const perPage = meta.per_page ?? data.data.length;
+      const total = meta.total ?? data.data.length;
+      const from = meta.from ?? (total > 0 ? ((currentPage - 1) * perPage) + 1 : null);
+      const to = meta.to ?? (from ? Math.min(from + data.data.length - 1, total) : null);
+
+      return adapter.setAll(data.data, {
+        ...state,
+        loading: false,
+        pagination: {
+          currentPage,
+          lastPage:    meta.last_page ?? 1,
+          perPage,
+          total,
+          from,
+          to,
+        },
+      });
+    }
   ),
   on(EmployeeActions.loadEmployeesFailure,
     (state, { error }): EmployeeState => ({ ...state, loading: false, error })

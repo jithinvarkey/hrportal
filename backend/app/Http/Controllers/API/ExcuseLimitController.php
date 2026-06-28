@@ -6,6 +6,7 @@ use App\Models\Department;
 use App\Models\LeaveType;
 use App\Models\DepartmentExcuseLimit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ExcuseLimitController extends Controller
 {
@@ -49,6 +50,10 @@ class ExcuseLimitController extends Controller
      */
     public function bulkUpsert(Request $request)
     {
+        if (!$this->canManageExcuseLimits()) {
+            return response()->json(['message' => 'You do not have permission to manage leave limits.'], 403);
+        }
+
         $request->validate([
             'leave_type_id'                    => 'required|exists:leave_types,id',
             'limits'                           => 'required|array',
@@ -81,6 +86,10 @@ class ExcuseLimitController extends Controller
      */
     public function update(Request $request, $id)
     {
+        if (!$this->canManageExcuseLimits()) {
+            return response()->json(['message' => 'You do not have permission to manage leave limits.'], 403);
+        }
+
         $request->validate([
             'is_limited'          => 'required|boolean',
             'monthly_hours_limit' => 'nullable|numeric|min:0.5|max:200',
@@ -93,5 +102,19 @@ class ExcuseLimitController extends Controller
         ]);
 
         return response()->json(['message' => 'Limit updated', 'limit' => $limit]);
+    }
+
+    private function canManageExcuseLimits(): bool
+    {
+        $user = auth()->user();
+        if (!$user) {
+            return false;
+        }
+
+        return DB::table('model_has_roles')
+            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('model_has_roles.model_id', $user->id)
+            ->whereIn('roles.name', ['super_admin', 'hr_manager', 'hr_staff'])
+            ->exists();
     }
 }

@@ -22,7 +22,7 @@ class LegacyMigrationController extends Controller
 
         $data = $request->validate([
             'file' => 'required|file|mimes:csv,txt,xlsx|max:20480',
-            'scope' => 'nullable|in:all,departments,job_positions,employees,leave_records,loan_records',
+            'scope' => 'nullable|in:all,departments,job_positions,employees,employee_managers,leave_records,loan_records',
             'dry_run' => 'nullable|boolean',
         ]);
 

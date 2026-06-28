@@ -18,6 +18,7 @@ export class LoanListComponent implements OnInit {
   loans: any[] = [];
   myLoans: any[] = [];
   loanTypes: any[] = [];
+  activeLoanTypes: any[] = [];
   stats: any = {};
   pagination: any = null;
   statItems: any[] = [];
@@ -56,6 +57,7 @@ export class LoanListComponent implements OnInit {
   typeEditId: number | null = null;
   typeError = '';
   typeSaving = false;
+  typeCodeTouched = false;
 
   // ── Installment actions ──────────────────────────────────────────────────
   showPayInst = false;
@@ -66,7 +68,7 @@ export class LoanListComponent implements OnInit {
 
   // ── Table columns ────────────────────────────────────────────────────────
   displayedColumns = ['ref', 'employee', 'type', 'amount', 'installments', 'status', 'progress', 'actions'];
-  typeColumns = ['name', 'code', 'max_amount', 'installments', 'interest', 'actions'];
+  typeColumns = ['name', 'code', 'max_amount', 'installments', 'interest', 'status', 'actions'];
   instColumns = ['no', 'due_date', 'amount', 'status', 'actions'];
 
   tabs = [
@@ -106,6 +108,9 @@ export class LoanListComponent implements OnInit {
     this.isHR = this.auth.isHRRole();
     this.isMgr = this.auth.isManagerRole();
     this.isFinance = this.auth.isFinanceManager();
+    this.typeColumns = this.isHR
+      ? ['name', 'code', 'max_amount', 'installments', 'interest', 'status', 'actions']
+      : ['name', 'code', 'max_amount', 'installments', 'interest', 'status'];
 
     this.http.get<any>('/api/v1/loans/stats').subscribe({
       next: r => {
@@ -151,6 +156,7 @@ export class LoanListComponent implements OnInit {
 
   loadLoanTypes() {
     this.http.get<any>('/api/v1/loans/types/all').subscribe({ next: r => this.loanTypes = r?.types || [] });
+    this.http.get<any>('/api/v1/loans/types').subscribe({ next: r => this.activeLoanTypes = r?.types || [] });
   }
 
   switchTab(id: string) {
@@ -295,11 +301,20 @@ export class LoanListComponent implements OnInit {
   openTypeForm(t?: any) {
     if (t) { this.typeEditId = t.id; this.typeForm = { ...t }; }
     else { this.typeEditId = null; this.typeForm = { name: '', code: '', max_amount: 0, max_installments: 12, interest_rate: 0, requires_guarantor: false, is_active: true, description: '' }; }
+    this.typeCodeTouched = !!t;
     this.typeError = ''; this.showTypeForm = true;
   }
 
+  onTypeNameChange() {
+    if (!this.typeEditId && !this.typeCodeTouched) {
+      this.typeForm.code = this.loanTypeCodeFromName(this.typeForm.name);
+    }
+  }
+
   saveType() {
-    if (!this.typeForm.name || !this.typeForm.code) { this.typeError = 'Name and code required.'; return; }
+    this.typeForm.name = String(this.typeForm.name || '').trim();
+    this.typeForm.code = String(this.typeForm.code || '').trim().toUpperCase() || this.loanTypeCodeFromName(this.typeForm.name);
+    if (!this.typeForm.name || !this.typeForm.code) { this.typeError = 'Name is required.'; return; }
     this.typeSaving = true; this.typeError = '';
     const req = this.typeEditId
       ? this.http.put(`/api/v1/loans/types/${this.typeEditId}`, this.typeForm)
@@ -310,7 +325,35 @@ export class LoanListComponent implements OnInit {
     });
   }
 
+  toggleTypeStatus(type: any) {
+    if (!this.isHR || this.typeSaving) return;
+
+    const previous = !!type.is_active;
+    type.is_active = !previous;
+    this.typeSaving = true;
+    this.typeError = '';
+
+    this.http.put(`/api/v1/loans/types/${type.id}`, { is_active: type.is_active }).subscribe({
+      next: () => {
+        this.typeSaving = false;
+        this.loadLoanTypes();
+      },
+      error: err => {
+        type.is_active = previous;
+        this.typeSaving = false;
+        this.typeError = err?.error?.message || 'Status update failed.';
+      }
+    });
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────
+  private loanTypeCodeFromName(name: string): string {
+    const words = String(name || '').trim().toUpperCase().match(/[A-Z0-9]+/g) || [];
+    if (!words.length) return '';
+    const initials = words.map(w => w[0]).join('');
+    return (initials.length >= 2 ? initials : words.join('').slice(0, 4)).slice(0, 20);
+  }
+
   get pages(): number[] {
     if (!this.pagination?.last_page) return [];
     const lastPage = this.pagination.last_page;
@@ -472,7 +515,7 @@ export class LoanListComponent implements OnInit {
   }
 
   get selectedType(): any {
-    return this.loanTypes.find(t => t.id == this.form.loan_type_id) || null;
+    return this.activeLoanTypes.find(t => t.id == this.form.loan_type_id) || null;
   }
 
   monthlyPreview(): number {

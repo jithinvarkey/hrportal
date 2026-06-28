@@ -64,10 +64,11 @@ export class AdminComponent implements OnInit {
     { id: 'departments', label: 'Departments' },
     { id: 'job_positions', label: 'Job Positions' },
     { id: 'employees', label: 'Employees' },
+    { id: 'employee_managers', label: 'Employee Managers' },
     { id: 'leave_records', label: 'Leave Records' },
     { id: 'loan_records', label: 'Loan Records' },
   ];
-  migrationOrder = ['Departments', 'Job Positions', 'Employees', 'Leave Records', 'Loan Records'];
+  migrationOrder = ['Departments', 'Job Positions', 'Employees', 'Employee Managers', 'Leave Records', 'Loan Records'];
   migrationScope = 'all';
   migrationFile: File | null = null;
   migrationSummary: any = null;

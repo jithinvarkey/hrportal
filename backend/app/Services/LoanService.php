@@ -122,6 +122,7 @@ class LoanService {
     // ── Loan summary stats ────────────────────────────────────────────────
     public function stats(): array {
         $user = auth()->user();
+        $approvalLevels = $this->loanApprovalLevels();
 
         $userRoles = rescue(fn() => DB::table('model_has_roles')
                         ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
@@ -156,13 +157,21 @@ class LoanService {
             }
         }
 
+        $pendingManager = (clone $baseQuery)
+                ->where('status', 'pending_manager')
+                ->count();
+
+        $pendingHr = (clone $baseQuery)
+                ->when(
+                        $approvalLevels === 2,
+                        fn($q) => $q->whereIn('status', ['pending_hr', 'pending_manager']),
+                        fn($q) => $q->where('status', 'pending_hr')
+                )
+                ->count();
+
         return [
-            'pending_manager' => (clone $baseQuery)
-                    ->where('status', 'pending_manager')
-                    ->count(),
-            'pending_hr' => (clone $baseQuery)
-                    ->where('status', 'pending_hr')
-                    ->count(),
+            'pending_manager' => $approvalLevels === 3 ? $pendingManager : 0,
+            'pending_hr' => $pendingHr,
             'pending_finance' => (clone $baseQuery)
                     ->where('status', 'pending_finance')
                     ->count(),
@@ -176,5 +185,21 @@ class LoanService {
                     ->where('status', 'completed')
                     ->count(),
         ];
+    }
+
+    private function loanApprovalLevels(): int {
+        $configured = (int) config('loans.approval_levels', 3);
+
+        $stored = rescue(
+                fn() => DB::table('system_settings')
+                        ->where('key', 'loan_approval_levels')
+                        ->value('value'),
+                null,
+                false
+        );
+
+        $levels = $stored === null ? $configured : (int) $stored;
+
+        return in_array($levels, [2, 3], true) ? $levels : 3;
     }
 }

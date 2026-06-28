@@ -49,6 +49,7 @@ export class LeaveListComponent implements OnInit {
   filterSearch = '';
   filterType = '';
   filterDept = '';
+  private searchTimer: any = null;
   currentPage = 1;
   pageSize = 10;
 
@@ -92,6 +93,7 @@ export class LeaveListComponent implements OnInit {
   visibilityLoading = false;
   visibilitySaving = false;
   visibilityError = '';
+  visibilityMessage = '';
   visibilityDirty = false;
 
   // Stat cards
@@ -144,6 +146,7 @@ export class LeaveListComponent implements OnInit {
     this.userId = user?.id ?? '';
     this.employeeId = user?.employee?.id ?? user?.employee_id ?? null;
     this.currentUserName = (user?.employee?.full_name || user?.name || '').trim().toLowerCase();
+    this.typeColumns = this.isHR ? ['name', 'code', 'days', 'paid', 'carry', 'actions'] : ['name', 'code', 'days', 'paid', 'carry'];
 
     this.http.get<any>('/api/v1/leave/stats').subscribe({
       next: r => {
@@ -180,6 +183,11 @@ export class LeaveListComponent implements OnInit {
   switchStatus(id: string) { this.activeStatus = id; this.currentPage = 1; this.load(); }
 
   changePageSize() { this.load(1); }
+
+  onRequestSearchChange() {
+    clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => this.load(1), 350);
+  }
 
   statusCount(statusId: string): number {
     const counts: Record<string, number> = {
@@ -803,12 +811,14 @@ export class LeaveListComponent implements OnInit {
     this.visibilityLeaveType = t;
     this.showVisibilityPanel = true;
     this.visibilityError = '';
+    this.visibilityMessage = '';
     this.visibilityDirty = false;
     this.loadDeptVisibility(t.id);
   }
 
   loadDeptVisibility(leaveTypeId: number) {
     this.visibilityLoading = true;
+    this.visibilityMessage = '';
     this.http.get<any>(`/api/v1/leave/types/${leaveTypeId}/visibility`).subscribe({
       next: r => {
         this.deptVisibility = r?.visibility || [];
@@ -820,6 +830,7 @@ export class LeaveListComponent implements OnInit {
 
   toggleDeptVisibility(row: any) {
     row.is_visible = !row.is_visible;
+    this.visibilityMessage = '';
     this.visibilityDirty = true;
   }
 
@@ -834,20 +845,23 @@ export class LeaveListComponent implements OnInit {
   saveVisibility() {
     this.visibilitySaving = true;
     this.visibilityError = '';
+    this.visibilityMessage = '';
     this.http.post(`/api/v1/leave/types/${this.visibilityLeaveType.id}/visibility`, {
       visibility: this.deptVisibility.map(r => ({
         department_id: r.department_id,
         is_visible: r.is_visible,
       }))
     }).subscribe({
-      next: () => {
+      next: (res: any) => {
         this.visibilitySaving = false;
         this.visibilityDirty = false;
         this.visibilityError = '';
+        this.visibilityMessage = res?.message || 'Department visibility saved successfully.';
         this.loadTypes();
       },
       error: err => {
         this.visibilitySaving = false;
+        this.visibilityMessage = '';
         this.visibilityError = err?.error?.message || 'Save failed.';
       }
     });
