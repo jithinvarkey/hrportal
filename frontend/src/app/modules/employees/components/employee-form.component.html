@@ -147,6 +147,14 @@
         </div>
 
         <div class="field-group">
+          <label class="field-label">Unit / Branch</label>
+          <select class="field-select" formControlName="unit_id">
+            <option [ngValue]="''">Select Unit</option>
+            <option *ngFor="let u of units" [ngValue]="u.id">{{ u.name }}</option>
+          </select>
+        </div>
+
+        <div class="field-group">
           <label class="field-label">Designation / Job Title</label>
           <select class="field-select" formControlName="designation_id">
             <option [ngValue]="''">Select Designation</option>

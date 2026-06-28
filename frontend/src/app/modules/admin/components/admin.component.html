@@ -279,6 +279,53 @@
   </ng-container>
 
   <!-- ── Departments ──────────────────────────────────────────────────────── -->
+  <ng-container *ngIf="activeTab==='units'">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Units / Branches</h2>
+        <p class="section-sub">Manage branch or unit masters used to identify employees branch-wise.</p>
+      </div>
+      <button class="btn-primary" (click)="openUnitForm()"><mat-icon>add</mat-icon> Add Unit</button>
+    </div>
+
+    <div class="data-card">
+      <table mat-table [dataSource]="units">
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>Unit</th>
+          <td mat-cell *matCellDef="let u"><strong>{{ u.name }}</strong></td>
+        </ng-container>
+        <ng-container matColumnDef="code">
+          <th mat-header-cell *matHeaderCellDef>Code</th>
+          <td mat-cell *matCellDef="let u"><span class="code-chip">{{ u.code }}</span></td>
+        </ng-container>
+        <ng-container matColumnDef="legacy">
+          <th mat-header-cell *matHeaderCellDef>Legacy Unit ID</th>
+          <td mat-cell *matCellDef="let u">{{ u.legacy_unitid || '—' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="counts">
+          <th mat-header-cell *matHeaderCellDef>Usage</th>
+          <td mat-cell *matCellDef="let u">{{ u.employees_count || 0 }} employees</td>
+        </ng-container>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let u"><span class="status-pill" [class.on]="u.is_active" [class.off]="!u.is_active">{{ u.is_active ? 'Active' : 'Inactive' }}</span></td>
+        </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef style="text-align:right">Actions</th>
+          <td mat-cell *matCellDef="let u" style="text-align:right">
+            <button class="row-btn" matTooltip="Edit" (click)="openUnitForm(u)"><mat-icon>edit</mat-icon></button>
+            <button class="row-btn danger" matTooltip="Delete" (click)="deleteUnit(u)"><mat-icon>delete_outline</mat-icon></button>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="unitColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: unitColumns;"></tr>
+      </table>
+      <div class="empty-state" *ngIf="!loading && !units.length">
+        <mat-icon>business</mat-icon><span>No units yet</span>
+      </div>
+    </div>
+  </ng-container>
+
   <ng-container *ngIf="activeTab==='departments'">
     <div class="section-head">
       <div>
@@ -385,6 +432,99 @@
         <mat-icon>badge</mat-icon><span>No job positions yet</span>
       </div>
       <div class="empty-state" *ngIf="loading"><mat-spinner diameter="28"></mat-spinner></div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="activeTab==='migration'">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Legacy Data Migration</h2>
+        <p class="section-sub">Upload CSV or Excel files and migrate records in the required dependency order.</p>
+      </div>
+    </div>
+
+    <div class="migration-grid">
+      <div class="migration-panel">
+        <div class="settings-heading">
+          <div class="settings-icon"><mat-icon>upload_file</mat-icon></div>
+          <div>
+            <div class="settings-title">Upload migration file</div>
+            <div class="settings-sub">Excel .xlsx sheets can be named Departments, Job Positions, Employees, Leave Records, and Loan Records. CSV files can use a selected module or a module column.</div>
+          </div>
+        </div>
+
+        <div class="migration-order">
+          <div class="mo-step" *ngFor="let item of migrationOrder; let i = index">
+            <span>{{ i + 1 }}</span>{{ item }}
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="field-group">
+            <label class="field-label">Migration Scope</label>
+            <select class="field-select-full" [(ngModel)]="migrationScope">
+              <option *ngFor="let scope of migrationScopes" [value]="scope.id">{{ scope.label }}</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">CSV / Excel File</label>
+            <label class="file-picker">
+              <input type="file" accept=".csv,.txt,.xlsx" (change)="onMigrationFile($event)">
+              <mat-icon>attach_file</mat-icon>
+              <span>{{ migrationFile?.name || 'Choose file' }}</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="migration-actions">
+          <button class="btn-outline" (click)="runMigration(true)" [disabled]="migrationRunning || !migrationFile">
+            <mat-icon>rule</mat-icon> Validate Only
+          </button>
+          <button class="btn-primary" (click)="runMigration(false)" [disabled]="migrationRunning || !migrationFile">
+            <mat-icon>{{ migrationRunning ? 'hourglass_empty' : 'cloud_upload' }}</mat-icon>
+            {{ migrationRunning ? 'Processing...' : 'Run Migration' }}
+          </button>
+        </div>
+
+        <div class="settings-feedback success" *ngIf="migrationMessage"><mat-icon>check_circle</mat-icon>{{ migrationMessage }}</div>
+        <div class="settings-feedback error" *ngIf="migrationError"><mat-icon>error_outline</mat-icon>{{ migrationError }}</div>
+      </div>
+
+      <div class="migration-panel template-panel">
+        <div class="settings-title">Expected columns</div>
+        <div class="template-list">
+          <div><strong>Departments</strong><span>deptname/name, deptcode/code, unitid, description, isactive/is_active</span></div>
+          <div><strong>Job Positions</strong><span>positionname/title, department_code, department, level, min_salary, max_salary, is_active</span></div>
+          <div><strong>Employees</strong><span>employee_code/empnum, first_name/firstname, last_name/lastname, email/emailaddress, emppassword, phone/contactnumber, hire_date/date_of_joining, department_name, businessunit_name, position_name, salary</span></div>
+          <div><strong>Employee Managers</strong><span>employee_code/empnum, email/emailaddress, manager_empnum, manager_email, reporting_manager_name</span></div>
+          <div><strong>Leave Records</strong><span>employeeId/employee_code, leavetype_name/leave_type, appliedleavescount/total_days, from_date/start_date, to_date/end_date, leavestatus, hr_status, reason</span></div>
+          <div><strong>Loan Records</strong><span>emailaddress/employee_code, empnum, loanId/reference, amount, loantype_name/loan_type, installmentnumber, emi_amount, emi_date, finance/reporting manager status</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="migration-summary" *ngIf="migrationSummary">
+      <div class="summary-total">
+        <div><strong>{{ migrationSummary.totals?.processed || 0 }}</strong><span>Processed</span></div>
+        <div><strong>{{ migrationSummary.totals?.success || 0 }}</strong><span>Migrated</span></div>
+        <div><strong>{{ migrationSummary.totals?.skipped || 0 }}</strong><span>Skipped</span></div>
+        <div><strong>{{ migrationSummary.totals?.failed || 0 }}</strong><span>Failed</span></div>
+      </div>
+
+      <div class="module-summary" *ngFor="let mod of migrationSummary.modules">
+        <div class="module-summary-head">
+          <strong>{{ mod.label }}</strong>
+          <span>{{ mod.processed }} processed · {{ mod.success }} success · {{ mod.skipped }} skipped · {{ mod.failed }} failed</span>
+        </div>
+        <div class="error-table" *ngIf="mod.errors?.length">
+          <div class="error-row header"><span>Row</span><span>Error</span><span>Data</span></div>
+          <div class="error-row" *ngFor="let e of mod.errors">
+            <span>{{ e.row }}</span>
+            <span>{{ e.message }}</span>
+            <span>{{ e.data | json }}</span>
+          </div>
+        </div>
+      </div>
     </div>
   </ng-container>
 
@@ -643,6 +783,52 @@
   <div class="modal-footer">
     <button class="btn-outline" (click)="showRoleEditor=false">Cancel</button>
     <button class="btn-primary" (click)="saveRolePermissions()"><mat-icon>save</mat-icon> Save Permissions</button>
+  </div>
+</div>
+
+<!-- Unit Form Modal -->
+<div class="modal-backdrop" *ngIf="showUnitForm" (click)="showUnitForm=false"></div>
+<div class="modal-panel" *ngIf="showUnitForm">
+  <div class="modal-hdr">
+    <h3><mat-icon>{{ unitEditId ? 'edit' : 'business' }}</mat-icon> {{ unitEditId ? 'Edit Unit' : 'Add Unit' }}</h3>
+    <button class="row-btn" (click)="showUnitForm=false"><mat-icon>close</mat-icon></button>
+  </div>
+  <div class="modal-body">
+    <div class="two-col">
+      <div class="field-group">
+        <label class="field-label">Name <span class="req">*</span></label>
+        <input class="field-input" [(ngModel)]="unitForm.name" placeholder="e.g. Riyadh Branch">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Code <span class="req">*</span></label>
+        <input class="field-input" [(ngModel)]="unitForm.code" placeholder="e.g. RUH">
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="field-group">
+        <label class="field-label">Legacy Unit ID</label>
+        <input class="field-input" [(ngModel)]="unitForm.legacy_unitid" placeholder="Old unitid">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Status</label>
+        <select class="field-select-full" [(ngModel)]="unitForm.is_active">
+          <option [ngValue]="true">Active</option>
+          <option [ngValue]="false">Inactive</option>
+        </select>
+      </div>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Description</label>
+      <input class="field-input" [(ngModel)]="unitForm.description" placeholder="Short description">
+    </div>
+    <div class="form-err" *ngIf="unitError"><mat-icon>error_outline</mat-icon> {{ unitError }}</div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn-outline" (click)="showUnitForm=false">Cancel</button>
+    <button class="btn-primary" (click)="saveUnit()" [disabled]="submitting">
+      <mat-icon>{{ submitting ? 'hourglass_empty' : 'save' }}</mat-icon>
+      {{ submitting ? 'Saving...' : (unitEditId ? 'Update Unit' : 'Create Unit') }}
+    </button>
   </div>
 </div>
 

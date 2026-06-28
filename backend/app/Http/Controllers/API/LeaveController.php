@@ -11,6 +11,7 @@ use App\Models\LeaveAllocation;
 use App\Services\LeaveService;
 use App\Services\RequestActivityService;
 use App\Services\AnnualTicketService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -165,6 +166,10 @@ class LeaveController extends Controller {
     }
 
     public function storeType(Request $request) {
+        if (!$this->canManageLeaveTypes()) {
+            return response()->json(['message' => 'You do not have permission to manage leave types.'], 403);
+        }
+
         $request->validate([
             'name' => 'required|string|max:100',
             'code' => 'required|string|max:20|unique:leave_types',
@@ -182,6 +187,10 @@ class LeaveController extends Controller {
     }
 
     public function updateType(Request $request, $id) {
+        if (!$this->canManageLeaveTypes()) {
+            return response()->json(['message' => 'You do not have permission to manage leave types.'], 403);
+        }
+
         $type = LeaveType::findOrFail($id);
         $request->validate([
             'name' => 'sometimes|string|max:100',
@@ -227,6 +236,10 @@ class LeaveController extends Controller {
     }
 
     public function saveTypeVisibility(Request $request, $id) {
+        if (!$this->canManageLeaveTypes()) {
+            return response()->json(['message' => 'You do not have permission to manage leave types.'], 403);
+        }
+
         $type = LeaveType::findOrFail($id);
         $request->validate([
             'visibility' => 'required|array',
@@ -249,6 +262,10 @@ class LeaveController extends Controller {
         }
 
         return response()->json(['message' => 'Department visibility saved successfully.']);
+    }
+
+    private function canManageLeaveTypes(): bool {
+        return $this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff']);
     }
 
     public function index(Request $request) {
@@ -282,6 +299,19 @@ class LeaveController extends Controller {
                 ->when($request->needs_action, fn($q) => $q->whereDoesntHave('employee', fn($eq) => $eq->where('user_id', $user->id)))
                 ->when(!$request->needs_action && $request->status, fn($q) => $q->where('status', $request->status))
                 ->when($request->employee_id, fn($q) => $q->where('employee_id', $request->employee_id))
+                ->when($request->leave_type_id, fn($q) => $q->where('leave_type_id', $request->leave_type_id))
+                ->when($request->search, function ($q) use ($request) {
+                    $search = trim((string) $request->search);
+                    $q->where(function ($sub) use ($search) {
+                        $sub->where('reason', 'like', "%{$search}%")
+                            ->orWhereHas('employee', function ($employeeQuery) use ($search) {
+                                $employeeQuery->where('first_name', 'like', "%{$search}%")
+                                    ->orWhere('last_name', 'like', "%{$search}%")
+                                    ->orWhere('email', 'like', "%{$search}%")
+                                    ->orWhere('employee_code', 'like', "%{$search}%");
+                            });
+                    });
+                })
                 ->orderBy('created_at', 'desc');
 
         $perPage = min(max((int) $request->input('per_page', 10), 10), 100);
@@ -360,6 +390,7 @@ class LeaveController extends Controller {
                 'notes' => $request->reason,
             ]);
 
+            $this->service->updateLeaveBalance($leaveRequest, 'submit');
             $this->service->notifyManager($leaveRequest, 'submitted');
             return response()->json(['message' => "{$leaveType->name} of {$hours}h submitted", 'request' => $leaveRequest->load('leaveType')], 201);
         }
@@ -400,7 +431,7 @@ class LeaveController extends Controller {
         $allocation = LeaveAllocation::where([
                     'employee_id' => $employee->id,
                     'leave_type_id' => $request->leave_type_id,
-                    'year' => now()->year,
+                    'year' => Carbon::parse($request->start_date)->year,
                 ])->first();
 
         if ($allocation && $allocation->remaining_days < $totalDays) {
@@ -443,6 +474,7 @@ class LeaveController extends Controller {
             'total_days' => $totalDays,
             'notes' => $request->reason,
         ]);
+        $this->service->updateLeaveBalance($leaveRequest, 'submit');
         /*
           |--------------------------------------------------------------------------
           | FIND ANY EMPLOYEE IN THE SAME DEPARTMENT WHO HAS APPLIED FOR ANNUAL LEAVE WITH IN THE SAME DATE PERIOD
@@ -630,7 +662,6 @@ class LeaveController extends Controller {
                 'to_status' => 'manager_approved',
                 'notes' => $request->input('notes'),
             ]);
-            $this->service->updateLeaveBalance($leave, 'approve');
             /*
               |--------------------------------------------------------------------------
               | Notify Employee
@@ -752,13 +783,11 @@ class LeaveController extends Controller {
 
     public function cancel(Request $request, $id) {
         $leave = LeaveRequest::findOrFail($id);
-        if (!in_array($leave->status, ['pending', 'approved'])) {
+        if (!in_array($leave->status, ['pending', 'manager_approved', 'approved'])) {
             return response()->json(['message' => 'Cannot cancel this leave'], 422);
         }
         $oldStatus = $leave->status;
-        if ($leave->status === 'approved') {
-            $this->service->updateLeaveBalance($leave, 'cancel');
-        }
+        $this->service->updateLeaveBalance($leave, 'cancel');
         $leave->update(['status' => 'cancelled']);
         $this->logLeaveActivity($leave, 'cancelled', 'Leave request cancelled.', [
             'from_status' => $oldStatus,

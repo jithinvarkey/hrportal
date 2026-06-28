@@ -75,9 +75,9 @@
       <div class="filter-row">
         <div class="search-wrap">
           <mat-icon class="search-ico">search</mat-icon>
-          <input class="search-input" placeholder="Search employee…" [(ngModel)]="filterSearch" (keyup.enter)="load()">
+          <input class="search-input" placeholder="Search employee…" [(ngModel)]="filterSearch" (ngModelChange)="onRequestSearchChange()" (keyup.enter)="load(1)">
         </div>
-        <select class="field-select" [(ngModel)]="filterType" (change)="load()">
+        <select class="field-select" [(ngModel)]="filterType" (change)="load(1)">
           <option value="">All Types</option>
           <option *ngFor="let t of leaveTypes" [value]="t.id">{{ t.name }}</option>
         </select>
@@ -436,7 +436,7 @@
   <ng-container *ngIf="activeTab==='types'">
     <div class="toolbar">
       <span style="font-size:13px;color:var(--text2)">{{ leaveTypes.length }} leave types configured</span>
-      <button class="btn-primary" style="margin-left:auto" (click)="openTypeForm()">
+      <button class="btn-primary" *ngIf="isHR" style="margin-left:auto" (click)="openTypeForm()">
         <mat-icon>add</mat-icon> Add Type
       </button>
     </div>
@@ -483,7 +483,7 @@
             </span>
           </td>
         </ng-container>
-        <ng-container matColumnDef="actions">
+        <ng-container matColumnDef="actions" *ngIf="isHR">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let t">
             <div class="row-actions">
@@ -1188,6 +1188,9 @@
 
       <div class="form-err" *ngIf="visibilityError">
         <mat-icon>error_outline</mat-icon> {{ visibilityError }}
+      </div>
+      <div class="form-success" *ngIf="visibilityMessage">
+        <mat-icon>check_circle</mat-icon> {{ visibilityMessage }}
       </div>
     </ng-container>
   </div>

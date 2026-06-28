@@ -204,31 +204,61 @@ class LeaveService {
         if (!$allocation)
             return;
 
+        $days = (float) ($leave->total_days ?? 0);
+        $hours = (float) ($leave->total_hours ?? 0);
+
         if ($action === 'approve') {
-            $allocation->decrement('pending_days', $leave->total_days ?? 0);
-            $allocation->increment('used_days', $leave->total_days ?? 0);
-            $allocation->decrement('remaining_days', $leave->total_days ?? 0);
-            if ($leave->total_hours) {
-                $allocation->decrement('pending_hours', $leave->total_hours);
-                $allocation->increment('used_hours', $leave->total_hours);
+            $legacyAlreadyCounted = (float) $allocation->pending_days < 0;
+
+            if ($legacyAlreadyCounted) {
+                $allocation->pending_days = 0;
+            } else {
+                $allocation->pending_days = max(0, (float) $allocation->pending_days - $days);
+                $allocation->used_days = (float) $allocation->used_days + $days;
             }
+
+            if ($hours) {
+                $legacyHoursAlreadyCounted = (float) $allocation->pending_hours < 0;
+                if ($legacyHoursAlreadyCounted) {
+                    $allocation->pending_hours = 0;
+                } else {
+                    $allocation->pending_hours = max(0, (float) $allocation->pending_hours - $hours);
+                    $allocation->used_hours = (float) $allocation->used_hours + $hours;
+                }
+            }
+
+            $allocation->remaining_days = $this->remainingDays($allocation);
+            $allocation->save();
         } elseif ($action === 'submit') {
-            $allocation->increment('pending_days', $leave->total_days ?? 0);
-            $allocation->decrement('remaining_days', $leave->total_days ?? 0);
-            if ($leave->total_hours)
-                $allocation->increment('pending_hours', $leave->total_hours);
+            $allocation->pending_days = (float) $allocation->pending_days + $days;
+            if ($hours) {
+                $allocation->pending_hours = (float) $allocation->pending_hours + $hours;
+            }
+            $allocation->remaining_days = $this->remainingDays($allocation);
+            $allocation->save();
         } elseif ($action === 'cancel') {
             if ($leave->status === 'approved') {
-                $allocation->decrement('used_days', $leave->total_days ?? 0);
-                if ($leave->total_hours)
-                    $allocation->decrement('used_hours', $leave->total_hours);
+                $allocation->used_days = max(0, (float) $allocation->used_days - $days);
+                if ($hours) {
+                    $allocation->used_hours = max(0, (float) $allocation->used_hours - $hours);
+                }
             } else {
-                $allocation->decrement('pending_days', $leave->total_days ?? 0);
-                if ($leave->total_hours)
-                    $allocation->decrement('pending_hours', $leave->total_hours);
+                $allocation->pending_days = max(0, (float) $allocation->pending_days - $days);
+                if ($hours) {
+                    $allocation->pending_hours = max(0, (float) $allocation->pending_hours - $hours);
+                }
             }
-            $allocation->increment('remaining_days', $leave->total_days ?? 0);
+            $allocation->remaining_days = $this->remainingDays($allocation);
+            $allocation->save();
         }
+    }
+
+    private function remainingDays(LeaveAllocation $allocation): float {
+        $available = (float) $allocation->allocated_days + (float) ($allocation->carried_forward_days ?? 0);
+        $used = (float) $allocation->used_days;
+        $pending = max(0, (float) $allocation->pending_days);
+
+        return max(0, round($available - $used - $pending, 2));
     }
 
     public function notifyManager(LeaveRequest $leave, string $status, $remarks = null, $conflicts = null): void {

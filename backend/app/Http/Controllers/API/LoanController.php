@@ -14,6 +14,7 @@ use App\Services\RequestActivityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 /**
  * Manages the full loan lifecycle: application, 3-stage approval,
@@ -75,6 +76,10 @@ class LoanController extends Controller {
         return $this->approvalService->levels();
     }
 
+    private function canManageLoanTypes(): bool {
+        return $this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff']);
+    }
+
     private function canApproveStage(string $status): bool {
         if ($this->hasAnyRoleDB(['super_admin'])) {
             return true;
@@ -126,13 +131,19 @@ class LoanController extends Controller {
      * @return JsonResponse           201 with created type
      */
     public function storeType(Request $request): JsonResponse {
+        if (!$this->canManageLoanTypes()) {
+            return response()->json(['message' => 'You do not have permission to manage loan types.'], 403);
+        }
+
         $validated = $request->validate([
             'name' => 'required|string|max:100',
             'code' => 'required|string|max:20|unique:loan_types',
             'max_amount' => 'required|numeric|min:0',
             'max_installments' => 'required|integer|min:1|max:120',
             'interest_rate' => 'nullable|numeric|min:0|max:100',
+            'requires_guarantor' => 'boolean',
             'is_active' => 'boolean',
+            'description' => 'nullable|string',
         ]);
 
         return response()->json(['type' => LoanType::create($validated)], 201);
@@ -146,14 +157,21 @@ class LoanController extends Controller {
      * @return JsonResponse
      */
     public function updateType(Request $request, int $id): JsonResponse {
+        if (!$this->canManageLoanTypes()) {
+            return response()->json(['message' => 'You do not have permission to manage loan types.'], 403);
+        }
+
         $type = LoanType::findOrFail($id);
 
         $validated = $request->validate([
             'name' => 'sometimes|string|max:100',
+            'code' => ['sometimes', 'string', 'max:20', Rule::unique('loan_types')->ignore($type->id)],
             'max_amount' => 'sometimes|numeric|min:0',
             'max_installments' => 'sometimes|integer|min:1|max:120',
             'interest_rate' => 'nullable|numeric|min:0|max:100',
+            'requires_guarantor' => 'boolean',
             'is_active' => 'boolean',
+            'description' => 'nullable|string',
         ]);
 
         $type->update($validated);
@@ -201,7 +219,13 @@ class LoanController extends Controller {
                         $q->where('employee_id', $user->employee->id);
                     }
                 })
-                ->when($request->status, fn($q) => $q->where('status', $request->status))
+                ->when($request->status, function ($q, string $status) {
+                    if ($status === 'pending_hr' && $this->approvalLevels() === 2) {
+                        return $q->whereIn('status', ['pending_hr', 'pending_manager']);
+                    }
+
+                    return $q->where('status', $status);
+                })
                 ->when($request->loan_type_id, fn($q) => $q->where('loan_type_id', $request->loan_type_id))
                 ->when($request->search, fn($q) =>
                         $q->whereHas('employee', fn($eq) =>

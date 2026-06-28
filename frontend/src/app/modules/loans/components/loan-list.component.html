@@ -293,7 +293,7 @@
   <ng-container *ngIf="activeTab==='types'">
     <div class="toolbar">
       <span style="font-size:13px;color:var(--text2)">{{ loanTypes.length }} loan types configured</span>
-      <button   *ngif="isHR" class="btn-primary" style="margin-left:auto" (click)="openTypeForm()">
+      <button *ngIf="isHR" class="btn-primary" style="margin-left:auto" (click)="openTypeForm()">
         <mat-icon>add</mat-icon> Add Type
       </button>
     </div>
@@ -330,6 +330,21 @@
           <td mat-cell *matCellDef="let t">
             <span class="status-badge" [class]="t.interest_rate > 0 ? 'badge-yellow' : 'badge-green'">
               {{ t.interest_rate > 0 ? t.interest_rate + '% / yr' : 'Interest-Free' }}
+            </span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let t">
+            <button *ngIf="isHR" type="button" class="status-toggle"
+              [class.active]="t.is_active"
+              [disabled]="typeSaving"
+              (click)="toggleTypeStatus(t)">
+              <span class="toggle-dot"></span>
+              {{ t.is_active ? 'Active' : 'Inactive' }}
+            </button>
+            <span *ngIf="!isHR" class="status-badge" [class]="t.is_active ? 'badge-green' : 'badge-gray'">
+              {{ t.is_active ? 'Active' : 'Inactive' }}
             </span>
           </td>
         </ng-container>
@@ -582,7 +597,7 @@
       <label class="field-label">Loan Type <span class="req">*</span></label>
       <select class="field-select-full" [(ngModel)]="form.loan_type_id">
         <option value="">Select loan type…</option>
-        <option *ngFor="let t of loanTypes" [value]="t.id">{{ t.name }}</option>
+        <option *ngFor="let t of activeLoanTypes" [value]="t.id">{{ t.name }}</option>
       </select>
       <div class="type-hint" *ngIf="selectedType">
         <mat-icon>info_outline</mat-icon>
@@ -775,11 +790,11 @@
     <div class="two-col">
       <div class="field-group">
         <label class="field-label">Name <span class="req">*</span></label>
-        <input class="field-input" [(ngModel)]="typeForm.name" placeholder="e.g. Housing Loan">
+        <input class="field-input" [(ngModel)]="typeForm.name" (ngModelChange)="onTypeNameChange()" placeholder="e.g. Housing Loan">
       </div>
       <div class="field-group">
-        <label class="field-label">Code <span class="req">*</span></label>
-        <input class="field-input" [(ngModel)]="typeForm.code" placeholder="e.g. HL">
+        <label class="field-label">Code <span class="field-hint">auto generated if blank</span></label>
+        <input class="field-input" [(ngModel)]="typeForm.code" (ngModelChange)="typeCodeTouched=true" placeholder="e.g. HL">
       </div>
     </div>
     <div class="two-col">

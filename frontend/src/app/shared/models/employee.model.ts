@@ -22,6 +22,11 @@ export interface DepartmentRef {
   name: string;
 }
 
+export interface UnitRef {
+  id:   number;
+  name: string;
+}
+
 export interface DesignationRef {
   id:    number;
   title: string;
@@ -73,6 +78,7 @@ export interface Employee {
 
   // Employment
   department_id:        number | null;
+  unit_id:              number | null;
   designation_id:       number | null;
   manager_id:           number | null;
   employment_type:      EmploymentType;
@@ -100,6 +106,7 @@ export interface Employee {
 
   // Conditionally loaded relations
   department?:          DepartmentRef;
+  unit?:                UnitRef;
   designation?:         DesignationRef;
   manager?:             ManagerRef | null;
   leave_allocations?:   LeaveAllocationSummary[];
@@ -112,12 +119,20 @@ export interface Employee {
 
 export interface PaginatedResponse<T> {
   data:          T[];
-  current_page:  number;
-  last_page:     number;
-  per_page:      number;
-  total:         number;
-  from:          number | null;
-  to:            number | null;
+  meta?: {
+    current_page: number;
+    last_page:    number;
+    per_page:     number;
+    total:        number;
+    from?:        number | null;
+    to?:          number | null;
+  };
+  current_page?: number;
+  last_page?:    number;
+  per_page?:     number;
+  total?:        number;
+  from?:         number | null;
+  to?:           number | null;
 }
 
 // ── Filter / params ───────────────────────────────────────────────────────────
@@ -126,6 +141,7 @@ export interface EmployeeFilters {
   search?:          string;
   status?:          EmployeeStatus | '';
   department_id?:   number | '';
+  unit_id?:         number | '';
   employment_type?: EmploymentType | '';
   sort_by?:         string;
   sort_dir?:        'asc' | 'desc';

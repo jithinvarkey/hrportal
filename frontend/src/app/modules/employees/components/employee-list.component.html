@@ -64,6 +64,11 @@
       <option *ngFor="let d of departments" [value]="d.id">{{ d.name }}</option>
     </select>
 
+    <select class="filter-select" [formControl]="unitFilter" (change)="loadEmployees()">
+      <option value="">All Units</option>
+      <option *ngFor="let u of units" [value]="u.id">{{ u.name }}</option>
+    </select>
+
     <select class="filter-select" [formControl]="typeFilter" (change)="loadEmployees()">
       <option value="">All Types</option>
       <option value="full_time">Full Time</option>
@@ -116,6 +121,11 @@
             <span class="td-sub">{{ e.designation?.title || '' }}</span>
           </div>
         </td>
+      </ng-container>
+
+      <ng-container matColumnDef="unit">
+        <th mat-header-cell *matHeaderCellDef>Unit</th>
+        <td mat-cell *matCellDef="let e">{{ e.unit?.name || '—' }}</td>
       </ng-container>
 
       <!-- Type -->

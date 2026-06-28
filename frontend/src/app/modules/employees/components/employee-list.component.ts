@@ -87,10 +87,12 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
   searchControl  = new FormControl<string>('');
   statusFilter   = new FormControl<EmployeeStatus | ''>('');
   deptFilter     = new FormControl<number | ''>('');
+  unitFilter     = new FormControl<number | ''>('');
   typeFilter     = new FormControl<EmploymentType | ''>('');
 
   /** Department list for the filter dropdown. */
   departments: DepartmentRef[] = [];
+  units: any[] = [];
 
   /** Workforce summary for the stat strip. */
   stats: EmpStats | null = null;
@@ -108,6 +110,7 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
   /** Columns shown in the Material table. */
   readonly displayedColumns: string[] = [
     'avatar', 'employee_code', 'full_name', 'department',
+    'unit',
     'employment_type', 'status', 'actions',
   ];
   isHR = false;
@@ -134,6 +137,7 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
     this.loadEmployees();
     this.loadStats();
     this.loadDepartments();
+    this.loadUnits();
     this.isHR = this.auth.isHRRole();
 
     // Re-fetch on search input after debounce
@@ -180,6 +184,18 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
       });
   }
 
+  loadUnits(): void {
+    this.http.get<any>('/api/v1/units')
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (r) => {
+          this.units = r?.data ?? r ?? [];
+          this.cdr.markForCheck();
+        },
+        error: () => {},
+      });
+  }
+
   private buildTiles(s: EmpStats): void {
     this.statTiles = [
       { label: 'Total',          value: s.total,          color: '#3b82f6', icon: 'people',          status: '' },
@@ -213,6 +229,7 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
         search:          this.searchControl.value  ?? '',
         status:          this.statusFilter.value   ?? '',
         department_id:   this.deptFilter.value     ?? '',
+        unit_id:         this.unitFilter.value     ?? '',
         employment_type: this.typeFilter.value      ?? '',
         page,
         per_page:        15,
@@ -226,6 +243,7 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
     this.searchControl.setValue('');
     this.statusFilter.setValue('');
     this.deptFilter.setValue('');
+    this.unitFilter.setValue('');
     this.typeFilter.setValue('');
     this.loadEmployees();
   }
