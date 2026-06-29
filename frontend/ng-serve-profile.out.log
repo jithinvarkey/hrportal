@@ -1235,3 +1235,36 @@ Component update sent to client(s).
 Application bundle generation complete. [1.597 seconds] - 2026-06-29T10:54:25.043Z
 
 Component update sent to client(s).
+[33m>[39m Changes detected. Rebuilding...
+[32m√[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m       [2m | [22m [1mRaw size[22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m        [2m | [22m [36m19.81 kB[39m[2m | [22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m       [2m | [22m [1mRaw size[22m
+[32mchunk-DRELVXPA.js[39m  [2m | [22m[2mleave-module[22m[2m | [22m[36m495.63 kB[39m[2m | [22m
+
+Application bundle generation complete. [1.836 seconds] - 2026-06-29T11:46:27.683Z
+
+Page reload sent to client(s).
+[33m>[39m Changes detected. Rebuilding...
+[32m√[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m       [2m | [22m [1mRaw size[22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m        [2m | [22m [36m19.81 kB[39m[2m | [22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m       [2m | [22m [1mRaw size[22m
+[32mchunk-LNU4M3HV.js[39m  [2m | [22m[2mleave-module[22m[2m | [22m[36m495.78 kB[39m[2m | [22m
+
+Application bundle generation complete. [1.564 seconds] - 2026-06-29T11:46:37.733Z
+
+Component update sent to client(s).
+[33m>[39m Changes detected. Rebuilding...
+[32m√[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m       [2m | [22m [1mRaw size[22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m        [2m | [22m [36m19.81 kB[39m[2m | [22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m       [2m | [22m [1mRaw size[22m
+[32mchunk-F3U5EGFQ.js[39m  [2m | [22m[2mleave-module[22m[2m | [22m[36m495.96 kB[39m[2m | [22m
+
+Application bundle generation complete. [1.201 seconds] - 2026-06-29T11:46:48.099Z
+
+Page reload sent to client(s).

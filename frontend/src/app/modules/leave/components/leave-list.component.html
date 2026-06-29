@@ -343,7 +343,7 @@
       <div class="card-hdr"><span class="card-title"><mat-icon>star</mat-icon> Holidays {{ calYear }}</span></div>
       <div class="holiday-list">
         <div class="holiday-row" *ngFor="let h of holidays">
-          <div class="holiday-date">{{ h.date | date:'EEE, dd MMM' }}</div>
+          <div class="holiday-date">{{ formatHolidayDate(h.date, { weekday:'short', day:'2-digit', month:'short' }) }}</div>
           <div class="holiday-name">{{ h.name }}</div>
           <span class="status-badge badge-blue" *ngIf="h.is_recurring">Annual</span>
           <button class="row-btn" *ngIf="canManageHolidays" (click)="openHolidayForm(h)"><mat-icon style="color:var(--accent);font-size:16px">edit</mat-icon></button>
@@ -378,9 +378,9 @@
       <div class="holiday-list" *ngIf="managedHolidays.length">
         <div class="holiday-row" *ngFor="let h of managedHolidays">
           <div class="holiday-date">
-            {{ h.date | date:'dd MMM yyyy' }}
-            <ng-container *ngIf="h.end_date && h.end_date.slice(0, 10) !== h.date.slice(0, 10)">
-              - {{ h.end_date | date:'dd MMM yyyy' }}
+            {{ formatHolidayDate(h.date) }}
+            <ng-container *ngIf="dateInputValue(h.end_date) && dateInputValue(h.end_date) !== dateInputValue(h.date)">
+              - {{ formatHolidayDate(h.end_date) }}
             </ng-container>
           </div>
           <div class="holiday-name">{{ h.name }}</div>
