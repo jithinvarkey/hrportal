@@ -4,7 +4,8 @@
   <div class="page-hdr">
     <div>
       <h1 class="page-title">Leave Management</h1>
-      <p class="page-sub">Requests · Calendar · Balances · Leave Types · Holidays</p>
+      <p class="page-sub" *ngIf="isHR">Requests · Calendar · Balances · Leave Types · Holidays</p>
+      <p class="page-sub" *ngIf="!isHR">Requests · Calendar · Balances · Holidays</p>
     </div>
     <button class="btn-primary" (click)="openNewRequest()">
       <mat-icon>add</mat-icon> New Request
@@ -50,10 +51,12 @@
 
   <!-- ── Main Tabs ───────────────────────────────────────────────────────── -->
   <div class="main-tabs">
-    <button *ngFor="let t of tabs" class="main-tab" [class.active]="activeTab===t.id" (click)="switchTab(t.id)">
-      <mat-icon>{{ t.icon }}</mat-icon>
-      {{ t.label }}
-    </button>
+    <ng-container *ngFor="let t of tabs">
+      <button *ngIf="t.id !== 'types' || isHR" class="main-tab" [class.active]="activeTab===t.id" (click)="switchTab(t.id)">
+        <mat-icon>{{ t.icon }}</mat-icon>
+        {{ t.label }}
+      </button>
+    </ng-container>
   </div>
 
   <!-- ══════════════════════════════════════════════════════════════════════ -->
@@ -508,7 +511,7 @@
   <!-- ══════════════════════════════════════════════════════════════════════ -->
   <!-- TAB: LEAVE TYPES                                                       -->
   <!-- ══════════════════════════════════════════════════════════════════════ -->
-  <ng-container *ngIf="activeTab==='types'">
+  <ng-container *ngIf="activeTab==='types' && isHR">
     <div class="toolbar">
       <span style="font-size:13px;color:var(--text2)">{{ leaveTypes.length }} leave types configured</span>
       <button class="btn-primary" *ngIf="isHR" style="margin-left:auto" (click)="openTypeForm()">
