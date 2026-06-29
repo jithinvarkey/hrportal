@@ -1263,6 +1263,29 @@ class LeaveController extends Controller {
             }
         }
 
+        $availableYears = LeaveAllocation::query()
+                ->when(!$isHRAdmin, fn($q) => $q->whereIn('employee_id', $visibleEmployeeIds->values()))
+                ->when($isHRAdmin && $request->department_id, fn($q) =>
+                        $q->whereHas('employee', fn($eq) => $eq->where('department_id', $request->department_id))
+                )
+                ->when(($isHRAdmin || $isMgr) && $request->search, fn($q) =>
+                        $q->whereHas('employee', fn($eq) =>
+                                $eq->where('first_name', 'like', "%{$request->search}%")
+                                ->orWhere('last_name', 'like', "%{$request->search}%")
+                        )
+                )
+                ->select('year')
+                ->whereNotNull('year')
+                ->distinct()
+                ->orderByDesc('year')
+                ->pluck('year')
+                ->map(fn($value) => (int) $value)
+                ->values();
+
+        if ($availableYears->isNotEmpty() && !$availableYears->contains((int) $year)) {
+            $year = $availableYears->first();
+        }
+
         $allocations = LeaveAllocation::with(['employee.department', 'leaveType'])
                 ->where('year', $year)
                 ->when(!$isHRAdmin, fn($q) => $q->whereIn('employee_id', $visibleEmployeeIds->values()))
@@ -1283,7 +1306,11 @@ class LeaveController extends Controller {
             return $this->decorateAnnualBalanceForDate($allocation, $now, true);
         });
 
-        return response()->json($allocations);
+        $response = $allocations->toArray();
+        $response['available_years'] = $availableYears;
+        $response['selected_year'] = (int) $year;
+
+        return response()->json($response);
     }
 
     public function holidays(Request $request) {

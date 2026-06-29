@@ -412,6 +412,12 @@
         <mat-icon class="search-ico">search</mat-icon>
         <input class="search-input" placeholder="Search employee…" [(ngModel)]="filterSearch" (keyup.enter)="loadAllBalances()">
       </div>
+      <div class="balance-year-filter">
+        <label>Contract Year</label>
+        <select [(ngModel)]="balanceYear" (change)="onBalanceYearChange()">
+          <option *ngFor="let year of balanceYears" [ngValue]="year">{{ year }}</option>
+        </select>
+      </div>
       <span *ngIf="!isHR && !isMgr" style="font-size:13px;color:var(--text2)">Your leave balance details</span>
       <button class="btn-outline" (click)="loadAllBalances()"><mat-icon>refresh</mat-icon></button>
     </div>

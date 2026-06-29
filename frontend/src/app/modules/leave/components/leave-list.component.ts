@@ -52,6 +52,8 @@ export class LeaveListComponent implements OnInit {
   filterSearch = '';
   filterType = '';
   filterDept = '';
+  balanceYear = new Date().getFullYear();
+  balanceYears: number[] = [new Date().getFullYear()];
   private searchTimer: any = null;
   currentPage = 1;
   pageSize = 10;
@@ -399,12 +401,22 @@ export class LeaveListComponent implements OnInit {
 
   // ── All Balances tab ─────────────────────────────────────────────────────
   loadAllBalances(page = 1) {
-    const params: any = { page, per_page: 25 };
+    const params: any = { page, per_page: 25, year: this.balanceYear };
     if (this.filterSearch) params.search = this.filterSearch;
     if (this.filterDept) params.department_id = this.filterDept;
     this.http.get<any>('/api/v1/leave/all-balances', { params }).subscribe({
-      next: r => { this.allBalances = r?.data || []; this.balancePagination = r; }
+      next: r => {
+        this.allBalances = r?.data || [];
+        this.balancePagination = r;
+        const years = (r?.available_years || []).map((value: any) => Number(value)).filter((value: number) => !!value);
+        this.balanceYears = years.length ? years : [this.balanceYear];
+        if (r?.selected_year) this.balanceYear = Number(r.selected_year);
+      }
     });
+  }
+
+  onBalanceYearChange(): void {
+    this.loadAllBalances(1);
   }
 
   // ── Calendar ──────────────────────────────────────────────────────────────

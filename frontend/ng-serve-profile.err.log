@@ -138,3 +138,16 @@
           ╵                                 [32m~~~~~~~~~~~~~~~~~~~~~[0m
 
 [39m[22m
+[1m[31mComponent update failed: ctx_r0.isAnnualLeaveBalance is not a function
+TypeError: ctx_r0.isAnnualLeaveBalance is not a function
+    at EmployeeDetailComponent_div_9_div_15_div_1_Template (http://localhost:4200/@ng/component?c=src%2Fapp%2Fmodules%2Femployees%2Fcomponents%2Femployee-detail.component.ts%40EmployeeDetailComponent&t=1782735907728:1144:59)
+    at executeTemplate (http://localhost:4200/@fs/E:/Xampp_new/htdocs/hrportal/frontend/.angular/cache/20.3.19/hrms-frontend/vite/deps/chunk-CVL54NEV.js?v=fb62ba7a:8595:5)
+    at refreshView (http://localhost:4200/@fs/E:/Xampp_new/htdocs/hrportal/frontend/.angular/cache/20.3.19/hrms-frontend/vite/deps/chunk-CVL54NEV.js?v=fb62ba7a:9281:7)
+    at detectChangesInView (http://localhost:4200/@fs/E:/Xampp_new/htdocs/hrportal/frontend/.angular/cache/20.3.19/hrms-frontend/vite/deps/chunk-CVL54NEV.js?v=fb62ba7a:9453:5)
+    at detectChangesInViewIfAttached (http://localhost:4200/@fs/E:/Xampp_new/htdocs/hrportal/frontend/.angular/cache/20.3.19/hrms-frontend/vite/deps/chunk-CVL54NEV.js?v=fb62ba7a:9436:3)
+    at detectChangesInEmbeddedViews (http://localhost:4200/@fs/E:/Xampp_new/htdocs/hrportal/frontend/.angular/cache/20.3.19/hrms-frontend/vite/deps/chunk-CVL54NEV.js?v=fb62ba7a:9406:7)
+    at refreshView (http://localhost:4200/@fs/E:/Xampp_new/htdocs/hrportal/frontend/.angular/cache/20.3.19/hrms-frontend/vite/deps/chunk-CVL54NEV.js?v=fb62ba7a:9306:5)
+    at detectChangesInView (http://localhost:4200/@fs/E:/Xampp_new/htdocs/hrportal/frontend/.angular/cache/20.3.19/hrms-frontend/vite/deps/chunk-CVL54NEV.js?v=fb62ba7a:9453:5)
+    at detectChangesInViewIfAttached (http://localhost:4200/@fs/E:/Xampp_new/htdocs/hrportal/frontend/.angular/cache/20.3.19/hrms-frontend/vite/deps/chunk-CVL54NEV.js?v=fb62ba7a:9436:3)
+    at detectChangesInEmbeddedViews (http://localhost:4200/@fs/E:/Xampp_new/htdocs/hrportal/frontend/.angular/cache/20.3.19/hrms-frontend/vite/deps/chunk-CVL54NEV.js?v=fb62ba7a:9406:7)
+Please consider reporting the error at https://github.com/angular/angular-cli/issues[39m[22m
