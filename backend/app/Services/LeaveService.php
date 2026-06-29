@@ -6,10 +6,12 @@ use App\Mail\LeaveStatusMail;
 use App\Models\User;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use App\Models\LeaveRequest;
 use App\Models\LeaveAllocation;
 use App\Models\LeaveType;
 use App\Models\Employee;
+use App\Models\Holiday;
 use App\Models\DepartmentExcuseLimit;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
@@ -28,11 +30,63 @@ class LeaveService {
     public function calculateWorkingDays(string $start, string $end): float {
         $days = 0;
         $period = CarbonPeriod::create($start, $end);
+        $holidays = $this->holidayKeys($start, $end);
+
         foreach ($period as $date) {
-            if (in_array($date->dayOfWeek, self::WORKING_DAYS))
+            if (in_array($date->dayOfWeek, self::WORKING_DAYS) && !isset($holidays[$date->format('Y-m-d')])) {
                 $days++;
+            }
         }
+
         return $days;
+    }
+
+    private function holidayKeys(string $start, string $end): array {
+        $startDate = Carbon::parse($start)->startOfDay();
+        $endDate = Carbon::parse($end)->startOfDay();
+        $years = range((int) $startDate->year, (int) $endDate->year);
+        $keys = [];
+
+        $holidays = Holiday::query()
+                ->where(function ($query) use ($startDate, $endDate, $years) {
+                    $query->whereRaw('date <= ? AND COALESCE(end_date, date) >= ?', [
+                                $endDate->toDateString(),
+                                $startDate->toDateString(),
+                            ])
+                            ->orWhere(function ($recurring) use ($years) {
+                                $recurring->where('is_recurring', true)
+                                        ->whereIn(DB::raw('YEAR(date)'), $years);
+                            })
+                            ->orWhere('is_recurring', true);
+                })
+                ->get();
+
+        foreach ($holidays as $holiday) {
+            $holidayDate = Carbon::parse($holiday->date)->startOfDay();
+            $holidayEndDate = Carbon::parse($holiday->end_date ?: $holiday->date)->startOfDay();
+            $durationDays = max(0, $holidayDate->diffInDays($holidayEndDate));
+
+            if ($holiday->is_recurring) {
+                foreach ($years as $year) {
+                    $date = Carbon::create($year, $holidayDate->month, $holidayDate->day)->startOfDay();
+                    $recurringEnd = $date->copy()->addDays($durationDays);
+                    foreach (CarbonPeriod::create($date, $recurringEnd) as $holidayDay) {
+                        if ($holidayDay->betweenIncluded($startDate, $endDate)) {
+                            $keys[$holidayDay->toDateString()] = true;
+                        }
+                    }
+                }
+                continue;
+            }
+
+            foreach (CarbonPeriod::create($holidayDate, $holidayEndDate) as $holidayDay) {
+                if ($holidayDay->betweenIncluded($startDate, $endDate)) {
+                    $keys[$holidayDay->toDateString()] = true;
+                }
+            }
+        }
+
+        return $keys;
     }
 
     // ── Calculate hours for a Business Excuse ────────────────────────────
@@ -195,7 +249,7 @@ class LeaveService {
 
     // ── Leave balance update ──────────────────────────────────────────────
     public function updateLeaveBalance(LeaveRequest $leave, string $action): void {
-        $allocation = LeaveAllocation::where([
+        $allocation = LeaveAllocation::with(['employee', 'leaveType'])->where([
                     'employee_id' => $leave->employee_id,
                     'leave_type_id' => $leave->leave_type_id,
                     'year' => Carbon::parse($leave->start_date)->year,
@@ -254,11 +308,89 @@ class LeaveService {
     }
 
     private function remainingDays(LeaveAllocation $allocation): float {
+        if ($allocation->leaveType && $this->isAnnualLeaveType($allocation->leaveType)) {
+            return $this->remainingAnnualDays($allocation, now('Asia/Riyadh')->startOfDay());
+        }
+
         $available = (float) $allocation->allocated_days + (float) ($allocation->carried_forward_days ?? 0);
         $used = (float) $allocation->used_days;
         $pending = max(0, (float) $allocation->pending_days);
 
         return max(0, round($available - $used - $pending, 2));
+    }
+
+    private function remainingAnnualDays(LeaveAllocation $allocation, Carbon $asOf): float {
+        $periodStart = $allocation->accrual_year_start
+            ? Carbon::parse($allocation->accrual_year_start)->startOfDay()
+            : Carbon::create((int) $allocation->year, 1, 1)->startOfDay();
+        $periodEnd = $periodStart->copy()->addYear()->subDay()->endOfDay();
+        $balanceDate = $asOf->copy()->min($periodEnd)->max($periodStart);
+        $carriedForward = (float) ($allocation->carried_forward_days ?? 0);
+        $usage = $this->annualUsageWithCarryForward($allocation, $periodStart, $balanceDate, $carriedForward);
+        $pending = max(0, (float) $allocation->pending_days);
+
+        return max(0, round((float) $allocation->allocated_days + $usage['active_carry_forward_remaining'] - $usage['annual_used_days'] - $pending, 2));
+    }
+
+    private function annualUsageWithCarryForward(LeaveAllocation $allocation, Carbon $periodStart, Carbon $asOf, float $carriedForward): array {
+        $balanceDate = $asOf->copy()->startOfDay();
+        $expiryDate = $periodStart->copy()->addMonthsNoOverflow(3)->subDay()->endOfDay();
+        $windowEnd = $balanceDate->copy()->min($expiryDate);
+        $usedDays = 0.0;
+        $carryForwardWindowUsedDays = 0.0;
+
+        $requests = LeaveRequest::with('leaveType')
+                ->where('employee_id', $allocation->employee_id)
+                ->where('status', 'approved')
+                ->whereDate('start_date', '<=', $balanceDate->toDateString())
+                ->whereDate('end_date', '>=', $periodStart->toDateString())
+                ->whereHas('leaveType', fn($query) =>
+                    $query->where('is_annual', true)
+                        ->orWhere('code', 'AL')
+                        ->orWhere('name', 'like', '%Annual%')
+                )
+                ->get();
+
+        foreach ($requests as $request) {
+            $requestStart = Carbon::parse($request->start_date)->startOfDay()->max($periodStart);
+            $requestEnd = Carbon::parse($request->end_date)->startOfDay()->min($balanceDate);
+            if ($requestEnd->lt($requestStart)) {
+                continue;
+            }
+
+            $usedDays += $this->leaveDaysWithin($request, $requestStart, $requestEnd);
+
+            if ($windowEnd->gte($periodStart)) {
+                $carryWindowStart = $requestStart->copy()->max($periodStart);
+                $carryWindowEnd = $requestEnd->copy()->min($windowEnd);
+                if ($carryWindowEnd->gte($carryWindowStart)) {
+                    $carryForwardWindowUsedDays += $this->leaveDaysWithin($request, $carryWindowStart, $carryWindowEnd);
+                }
+            }
+        }
+
+        $carryForwardUsed = min($carriedForward, $carryForwardWindowUsedDays);
+        $carryForwardRemaining = max(0, $carriedForward - $carryForwardUsed);
+        $activeCarryForwardRemaining = $balanceDate->lte($expiryDate) ? $carryForwardRemaining : 0.0;
+
+        return [
+            'annual_used_days' => round(max(0, $usedDays - $carryForwardUsed), 2),
+            'active_carry_forward_remaining' => round($activeCarryForwardRemaining, 2),
+        ];
+    }
+
+    private function leaveDaysWithin(LeaveRequest $request, Carbon $start, Carbon $end): float {
+        if ($request->is_half_day && $start->isSameDay($end)) {
+            return 0.5;
+        }
+
+        return (float) $this->calculateWorkingDays($start->toDateString(), $end->toDateString());
+    }
+
+    private function isAnnualLeaveType(LeaveType $leaveType): bool {
+        return (bool) $leaveType->is_annual
+            || strtoupper((string) $leaveType->code) === 'AL'
+            || str_contains(strtolower((string) $leaveType->name), 'annual');
     }
 
     public function notifyManager(LeaveRequest $leave, string $status, $remarks = null, $conflicts = null): void {

@@ -73,6 +73,7 @@ class CreateLeaveAttendanceTables extends Migration {
             $table->bigIncrements('id');
             $table->string('name', 100);
             $table->date('date');
+            $table->date('end_date')->nullable();
             $table->boolean('is_recurring')->default(false);
             $table->timestamps();
         });

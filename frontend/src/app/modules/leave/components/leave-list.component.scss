@@ -652,6 +652,7 @@
 
 /* badge-blue for manager_approved */
 .badge-blue { background:rgba(59,130,246,.12); color:#3b82f6; border-color:rgba(59,130,246,.2); }
+.badge-gray { background:rgba(148,163,184,.12); color:var(--text3); border-color:rgba(148,163,184,.2); }
 
 /* ── Approval action buttons (table rows) ─────────────────────── */
 .approve-btn:hover { background:rgba(16,185,129,.1) !important; color:var(--success) !important; border-color:rgba(16,185,129,.3) !important; }
