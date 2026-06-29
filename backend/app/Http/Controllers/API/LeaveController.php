@@ -12,6 +12,7 @@ use App\Services\LeaveService;
 use App\Services\RequestActivityService;
 use App\Services\AnnualTicketService;
 use Carbon\Carbon;
+use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -54,6 +55,10 @@ class LeaveController extends Controller {
 
     private function hasAnyRoleDB(array $roles): bool {
         return count(array_intersect($this->userRoles(), $roles)) > 0;
+    }
+
+    private function canManageHolidays(): bool {
+        return $this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff']);
     }
 
     private function visibleLeaveTypeIdsForDepartment(?int $departmentId): ?array {
@@ -426,16 +431,40 @@ class LeaveController extends Controller {
             $request->merge(['end_date' => $request->start_date]);
         }
 
-        $totalDays = $isHalfDay ? 0.5 : $this->service->calculateWorkingDays($request->start_date, $request->end_date);
+        $overlappingLeave = $this->overlappingLeaveRequest(
+            $employee->id,
+            $request->start_date,
+            $request->end_date
+        );
 
-        $allocation = LeaveAllocation::where([
-                    'employee_id' => $employee->id,
-                    'leave_type_id' => $request->leave_type_id,
-                    'year' => Carbon::parse($request->start_date)->year,
-                ])->first();
+        if ($overlappingLeave) {
+            return response()->json([
+                'message' => sprintf(
+                    'You already have a %s leave request from %s to %s with status %s. Please choose different dates.',
+                    $overlappingLeave->leaveType?->name ?? 'leave',
+                    Carbon::parse($overlappingLeave->start_date)->toDateString(),
+                    Carbon::parse($overlappingLeave->end_date)->toDateString(),
+                    str_replace('_', ' ', $overlappingLeave->status)
+                ),
+            ], 422);
+        }
 
-        if ($allocation && $allocation->remaining_days < $totalDays) {
-            return response()->json(['message' => "Insufficient leave balance. Available: {$allocation->remaining_days} days"], 422);
+        $workingDays = $this->service->calculateWorkingDays($request->start_date, $request->end_date);
+        $totalDays = $isHalfDay ? ($workingDays > 0 ? 0.5 : 0) : $workingDays;
+
+        if ($totalDays <= 0) {
+            return response()->json(['message' => 'Selected dates do not contain working days after excluding weekends and holidays.'], 422);
+        }
+
+        $allocation = $this->allocationForLeaveDate($employee, $leaveType, Carbon::parse($request->end_date));
+        $availableDays = $allocation
+            ? ($this->isAnnualLeaveType($leaveType)
+                ? (float) $this->projectedAnnualAllocation($allocation, Carbon::parse($request->end_date))->remaining_days
+                : (float) $allocation->remaining_days)
+            : null;
+
+        if ($availableDays !== null && $availableDays < $totalDays) {
+            return response()->json(['message' => "Insufficient leave balance. Available until {$request->end_date}: {$availableDays} days"], 422);
         }
 
         // ── Document upload (required if leave type has requires_document=true) ──
@@ -804,12 +833,326 @@ class LeaveController extends Controller {
         return response()->json(['message' => 'Leave cancelled']);
     }
 
-    public function balance($empId) {
-        $allocations = LeaveAllocation::with('leaveType')
+    public function balance(Request $request, $empId) {
+        if (!$request->query('as_of')) {
+            $allocations = LeaveAllocation::with(['leaveType', 'employee'])
+                    ->where('employee_id', $empId)
+                    ->where('year', now()->year)
+                    ->get()
+                    ->map(fn(LeaveAllocation $allocation) => $this->decorateAnnualBalanceForDate($allocation, now('Asia/Riyadh')->startOfDay(), true));
+
+            return response()->json(['balances' => $this->mergeAnnualBalances($allocations)]);
+        }
+
+        $asOf = $request->query('as_of')
+            ? Carbon::parse($request->query('as_of'))->startOfDay()
+            : now('Asia/Riyadh')->startOfDay();
+        $employee = \App\Models\Employee::findOrFail($empId);
+        $annualPeriodYear = $this->annualPeriodStart($employee, $asOf)->year;
+
+        $allocations = LeaveAllocation::with(['leaveType', 'employee'])
                 ->where('employee_id', $empId)
-                ->where('year', now()->year)
-                ->get();
+                ->whereIn('year', array_values(array_unique([$asOf->year, $annualPeriodYear])))
+                ->get()
+                ->filter(function (LeaveAllocation $allocation) use ($asOf, $annualPeriodYear) {
+                    if (!$allocation->leaveType || !$this->isAnnualLeaveType($allocation->leaveType)) {
+                        return (int) $allocation->year === (int) $asOf->year;
+                    }
+
+                    if (!$allocation->accrual_year_start) {
+                        return (int) $allocation->year === (int) $annualPeriodYear;
+                    }
+
+                    $periodStart = Carbon::parse($allocation->accrual_year_start)->startOfDay();
+                    $periodEnd = $periodStart->copy()->addYear()->subDay()->endOfDay();
+
+                    return $asOf->betweenIncluded($periodStart, $periodEnd);
+                })
+                ->map(function (LeaveAllocation $allocation) use ($asOf) {
+                    if ($allocation->leaveType && $this->isAnnualLeaveType($allocation->leaveType)) {
+                        return $this->projectedAnnualAllocation($allocation, $asOf);
+                    }
+
+                    return $allocation;
+                })
+                ->values();
+
         return response()->json(['balances' => $allocations]);
+    }
+
+    private function mergeAnnualBalances($allocations) {
+        $annual = $allocations->filter(fn(LeaveAllocation $allocation) =>
+            $allocation->leaveType && $this->isAnnualLeaveType($allocation->leaveType)
+        );
+
+        if ($annual->count() <= 1) {
+            return $allocations->values();
+        }
+
+        $display = $annual->first(fn(LeaveAllocation $allocation) =>
+            strtoupper((string) $allocation->leaveType?->code) === 'AL'
+        ) ?: $annual->first();
+
+        $allocated = (float) $annual->max(fn(LeaveAllocation $allocation) =>
+            (float) ($allocation->annual_entitlement ?: $allocation->allocated_days)
+        );
+        $carriedForward = (float) $annual->max(fn(LeaveAllocation $allocation) =>
+            (float) ($allocation->carried_forward_days ?? 0)
+        );
+        $periodStart = $display->accrual_year_start
+            ? Carbon::parse($display->accrual_year_start)->startOfDay()
+            : $this->annualPeriodStart($display->employee, now('Asia/Riyadh'));
+        $usage = $this->annualUsageWithCarryForward($display, $periodStart, now('Asia/Riyadh')->startOfDay(), $carriedForward);
+        $used = (float) $annual->sum(fn(LeaveAllocation $allocation) => (float) $allocation->used_days);
+        $pending = (float) $annual->sum(fn(LeaveAllocation $allocation) => (float) $allocation->pending_days);
+        $usedHours = (float) $annual->sum(fn(LeaveAllocation $allocation) => (float) ($allocation->used_hours ?? 0));
+        $pendingHours = (float) $annual->sum(fn(LeaveAllocation $allocation) => (float) ($allocation->pending_hours ?? 0));
+        $remaining = max(0, round($allocated + $usage['active_carry_forward_remaining'] - $usage['annual_used_days'] - $pending, 2));
+
+        $display->setAttribute('allocated_days', $allocated);
+        $display->setAttribute('annual_entitlement', $allocated);
+        $display->setAttribute('carried_forward_days', $usage['active_carry_forward_remaining']);
+        $display->setAttribute('expired_carried_forward_days', $usage['expired_carry_forward_days']);
+        $display->setAttribute('used_days', $used);
+        $display->setAttribute('pending_days', $pending);
+        $display->setAttribute('remaining_days', $remaining);
+        $display->setAttribute('used_hours', $usedHours);
+        $display->setAttribute('pending_hours', $pendingHours);
+
+        return $allocations
+            ->reject(fn(LeaveAllocation $allocation) =>
+                $allocation->leaveType && $this->isAnnualLeaveType($allocation->leaveType)
+            )
+            ->prepend($display)
+            ->values();
+    }
+
+    private function overlappingLeaveRequest(int $employeeId, string $startDate, string $endDate): ?LeaveRequest {
+        return LeaveRequest::with('leaveType')
+            ->where('employee_id', $employeeId)
+            ->whereIn('status', ['pending', 'manager_approved', 'approved'])
+            ->whereDate('start_date', '<=', $endDate)
+            ->whereDate('end_date', '>=', $startDate)
+            ->orderBy('start_date')
+            ->first();
+    }
+
+    private function allocationForLeaveDate($employee, LeaveType $leaveType, Carbon $date): ?LeaveAllocation {
+        $query = LeaveAllocation::with(['leaveType', 'employee'])
+            ->where('employee_id', $employee->id)
+            ->where('leave_type_id', $leaveType->id);
+
+        if (!$this->isAnnualLeaveType($leaveType)) {
+            return $query->where('year', $date->year)->first();
+        }
+
+        return (clone $query)
+            ->whereDate('accrual_year_start', '<=', $date->toDateString())
+            ->whereDate(DB::raw('DATE_ADD(accrual_year_start, INTERVAL 1 YEAR)'), '>', $date->toDateString())
+            ->first()
+            ?: $query->where('year', $this->annualPeriodStart($employee, $date)->year)->first();
+    }
+
+    private function projectedAnnualAllocation(LeaveAllocation $allocation, Carbon $asOf): LeaveAllocation {
+        $employee = $allocation->employee;
+        $leaveType = $allocation->leaveType;
+
+        if (!$employee || !$leaveType) {
+            return $allocation;
+        }
+
+        $periodStart = $allocation->accrual_year_start
+            ? Carbon::parse($allocation->accrual_year_start)->startOfDay()
+            : $this->annualPeriodStart($employee, $asOf);
+        $periodEnd = $periodStart->copy()->addYear()->subDay()->endOfDay();
+        $balanceDate = $asOf->copy()->min($periodEnd)->max($periodStart);
+        $entitlement = $this->annualEntitlement($employee, $leaveType, $periodStart, $allocation);
+        $accrued = min($entitlement, round($this->countWorkingDays($periodStart, $balanceDate) * ($entitlement / 260), 2));
+        $carriedForward = $this->annualCarryForwardForPeriod($allocation, $periodStart);
+
+        $base = LeaveRequest::query()
+            ->where('employee_id', $allocation->employee_id)
+            ->whereDate('start_date', '<=', $balanceDate->toDateString())
+            ->whereDate('end_date', '>=', $periodStart->toDateString());
+
+        $base->whereHas('leaveType', fn($query) =>
+            $query->where('is_annual', true)
+                ->orWhere('code', 'AL')
+                ->orWhere('name', 'like', '%Annual%')
+        );
+
+        $usedDays = (float) (clone $base)->where('status', 'approved')->sum('total_days');
+        $pendingDays = (float) (clone $base)->whereIn('status', ['pending', 'manager_approved'])->sum('total_days');
+        $usage = $this->annualUsageWithCarryForward($allocation, $periodStart, $balanceDate, $carriedForward);
+        $remainingDays = max(0, round($usage['active_carry_forward_remaining'] + $accrued - $usage['annual_used_days'], 2));
+
+        $allocation->setAttribute('allocated_days', $accrued);
+        $allocation->setAttribute('carried_forward_days', $usage['active_carry_forward_remaining']);
+        $allocation->setAttribute('expired_carried_forward_days', $usage['expired_carry_forward_days']);
+        $allocation->setAttribute('used_days', $usedDays);
+        $allocation->setAttribute('annual_used_days_after_carry_forward', $usage['annual_used_days']);
+        $allocation->setAttribute('carry_forward_used_days', $usage['carry_forward_used_days']);
+        $allocation->setAttribute('pending_days', $pendingDays);
+        $allocation->setAttribute('remaining_days', $remainingDays);
+        $allocation->setAttribute('earned_until_as_of', $accrued);
+        $allocation->setAttribute('approved_taken_until_as_of', $usedDays);
+        $allocation->setAttribute('annual_entitlement', $entitlement);
+        $allocation->setAttribute('balance_as_of', $balanceDate->toDateString());
+        $allocation->setAttribute('accrual_period_start', $periodStart->toDateString());
+        $allocation->setAttribute('accrual_period_end', $periodEnd->toDateString());
+
+        return $allocation;
+    }
+
+    private function annualCarryForwardForPeriod(LeaveAllocation $allocation, Carbon $periodStart): float {
+        $value = LeaveAllocation::query()
+            ->where('employee_id', $allocation->employee_id)
+            ->where('year', $periodStart->year)
+            ->whereHas('leaveType', fn($query) =>
+                $query->where('is_annual', true)
+                    ->orWhere('code', 'AL')
+                    ->orWhere('name', 'like', '%Annual%')
+            )
+            ->max('carried_forward_days');
+
+        return (float) ($value ?? $allocation->carried_forward_days ?? 0);
+    }
+
+    private function decorateAnnualBalanceForDate(LeaveAllocation $allocation, Carbon $asOf, bool $includeFullPeriodUsage = false): LeaveAllocation {
+        if (!$allocation->leaveType || !$this->isAnnualLeaveType($allocation->leaveType)) {
+            return $allocation;
+        }
+
+        $periodStart = $allocation->accrual_year_start
+            ? Carbon::parse($allocation->accrual_year_start)->startOfDay()
+            : $this->annualPeriodStart($allocation->employee, $asOf);
+        $periodEnd = $periodStart->copy()->addYear()->subDay()->endOfDay();
+        $balanceDate = $asOf->copy()->min($periodEnd)->max($periodStart);
+        $carriedForward = (float) ($allocation->carried_forward_days ?? 0);
+        $usageEndDate = $includeFullPeriodUsage ? $periodEnd->copy() : $balanceDate->copy();
+        $usage = $this->annualUsageWithCarryForward($allocation, $periodStart, $usageEndDate, $carriedForward, $balanceDate);
+        $pending = (float) ($allocation->pending_days ?? 0);
+        $remaining = max(0, round((float) $allocation->allocated_days + $usage['active_carry_forward_remaining'] - $usage['annual_used_days'] - $pending, 2));
+
+        $allocation->setAttribute('remaining_days', $remaining);
+        $allocation->setAttribute('active_carried_forward_days', $usage['active_carry_forward_remaining']);
+        $allocation->setAttribute('expired_carried_forward_days', $usage['expired_carry_forward_days']);
+        $allocation->setAttribute('carry_forward_used_days', $usage['carry_forward_used_days']);
+        $allocation->setAttribute('annual_used_days_after_carry_forward', $usage['annual_used_days']);
+        $allocation->setAttribute('carry_forward_expiry_date', $this->carryForwardExpiryDate($periodStart)->toDateString());
+
+        return $allocation;
+    }
+
+    private function annualUsageWithCarryForward(LeaveAllocation $allocation, Carbon $periodStart, Carbon $asOf, float $carriedForward, ?Carbon $carryForwardAsOf = null): array {
+        $balanceDate = $asOf->copy()->startOfDay();
+        $carryForwardDate = ($carryForwardAsOf ?: $balanceDate)->copy()->startOfDay();
+        $expiryDate = $this->carryForwardExpiryDate($periodStart);
+        $windowEnd = $balanceDate->copy()->min($expiryDate);
+        $usedDays = 0.0;
+        $carryForwardWindowUsedDays = 0.0;
+
+        $requests = LeaveRequest::with('leaveType')
+            ->where('employee_id', $allocation->employee_id)
+            ->where('status', 'approved')
+            ->whereDate('start_date', '<=', $balanceDate->toDateString())
+            ->whereDate('end_date', '>=', $periodStart->toDateString())
+            ->whereHas('leaveType', fn($query) =>
+                $query->where('is_annual', true)
+                    ->orWhere('code', 'AL')
+                    ->orWhere('name', 'like', '%Annual%')
+            )
+            ->get();
+
+        foreach ($requests as $request) {
+            $requestStart = Carbon::parse($request->start_date)->startOfDay()->max($periodStart);
+            $requestEnd = Carbon::parse($request->end_date)->startOfDay()->min($balanceDate);
+            if ($requestEnd->lt($requestStart)) {
+                continue;
+            }
+
+            $usedDays += $this->leaveDaysWithin($request, $requestStart, $requestEnd);
+
+            if ($windowEnd->gte($periodStart)) {
+                $carryWindowStart = $requestStart->copy()->max($periodStart);
+                $carryWindowEnd = $requestEnd->copy()->min($windowEnd);
+                if ($carryWindowEnd->gte($carryWindowStart)) {
+                    $carryForwardWindowUsedDays += $this->leaveDaysWithin($request, $carryWindowStart, $carryWindowEnd);
+                }
+            }
+        }
+
+        $carryForwardUsed = min($carriedForward, $carryForwardWindowUsedDays);
+        $carryForwardRemaining = max(0, $carriedForward - $carryForwardUsed);
+        $activeCarryForwardRemaining = $carryForwardDate->lte($expiryDate) ? $carryForwardRemaining : 0.0;
+
+        return [
+            'total_used_days' => round($usedDays, 2),
+            'carry_forward_used_days' => round($carryForwardUsed, 2),
+            'annual_used_days' => round(max(0, $usedDays - $carryForwardUsed), 2),
+            'active_carry_forward_remaining' => round($activeCarryForwardRemaining, 2),
+            'expired_carry_forward_days' => round(max(0, $carryForwardRemaining - $activeCarryForwardRemaining), 2),
+        ];
+    }
+
+    private function carryForwardExpiryDate(Carbon $periodStart): Carbon {
+        return $periodStart->copy()->addMonthsNoOverflow(3)->subDay()->endOfDay();
+    }
+
+    private function leaveDaysWithin(LeaveRequest $request, Carbon $start, Carbon $end): float {
+        if ($request->is_half_day && $start->isSameDay($end)) {
+            return 0.5;
+        }
+
+        return (float) $this->service->calculateWorkingDays($start->toDateString(), $end->toDateString());
+    }
+
+    private function annualPeriodStart($employee, Carbon $date): Carbon {
+        if (!$employee?->hire_date) {
+            return Carbon::create($date->year, 1, 1)->startOfDay();
+        }
+
+        $hireDate = Carbon::parse($employee->hire_date)->startOfDay();
+        $periodStart = Carbon::create($date->year, $hireDate->month, $hireDate->day)->startOfDay();
+
+        return $periodStart->gt($date) ? $periodStart->subYear() : $periodStart;
+    }
+
+    private function annualEntitlement($employee, LeaveType $leaveType, Carbon $periodStart, ?LeaveAllocation $allocation = null): float {
+        if ($allocation?->annual_entitlement) {
+            return (float) $allocation->annual_entitlement;
+        }
+
+        if ($employee?->hire_date && Carbon::parse($employee->hire_date)->diffInYears($periodStart) >= 5) {
+            return 30.0;
+        }
+
+        return (float) ($leaveType->days_allowed ?: 22);
+    }
+
+    private function isAnnualLeaveType(LeaveType $leaveType): bool {
+        return (bool) $leaveType->is_annual
+            || strtoupper((string) $leaveType->code) === 'AL'
+            || str_contains(strtolower((string) $leaveType->name), 'annual');
+    }
+
+    private function countWorkingDays(Carbon $from, Carbon $to): int {
+        if ($from->gt($to)) {
+            return 0;
+        }
+
+        $count = 0;
+        $current = $from->copy()->startOfDay();
+        $end = $to->copy()->startOfDay();
+
+        while ($current->lte($end)) {
+            if (!in_array($current->dayOfWeek, [5, 6], true)) {
+                $count++;
+            }
+            $current->addDay();
+        }
+
+        return $count;
     }
 
     public function calendar(Request $request) {
@@ -905,13 +1248,28 @@ class LeaveController extends Controller {
     }
 
     public function allBalances(Request $request) {
+        $user = auth()->user();
+        $isHRAdmin = $this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff']);
+        $isMgr = $this->hasAnyRoleDB(['department_manager']);
         $year = $request->year ?? now()->year;
+        $visibleEmployeeIds = collect();
+
+        if (!$isHRAdmin) {
+            if ($isMgr && $user->employee) {
+                $visibleEmployeeIds = $user->employee->subordinates()->pluck('id');
+                $visibleEmployeeIds->push($user->employee->id);
+            } elseif ($user->employee) {
+                $visibleEmployeeIds->push($user->employee->id);
+            }
+        }
+
         $allocations = LeaveAllocation::with(['employee.department', 'leaveType'])
                 ->where('year', $year)
-                ->when($request->department_id, fn($q) =>
+                ->when(!$isHRAdmin, fn($q) => $q->whereIn('employee_id', $visibleEmployeeIds->values()))
+                ->when($isHRAdmin && $request->department_id, fn($q) =>
                         $q->whereHas('employee', fn($eq) => $eq->where('department_id', $request->department_id))
                 )
-                ->when($request->search, fn($q) =>
+                ->when(($isHRAdmin || $isMgr) && $request->search, fn($q) =>
                         $q->whereHas('employee', fn($eq) =>
                                 $eq->where('first_name', 'like', "%{$request->search}%")
                                 ->orWhere('last_name', 'like', "%{$request->search}%")
@@ -919,28 +1277,151 @@ class LeaveController extends Controller {
                 )
                 ->orderBy('employee_id')
                 ->paginate(25);
+
+        $now = now('Asia/Riyadh')->startOfDay();
+        $allocations->getCollection()->transform(function (LeaveAllocation $allocation) use ($now) {
+            return $this->decorateAnnualBalanceForDate($allocation, $now, true);
+        });
+
         return response()->json($allocations);
     }
 
     public function holidays(Request $request) {
-        $year = $request->year ?? now()->year;
-        $holidays = \App\Models\Holiday::whereYear('date', $year)
-                        ->orderBy('date')->get();
+        if ($request->boolean('manage')) {
+            $year = (int) ($request->year ?? now()->year);
+            $holidays = \App\Models\Holiday::query()
+                    ->where(function ($query) use ($year) {
+                        $query->whereYear('date', $year)
+                                ->orWhereYear('end_date', $year)
+                                ->orWhere('is_recurring', true);
+                    })
+                    ->orderBy('date')
+                    ->get()
+                    ->map(function ($holiday) use ($year) {
+                        if (!$holiday->is_recurring) {
+                            return $holiday;
+                        }
+
+                        $holidayDate = Carbon::parse($holiday->date)->startOfDay();
+                        $holidayEndDate = Carbon::parse($holiday->end_date ?: $holiday->date)->startOfDay();
+                        $durationDays = max(0, $holidayDate->diffInDays($holidayEndDate));
+                        $displayDate = Carbon::create($year, $holidayDate->month, $holidayDate->day)->startOfDay();
+
+                        $copy = $holiday->replicate();
+                        $copy->id = $holiday->id;
+                        $copy->exists = true;
+                        $copy->date = $displayDate->toDateString();
+                        $copy->end_date = $displayDate->copy()->addDays($durationDays)->toDateString();
+
+                        return $copy;
+                    });
+
+            return response()->json(['holidays' => $holidays]);
+        }
+
+        if ($request->start_date && $request->end_date) {
+            $holidays = $this->holidaysForRange(
+                Carbon::parse($request->start_date)->startOfDay(),
+                Carbon::parse($request->end_date)->startOfDay()
+            );
+
+            return response()->json(['holidays' => $holidays]);
+        }
+
+        $year = (int) ($request->year ?? now()->year);
+        $start = Carbon::create($year, 1, 1)->startOfDay();
+        $end = $start->copy()->endOfYear();
+        $holidays = $this->holidaysForRange($start, $end);
+
         return response()->json(['holidays' => $holidays]);
     }
 
     public function storeHoliday(Request $request) {
+        if (!$this->canManageHolidays()) {
+            return response()->json(['message' => 'You do not have permission to manage holidays.'], 403);
+        }
+
         $request->validate([
             'name' => 'required|string|max:100',
             'date' => 'required|date',
+            'end_date' => 'nullable|date|after_or_equal:date',
+            'is_recurring' => 'nullable|boolean',
         ]);
-        $holiday = \App\Models\Holiday::create($request->only(['name', 'date', 'is_recurring']));
+        $holiday = \App\Models\Holiday::create($request->only(['name', 'date', 'end_date', 'is_recurring']));
         return response()->json(['holiday' => $holiday], 201);
     }
 
+    public function updateHoliday(Request $request, $id) {
+        if (!$this->canManageHolidays()) {
+            return response()->json(['message' => 'You do not have permission to manage holidays.'], 403);
+        }
+
+        $holiday = \App\Models\Holiday::findOrFail($id);
+        $request->validate([
+            'name' => 'required|string|max:100',
+            'date' => 'required|date',
+            'end_date' => 'nullable|date|after_or_equal:date',
+            'is_recurring' => 'nullable|boolean',
+        ]);
+
+        $holiday->update($request->only(['name', 'date', 'end_date', 'is_recurring']));
+        return response()->json(['holiday' => $holiday->fresh()]);
+    }
+
     public function deleteHoliday($id) {
+        if (!$this->canManageHolidays()) {
+            return response()->json(['message' => 'You do not have permission to manage holidays.'], 403);
+        }
+
         \App\Models\Holiday::findOrFail($id)->delete();
         return response()->json(['message' => 'Holiday deleted']);
+    }
+
+    private function holidaysForRange(Carbon $start, Carbon $end) {
+        $years = range((int) $start->year, (int) $end->year);
+        $holidays = \App\Models\Holiday::query()
+                ->where(function ($query) use ($start, $end) {
+                    $query->whereRaw('date <= ? AND COALESCE(end_date, date) >= ?', [
+                                $end->toDateString(),
+                                $start->toDateString(),
+                            ])
+                            ->orWhere('is_recurring', true);
+                })
+                ->orderBy('date')
+                ->get();
+
+        return $holidays->flatMap(function ($holiday) use ($years, $start, $end) {
+            $holidayDate = Carbon::parse($holiday->date)->startOfDay();
+            $holidayEndDate = Carbon::parse($holiday->end_date ?: $holiday->date)->startOfDay();
+            $durationDays = max(0, $holidayDate->diffInDays($holidayEndDate));
+
+            $expand = function (Carbon $rangeStart, Carbon $rangeEnd) use ($holiday, $start, $end) {
+                return collect(CarbonPeriod::create($rangeStart, $rangeEnd))
+                        ->filter(fn($day) => $day->betweenIncluded($start, $end))
+                        ->map(function ($day) use ($holiday, $rangeStart, $rangeEnd) {
+                            $copy = $holiday->replicate();
+                            $copy->id = $holiday->id;
+                            $copy->exists = true;
+                            $copy->date = $day->toDateString();
+                            $copy->start_date = $rangeStart->toDateString();
+                            $copy->end_date = $rangeEnd->toDateString();
+                            return $copy;
+                        });
+            };
+
+            if (!$holiday->is_recurring) {
+                return $expand($holidayDate, $holidayEndDate);
+            }
+
+            return collect($years)
+                    ->flatMap(function (int $year) use ($holidayDate, $durationDays, $expand) {
+                        $rangeStart = Carbon::create($year, $holidayDate->month, $holidayDate->day)->startOfDay();
+                        return $expand($rangeStart, $rangeStart->copy()->addDays($durationDays));
+                    })
+                    ->values();
+        })
+                ->sortBy('date')
+                ->values();
     }
 
     public function excuseUsage(Request $request) {

@@ -23,11 +23,14 @@ export class LeaveListComponent implements OnInit {
   requests: any[] = [];
   leaveTypes: any[] = [];
   myBalances: any[] = [];
+  formBalances: any[] = [];
   allBalances: any[] = [];
   stats: any = {};
   calendarEvents: any[] = [];
   calendarMeta: any = { department: null, scope: 'department' };
   holidays: any[] = [];
+  managedHolidays: any[] = [];
+  formHolidays: any[] = [];
   pagination: any = null;
   balancePagination: any = null;
 
@@ -59,6 +62,8 @@ export class LeaveListComponent implements OnInit {
   calDays: any[] = [];
   loadingCalendar = false;
   selectedCalendarCell: any = null;
+  holidayYear = new Date().getFullYear();
+  holidayLoading = false;
 
   // Leave type form
   typeForm: any = { name: '', code: '', days_allowed: 0, is_paid: true, carry_forward: false, max_carry_forward: 0, requires_document: false, description: '' };
@@ -67,7 +72,9 @@ export class LeaveListComponent implements OnInit {
   typeSaving = false;
 
   // Holiday form
-  holidayForm = { name: '', date: '', is_recurring: false };
+  holidayForm = { name: '', date: '', end_date: '', is_recurring: false };
+  holidayEditId: number | null = null;
+  holidayError = '';
   holidaySaving = false;
 
   // New request form
@@ -104,11 +111,12 @@ export class LeaveListComponent implements OnInit {
   // Table columns
   displayedColumns = ['employee', 'type', 'dates', 'days', 'reason', 'status', 'actions'];
   isHR = false;
+  canManageHolidays = false;
   isMgr = false;
   userId = '';
   employeeId = '';
   currentUserName = '';
-  balanceColumns = ['employee', 'leave_type', 'allocated', 'used', 'pending', 'remaining', 'bar'];
+  balanceColumns = ['employee', 'leave_type', 'allocated', 'carry_forward', 'used', 'pending', 'remaining', 'bar'];
   typeColumns = ['name', 'code', 'days', 'paid', 'carry', 'actions'];
 
   tabs = [
@@ -116,6 +124,7 @@ export class LeaveListComponent implements OnInit {
     { id: 'calendar', label: 'Calendar', icon: 'calendar_month' },
     { id: 'balances', label: 'Balances', icon: 'account_balance_wallet' },
     { id: 'types', label: 'Leave Types', icon: 'tune' },
+    { id: 'holidays', label: 'Holidays', icon: 'star' },
   ];
 
   statusTabs = [
@@ -141,6 +150,7 @@ export class LeaveListComponent implements OnInit {
   loadStats() {
     // Role detection
     this.isHR = this.auth.isHRRole();
+    this.canManageHolidays = this.auth.hasAnyRole(['super_admin', 'hr_manager', 'hr_staff']);
     this.isMgr = this.auth.isManagerRole();
     const user = this.auth.getUser();
     this.userId = user?.id ?? '';
@@ -275,6 +285,7 @@ export class LeaveListComponent implements OnInit {
   openNewRequest() {
     this.form = { leave_type_id: '', start_date: '', end_date: '', start_time: '08:00', end_time: '09:00', reason: '', employee_id: '', is_half_day: false, half_day_period: 'morning', requires_exit_reentry: false, requires_ticket: false, ticket_dependent_ids: [], destination_country: '' };
     this.ticketOptions = null;
+    this.formBalances = [...this.myBalances];
     this.formError = '';
     this.selectedFile = null;
     this.fileError = '';
@@ -341,6 +352,17 @@ export class LeaveListComponent implements OnInit {
     if (!empId) return;
     this.http.get<any>(`/api/v1/leave/balance/${empId}`).subscribe({
       next: r => this.myBalances = r?.balances || []
+    });
+  }
+
+  loadFormBalance(asOf?: string) {
+    const user = JSON.parse(localStorage.getItem('hrms_user') || '{}');
+    const empId = user?.employee?.id || user?.employee_id;
+    if (!empId) return;
+    const params: any = {};
+    if (asOf) params.as_of = asOf;
+    this.http.get<any>(`/api/v1/leave/balance/${empId}`, { params }).subscribe({
+      next: r => this.formBalances = r?.balances || []
     });
   }
 
@@ -437,22 +459,66 @@ export class LeaveListComponent implements OnInit {
     this.activeTab = id;
     if (id === 'calendar') this.loadCalendar();
     if (id === 'balances') this.loadAllBalances();
+    if (id === 'holidays') this.loadHolidayManagement();
   }
 
   // ── Holidays ──────────────────────────────────────────────────────────────
+  loadHolidayManagement() {
+    if (!this.canManageHolidays) return;
+    this.holidayLoading = true;
+    this.http.get<any>('/api/v1/leave/holidays', { params: { year: this.holidayYear, manage: '1' } }).subscribe({
+      next: r => { this.managedHolidays = r?.holidays || []; this.holidayLoading = false; },
+      error: () => { this.managedHolidays = []; this.holidayLoading = false; }
+    });
+  }
+
+  openHolidayForm(h?: any) {
+    this.holidayEditId = h?.id ?? null;
+    this.holidayError = '';
+    this.holidayForm = h
+      ? { name: h.name || '', date: (h.date || '').slice(0, 10), end_date: (h.end_date || '').slice(0, 10), is_recurring: !!h.is_recurring }
+      : { name: '', date: '', end_date: '', is_recurring: false };
+    this.showHolidayForm = true;
+  }
+
+  closeHolidayForm() {
+    this.showHolidayForm = false;
+    this.holidayEditId = null;
+    this.holidayError = '';
+  }
+
   saveHoliday() {
-    if (!this.holidayForm.name || !this.holidayForm.date) return;
+    if (!this.holidayForm.name || !this.holidayForm.date) {
+      this.holidayError = 'Holiday name and date are required.';
+      return;
+    }
     this.holidaySaving = true;
-    this.http.post('/api/v1/leave/holidays', this.holidayForm).subscribe({
-      next: () => { this.holidaySaving = false; this.showHolidayForm = false; this.loadCalendar(); },
-      error: () => this.holidaySaving = false
+    this.holidayError = '';
+    const req = this.holidayEditId
+      ? this.http.put(`/api/v1/leave/holidays/${this.holidayEditId}`, this.holidayForm)
+      : this.http.post('/api/v1/leave/holidays', this.holidayForm);
+
+    req.subscribe({
+      next: () => {
+        this.holidaySaving = false;
+        this.closeHolidayForm();
+        this.loadCalendar();
+        if (this.activeTab === 'holidays') this.loadHolidayManagement();
+      },
+      error: err => {
+        this.holidaySaving = false;
+        this.holidayError = err?.error?.message || 'Holiday save failed.';
+      }
     });
   }
 
   deleteHoliday(id: number) {
     if (!confirm('Delete this holiday?')) return;
     this.http.delete(`/api/v1/leave/holidays/${id}`).subscribe({
-      next: () => this.loadCalendar()
+      next: () => {
+        this.loadCalendar();
+        if (this.activeTab === 'holidays') this.loadHolidayManagement();
+      }
     });
   }
 
@@ -505,6 +571,7 @@ export class LeaveListComponent implements OnInit {
       if (this.form.start_date) this.form.end_date = this.form.start_date;
       if (!this.form.half_day_period) this.form.half_day_period = 'morning';
     }
+    this.loadFormHolidays();
   }
 
   onLeaveTypeChange() {
@@ -513,6 +580,7 @@ export class LeaveListComponent implements OnInit {
     } else {
       this.excuseUsage = null;
     }
+    this.loadMyBalanceForFormDate();
   }
 
   loadExcuseUsage() {
@@ -536,9 +604,11 @@ export class LeaveListComponent implements OnInit {
     if (end < start) return 0;
     let count = 0;
     const cur = new Date(start);
+    const holidayDates = new Set((this.formHolidays || []).map(h => (h.date || '').slice(0, 10)));
     while (cur <= end) {
       const d = cur.getDay();
-      if (d !== 5 && d !== 6) count++;
+      const dateStr = cur.toISOString().slice(0, 10);
+      if (d !== 5 && d !== 6 && !holidayDates.has(dateStr)) count++;
       cur.setDate(cur.getDate() + 1);
     }
     return count;
@@ -562,7 +632,25 @@ export class LeaveListComponent implements OnInit {
 
   selectedTypeBalance(): any {
     if (!this.form.leave_type_id) return null;
-    return this.myBalances.find(b => b.leave_type_id == this.form.leave_type_id);
+    const balances = this.showNewRequest ? this.formBalances : this.myBalances;
+    return balances.find(b => b.leave_type_id == this.form.leave_type_id);
+  }
+
+  balanceHintLabel(): string {
+    if (this.isAnnualLeave && this.balanceAsOfDate()) {
+      return `Available until ${this.balanceAsOfDate()}`;
+    }
+
+    return 'Available';
+  }
+
+  private balanceAsOfDate(): string {
+    if (!this.isAnnualLeave || this.isHourlyExcuse) return '';
+    return this.form.is_half_day ? this.form.start_date : (this.form.end_date || this.form.start_date || '');
+  }
+
+  private loadMyBalanceForFormDate(): void {
+    this.loadFormBalance(this.balanceAsOfDate() || undefined);
   }
 
   get pages(): number[] {
@@ -585,6 +673,27 @@ export class LeaveListComponent implements OnInit {
   onLeaveStartDateChange(): void {
     if (this.form.is_half_day) this.form.end_date = this.form.start_date;
     if (this.form.requires_ticket) this.loadTicketOptions();
+    this.loadMyBalanceForFormDate();
+    this.loadFormHolidays();
+  }
+
+  onLeaveEndDateChange(): void {
+    this.loadMyBalanceForFormDate();
+    this.loadFormHolidays();
+  }
+
+  loadFormHolidays(): void {
+    if (!this.form.start_date || !this.form.end_date) {
+      this.formHolidays = [];
+      return;
+    }
+
+    this.http.get<any>('/api/v1/leave/holidays', {
+      params: { start_date: this.form.start_date, end_date: this.form.end_date }
+    }).subscribe({
+      next: r => this.formHolidays = r?.holidays || [],
+      error: () => this.formHolidays = []
+    });
   }
 
   loadTicketOptions(): void {

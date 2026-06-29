@@ -218,6 +218,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/all-balances',            [LeaveController::class, 'allBalances']);
             Route::get('/holidays',                [LeaveController::class, 'holidays']);
             Route::post('/holidays',               [LeaveController::class, 'storeHoliday']);
+            Route::put('/holidays/{id}',           [LeaveController::class, 'updateHoliday']);
             Route::delete('/holidays/{id}',        [LeaveController::class, 'deleteHoliday']);
         });
 

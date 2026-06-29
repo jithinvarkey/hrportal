@@ -4,7 +4,7 @@
   <div class="page-hdr">
     <div>
       <h1 class="page-title">Leave Management</h1>
-      <p class="page-sub">Requests · Calendar · Balances · Leave Types</p>
+      <p class="page-sub">Requests · Calendar · Balances · Leave Types · Holidays</p>
     </div>
     <button class="btn-primary" (click)="openNewRequest()">
       <mat-icon>add</mat-icon> New Request
@@ -50,7 +50,7 @@
 
   <!-- ── Main Tabs ───────────────────────────────────────────────────────── -->
   <div class="main-tabs">
-    <button *ngFor="let t of tabs" class="main-tab" [class.active]="activeTab===t.id" (click)="switchTab(t.id)">
+    <button *ngFor="let t of tabs" class="main-tab" [class.active]="activeTab===t.id" (click)="switchTab(t.id)" [hidden]="t.id === 'holidays' && !canManageHolidays">
       <mat-icon>{{ t.icon }}</mat-icon>
       {{ t.label }}
     </button>
@@ -243,7 +243,7 @@
       <button class="row-btn" (click)="prevMonth()"><mat-icon>chevron_left</mat-icon></button>
       <h2 class="cal-month-title">{{ calMonthLabel }}</h2>
       <button class="row-btn" (click)="nextMonth()"><mat-icon>chevron_right</mat-icon></button>
-      <button class="btn-outline"   *ngIf="isHR" style="margin-left:auto;font-size:12px" (click)="showHolidayForm=true">
+      <button class="btn-outline"   *ngIf="canManageHolidays" style="margin-left:auto;font-size:12px" (click)="openHolidayForm()">
         <mat-icon>add</mat-icon> Add Holiday
       </button>
     </div>
@@ -346,7 +346,8 @@
           <div class="holiday-date">{{ h.date | date:'EEE, dd MMM' }}</div>
           <div class="holiday-name">{{ h.name }}</div>
           <span class="status-badge badge-blue" *ngIf="h.is_recurring">Annual</span>
-          <button class="row-btn" (click)="deleteHoliday(h.id)"><mat-icon style="color:var(--danger);font-size:16px">delete_outline</mat-icon></button>
+          <button class="row-btn" *ngIf="canManageHolidays" (click)="openHolidayForm(h)"><mat-icon style="color:var(--accent);font-size:16px">edit</mat-icon></button>
+          <button class="row-btn" *ngIf="canManageHolidays" (click)="deleteHoliday(h.id)"><mat-icon style="color:var(--danger);font-size:16px">delete_outline</mat-icon></button>
         </div>
       </div>
     </div>
@@ -355,12 +356,63 @@
   <!-- ══════════════════════════════════════════════════════════════════════ -->
   <!-- TAB: BALANCES                                                          -->
   <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <ng-container *ngIf="activeTab==='holidays' && canManageHolidays">
+    <div class="toolbar">
+      <div class="filter-row" style="margin-left:0">
+        <div class="search-wrap">
+          <mat-icon class="search-ico">calendar_today</mat-icon>
+          <input class="search-input" type="number" min="2000" max="2100" [(ngModel)]="holidayYear" (change)="loadHolidayManagement()" placeholder="Year">
+        </div>
+        <button class="btn-outline" (click)="loadHolidayManagement()"><mat-icon>refresh</mat-icon></button>
+      </div>
+      <button class="btn-primary" style="margin-left:auto" (click)="openHolidayForm()">
+        <mat-icon>add</mat-icon> Add Holiday
+      </button>
+    </div>
+
+    <div class="data-card">
+      <div class="card-hdr">
+        <span class="card-title"><mat-icon>star</mat-icon> Yearly Holidays {{ holidayYear }}</span>
+        <span class="status-badge badge-blue">{{ managedHolidays.length }} holidays</span>
+      </div>
+      <div class="holiday-list" *ngIf="managedHolidays.length">
+        <div class="holiday-row" *ngFor="let h of managedHolidays">
+          <div class="holiday-date">
+            {{ h.date | date:'dd MMM yyyy' }}
+            <ng-container *ngIf="h.end_date && h.end_date.slice(0, 10) !== h.date.slice(0, 10)">
+              - {{ h.end_date | date:'dd MMM yyyy' }}
+            </ng-container>
+          </div>
+          <div class="holiday-name">{{ h.name }}</div>
+          <span class="status-badge badge-blue" *ngIf="h.is_recurring">Recurring</span>
+          <span class="status-badge badge-gray" *ngIf="!h.is_recurring">One time</span>
+          <div class="row-actions">
+            <button class="row-btn" matTooltip="Edit holiday" (click)="openHolidayForm(h)">
+              <mat-icon style="color:var(--accent)">edit</mat-icon>
+            </button>
+            <button class="row-btn" matTooltip="Delete holiday" (click)="deleteHoliday(h.id)">
+              <mat-icon style="color:var(--danger)">delete_outline</mat-icon>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="empty-state" *ngIf="!holidayLoading && !managedHolidays.length">
+        <mat-icon>event_busy</mat-icon>
+        <span>No holidays configured for {{ holidayYear }}.</span>
+      </div>
+      <div class="empty-state" *ngIf="holidayLoading">
+        <mat-spinner diameter="28"></mat-spinner>
+      </div>
+    </div>
+  </ng-container>
+
   <ng-container *ngIf="activeTab==='balances'">
     <div class="toolbar">
-      <div class="search-wrap">
+      <div class="search-wrap" *ngIf="isHR || isMgr">
         <mat-icon class="search-ico">search</mat-icon>
         <input class="search-input" placeholder="Search employee…" [(ngModel)]="filterSearch" (keyup.enter)="loadAllBalances()">
       </div>
+      <span *ngIf="!isHR && !isMgr" style="font-size:13px;color:var(--text2)">Your leave balance details</span>
       <button class="btn-outline" (click)="loadAllBalances()"><mat-icon>refresh</mat-icon></button>
     </div>
 
@@ -394,6 +446,23 @@
           <th mat-header-cell *matHeaderCellDef>Allocated</th>
           <td mat-cell *matCellDef="let b" class="mono-val">{{ b.allocated_days }}</td>
         </ng-container>
+        <ng-container matColumnDef="carry_forward">
+          <th mat-header-cell *matHeaderCellDef>Carry Forward</th>
+          <td mat-cell *matCellDef="let b">
+            <ng-container *ngIf="(b.carried_forward_days || 0) > 0; else noCarryForward">
+              <div class="mono-val" style="color:var(--accent)">{{ b.carried_forward_days }} d</div>
+              <div class="name-sub">
+                Active {{ b.active_carried_forward_days || 0 }} · Used {{ b.carry_forward_used_days || 0 }}
+              </div>
+              <div class="name-sub" *ngIf="(b.expired_carried_forward_days || 0) > 0" style="color:var(--danger)">
+                Expired {{ b.expired_carried_forward_days }} after {{ b.carry_forward_expiry_date | date:'dd MMM yyyy' }}
+              </div>
+            </ng-container>
+            <ng-template #noCarryForward>
+              <span class="status-badge badge-gray">No</span>
+            </ng-template>
+          </td>
+        </ng-container>
         <ng-container matColumnDef="used">
           <th mat-header-cell *matHeaderCellDef>Used</th>
           <td mat-cell *matCellDef="let b" class="mono-val" style="color:var(--warning)">{{ b.used_days }}</td>
@@ -422,7 +491,7 @@
         <tr mat-header-row *matHeaderRowDef="balanceColumns; sticky:true"></tr>
         <tr mat-row *matRowDef="let row; columns:balanceColumns;" class="data-row"></tr>
         <tr class="mat-row" *matNoDataRow>
-          <td class="mat-cell empty-state" colspan="7">
+          <td class="mat-cell empty-state" colspan="8">
             <mat-icon>account_balance_wallet</mat-icon><span>No balance data. Load balances first.</span>
           </td>
         </tr>
@@ -741,7 +810,18 @@
       <!-- Daily balance hint -->
       <div class="balance-hint" *ngIf="selectedTypeBalance() && !isHourlyExcuse">
         <mat-icon>account_balance_wallet</mat-icon>
-        Available: <strong>{{ selectedTypeBalance().remaining_days }}</strong> of {{ selectedTypeBalance().allocated_days }} days
+        {{ balanceHintLabel() }}:
+        <strong>{{ selectedTypeBalance().remaining_days }}</strong> days
+        <ng-container *ngIf="isAnnualLeave">
+          (
+          <ng-container *ngIf="selectedTypeBalance().carried_forward_days > 0">
+            carry forward {{ selectedTypeBalance().carried_forward_days }} +
+          </ng-container>
+          earned {{ selectedTypeBalance().allocated_days }} - approved taken {{ selectedTypeBalance().used_days }})
+        </ng-container>
+        <ng-container *ngIf="!isAnnualLeave">
+          of {{ selectedTypeBalance().allocated_days }} days
+        </ng-container>
       </div>
     </div>
 
@@ -855,7 +935,7 @@
         </div>
         <div class="field-group" *ngIf="!form.is_half_day">
           <label class="field-label">End Date <span class="req">*</span></label>
-          <input class="field-input" type="date" [(ngModel)]="form.end_date">
+          <input class="field-input" type="date" [(ngModel)]="form.end_date" (change)="onLeaveEndDateChange()">
         </div>
       </div>
 
@@ -868,6 +948,9 @@
         </ng-container>
         <ng-container *ngIf="!form.is_half_day && workingDaysPreview() > 0">
           <strong>{{ workingDaysPreview() }}</strong> working days (Sun–Thu)
+          <span *ngIf="formHolidays.length" style="color:var(--text3);font-size:11px">
+            &nbsp;· excluding {{ formHolidays.length }} holiday{{ formHolidays.length === 1 ? '' : 's' }}
+          </span>
         </ng-container>
       </div>
     </ng-container>
@@ -1099,11 +1182,11 @@
 </div>
 
 <!-- ── Add Holiday Modal ─────────────────────────────────────────────────── -->
-<div class="modal-backdrop" *ngIf="showHolidayForm" (click)="showHolidayForm=false"></div>
+<div class="modal-backdrop" *ngIf="showHolidayForm" (click)="closeHolidayForm()"></div>
 <div class="modal-panel" *ngIf="showHolidayForm">
   <div class="modal-hdr">
-    <h3><mat-icon>star</mat-icon> Add Holiday</h3>
-    <button class="row-btn" (click)="showHolidayForm=false"><mat-icon>close</mat-icon></button>
+    <h3><mat-icon>star</mat-icon> {{ holidayEditId ? 'Edit' : 'Add' }} Holiday</h3>
+    <button class="row-btn" (click)="closeHolidayForm()"><mat-icon>close</mat-icon></button>
   </div>
   <div class="modal-body">
     <div class="field-group">
@@ -1111,13 +1194,18 @@
       <input class="field-input" [(ngModel)]="holidayForm.name" placeholder="e.g. National Day">
     </div>
     <div class="field-group">
-      <label class="field-label">Date <span class="req">*</span></label>
+      <label class="field-label">Start Date <span class="req">*</span></label>
       <input class="field-input" type="date" [(ngModel)]="holidayForm.date">
     </div>
+    <div class="field-group">
+      <label class="field-label">End Date</label>
+      <input class="field-input" type="date" [(ngModel)]="holidayForm.end_date">
+    </div>
     <label class="chk-label"><input type="checkbox" [(ngModel)]="holidayForm.is_recurring"> Recurring annually</label>
+    <div class="form-err" *ngIf="holidayError"><mat-icon>error_outline</mat-icon> {{ holidayError }}</div>
   </div>
   <div class="modal-footer">
-    <button class="btn-outline" (click)="showHolidayForm=false">Cancel</button>
+    <button class="btn-outline" (click)="closeHolidayForm()">Cancel</button>
     <button class="btn-primary" (click)="saveHoliday()" [disabled]="holidaySaving">
       <mat-icon>save</mat-icon> Save Holiday
     </button>
