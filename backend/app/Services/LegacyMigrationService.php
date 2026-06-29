@@ -741,26 +741,29 @@ class LegacyMigrationService
 
     private function refreshLoanTotals(Loan $loan): void
     {
-        $loan->load('installments');
+        $installments = LoanInstallment::where('loan_id', $loan->id)
+            ->orderBy('due_date')
+            ->orderBy('id')
+            ->get();
 
-        $totalPaid = (float) $loan->installments->sum('paid_amount');
-        $paidCount = $loan->installments->where('status', 'paid')->count();
-        $skippedCount = $loan->installments->where('status', 'skipped')->count();
+        $totalPaid = (float) $installments->sum('paid_amount');
+        $paidCount = $installments->where('status', 'paid')->count();
+        $skippedCount = $installments->where('status', 'skipped')->count();
         $approvedAmount = (float) ($loan->approved_amount ?: $loan->requested_amount);
         $balance = max(0, round($approvedAmount - $totalPaid, 2));
         $status = $loan->status;
 
         if (!in_array($status, ['rejected', 'cancelled'], true)) {
-            $status = $balance <= 0 && $loan->installments->count() > 0 ? 'completed' : $status;
+            $status = $balance <= 0 && $installments->count() > 0 ? 'completed' : $status;
         }
 
         $loan->forceFill([
-            'installments' => max((int) $loan->getAttribute('installments'), $loan->installments->count()),
+            'installments' => max((int) $loan->getAttribute('installments'), $installments->count()),
             'total_paid' => $totalPaid,
             'balance_remaining' => $balance,
             'installments_paid' => $paidCount,
             'installments_skipped' => $skippedCount,
-            'first_installment_date' => $loan->first_installment_date ?: optional($loan->installments->sortBy('due_date')->first())->due_date,
+            'first_installment_date' => $loan->first_installment_date ?: optional($installments->first())->due_date,
             'status' => $status,
         ])->save();
     }
