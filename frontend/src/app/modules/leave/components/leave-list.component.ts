@@ -468,6 +468,7 @@ export class LeaveListComponent implements OnInit {
 
   // ── Tab switch ────────────────────────────────────────────────────────────
   switchTab(id: string) {
+    if (id === 'types' && !this.isHR) return;
     this.activeTab = id;
     if (id === 'calendar') this.loadCalendar();
     if (id === 'balances') this.loadAllBalances();
