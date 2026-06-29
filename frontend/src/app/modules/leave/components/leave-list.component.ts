@@ -52,6 +52,8 @@ export class LeaveListComponent implements OnInit {
   filterSearch = '';
   filterType = '';
   filterDept = '';
+  balanceYear = new Date().getFullYear();
+  balanceYears: number[] = [new Date().getFullYear()];
   private searchTimer: any = null;
   currentPage = 1;
   pageSize = 10;
@@ -399,12 +401,22 @@ export class LeaveListComponent implements OnInit {
 
   // ── All Balances tab ─────────────────────────────────────────────────────
   loadAllBalances(page = 1) {
-    const params: any = { page, per_page: 25 };
+    const params: any = { page, per_page: 25, year: this.balanceYear };
     if (this.filterSearch) params.search = this.filterSearch;
     if (this.filterDept) params.department_id = this.filterDept;
     this.http.get<any>('/api/v1/leave/all-balances', { params }).subscribe({
-      next: r => { this.allBalances = r?.data || []; this.balancePagination = r; }
+      next: r => {
+        this.allBalances = r?.data || [];
+        this.balancePagination = r;
+        const years = (r?.available_years || []).map((value: any) => Number(value)).filter((value: number) => !!value);
+        this.balanceYears = years.length ? years : [this.balanceYear];
+        if (r?.selected_year) this.balanceYear = Number(r.selected_year);
+      }
     });
+  }
+
+  onBalanceYearChange(): void {
+    this.loadAllBalances(1);
   }
 
   // ── Calendar ──────────────────────────────────────────────────────────────
@@ -464,7 +476,6 @@ export class LeaveListComponent implements OnInit {
 
   // ── Holidays ──────────────────────────────────────────────────────────────
   loadHolidayManagement() {
-    if (!this.canManageHolidays) return;
     this.holidayLoading = true;
     this.http.get<any>('/api/v1/leave/holidays', { params: { year: this.holidayYear, manage: '1' } }).subscribe({
       next: r => { this.managedHolidays = r?.holidays || []; this.holidayLoading = false; },
@@ -476,9 +487,27 @@ export class LeaveListComponent implements OnInit {
     this.holidayEditId = h?.id ?? null;
     this.holidayError = '';
     this.holidayForm = h
-      ? { name: h.name || '', date: (h.date || '').slice(0, 10), end_date: (h.end_date || '').slice(0, 10), is_recurring: !!h.is_recurring }
+      ? { name: h.name || '', date: this.dateInputValue(h.date), end_date: this.dateInputValue(h.end_date), is_recurring: !!h.is_recurring }
       : { name: '', date: '', end_date: '', is_recurring: false };
     this.showHolidayForm = true;
+  }
+
+  dateInputValue(value: any): string {
+    if (!value) return '';
+    if (typeof value === 'string') return value.slice(0, 10);
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  formatHolidayDate(value: any, options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric' }): string {
+    const dateValue = this.dateInputValue(value);
+    if (!dateValue) return '';
+    const [year, month, day] = dateValue.split('-').map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString('en', options);
   }
 
   closeHolidayForm() {
@@ -494,9 +523,14 @@ export class LeaveListComponent implements OnInit {
     }
     this.holidaySaving = true;
     this.holidayError = '';
+    const payload = {
+      ...this.holidayForm,
+      date: this.dateInputValue(this.holidayForm.date),
+      end_date: this.dateInputValue(this.holidayForm.end_date),
+    };
     const req = this.holidayEditId
-      ? this.http.put(`/api/v1/leave/holidays/${this.holidayEditId}`, this.holidayForm)
-      : this.http.post('/api/v1/leave/holidays', this.holidayForm);
+      ? this.http.put(`/api/v1/leave/holidays/${this.holidayEditId}`, payload)
+      : this.http.post('/api/v1/leave/holidays', payload);
 
     req.subscribe({
       next: () => {

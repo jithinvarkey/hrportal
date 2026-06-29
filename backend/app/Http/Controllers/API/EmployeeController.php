@@ -9,8 +9,10 @@ use App\Models\Employee;
 use App\Models\EmployeeDocument;
 use App\Models\User;
 use App\Models\EmployeeDependent;
+use App\Models\LeaveAllocation;
 use App\Mail\EmployeeDocumentUploadedMail;
 use App\Services\EmployeeService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -317,6 +319,88 @@ class EmployeeController extends Controller {
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['message' => 'Employee not found'], 404);
         }
+    }
+
+    public function leaveBalances(Request $request, int $id): JsonResponse {
+        $employee = Employee::findOrFail($id);
+        $authEmployeeId = (int) auth()->user()?->employee?->id;
+
+        if (!$this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff']) && $authEmployeeId !== $employee->id) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $asOf = now();
+        $periods = $this->contractPeriodsFor($employee, $asOf);
+        $requestedStart = $request->string('period_start')->toString();
+        $selected = collect($periods)->firstWhere('start_date', $requestedStart)
+            ?? collect($periods)->firstWhere('is_current', true)
+            ?? collect($periods)->first();
+
+        if (!$selected) {
+            return response()->json([
+                'periods' => [],
+                'selected_period' => null,
+                'balances' => [],
+            ]);
+        }
+
+        $periodStart = Carbon::parse($selected['start_date']);
+        $periodEnd = Carbon::parse($selected['end_date']);
+
+        $allocations = LeaveAllocation::with('leaveType')
+            ->where('employee_id', $employee->id)
+            ->where(function ($query) use ($periodStart, $periodEnd) {
+                $query->whereBetween('accrual_year_start', [$periodStart->toDateString(), $periodEnd->toDateString()])
+                    ->orWhere('year', $periodStart->year);
+            })
+            ->get()
+            ->sortBy(fn ($allocation) => $allocation->leaveType?->name ?? '')
+            ->values()
+            ->map(fn ($allocation) => [
+                'id' => $allocation->id,
+                'year' => $allocation->year,
+                'allocated_days' => (float) $allocation->allocated_days,
+                'remaining_days' => (float) $allocation->remaining_days,
+                'used_days' => (float) $allocation->used_days,
+                'pending_days' => (float) $allocation->pending_days,
+                'carried_forward_days' => (float) ($allocation->carried_forward_days ?? 0),
+                'accrual_year_start' => optional($allocation->accrual_year_start)->toDateString(),
+                'annual_entitlement' => $allocation->annual_entitlement,
+                'leave_type' => $allocation->leaveType ? [
+                    'id' => $allocation->leaveType->id,
+                    'name' => $allocation->leaveType->name,
+                    'code' => $allocation->leaveType->code,
+                ] : null,
+            ]);
+
+        return response()->json([
+            'periods' => $periods,
+            'selected_period' => $selected,
+            'balances' => $allocations,
+        ]);
+    }
+
+    private function contractPeriodsFor(Employee $employee, Carbon $asOf): array {
+        $hireDate = $employee->hire_date ? Carbon::parse($employee->hire_date)->startOfDay() : $asOf->copy()->startOfYear();
+        $cursor = $hireDate->copy();
+        $periods = [];
+        $guard = 0;
+
+        while ($cursor->lte($asOf) && $guard < 80) {
+            $start = $cursor->copy();
+            $end = $start->copy()->addYear()->subDay();
+            $periods[] = [
+                'label' => $start->format('d M Y') . ' - ' . $end->format('d M Y'),
+                'start_date' => $start->toDateString(),
+                'end_date' => $end->toDateString(),
+                'year' => $start->year,
+                'is_current' => $asOf->betweenIncluded($start, $end),
+            ];
+            $cursor->addYear();
+            $guard++;
+        }
+
+        return array_reverse($periods);
     }
 
     public function dependents(int $id): JsonResponse {

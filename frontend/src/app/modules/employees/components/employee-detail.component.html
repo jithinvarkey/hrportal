@@ -294,11 +294,33 @@
 
   <!-- â”€â”€ Leave Balance Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <div *ngIf="activeTab === 'leave'">
-    <div class="leave-grid">
+    <div class="detail-card leave-filter-card">
+      <div class="dc-header" style="margin-bottom:0">
+        <div>
+          <div class="dc-title"><mat-icon>event_available</mat-icon> Leave Balance</div>
+          <div class="leave-period-note" *ngIf="selectedLeavePeriodLabel">Showing {{ selectedLeavePeriodLabel }}</div>
+        </div>
+        <div class="leave-period-control">
+          <label class="field-label">Contract Year</label>
+          <select class="field-select" [(ngModel)]="selectedLeavePeriod" (change)="loadLeaveBalances(selectedLeavePeriod)">
+            <option *ngFor="let p of leaveBalancePeriods" [value]="p.start_date">
+              {{ p.label }}{{ p.is_current ? ' (Current)' : '' }}
+            </option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="empty-state" *ngIf="leaveBalanceLoading">
+      <mat-icon>hourglass_empty</mat-icon><p>Loading leave balances...</p>
+    </div>
+
+    <div class="leave-grid" *ngIf="!leaveBalanceLoading">
       <div class="leave-card" *ngFor="let lb of leaveBalance">
         <div class="lc-name">{{ lb.leave_type?.name || 'Leave' }}</div>
-        <div class="lc-numbers">
+        <div class="lc-numbers" [class.has-carry-forward]="isAnnualLeaveBalance(lb)">
           <div class="lc-stat"><span class="lc-big" style="color:var(--accent)">{{ lb.allocated_days }}</span><span class="lc-lbl">Allocated</span></div>
+          <div class="lc-stat" *ngIf="isAnnualLeaveBalance(lb)"><span class="lc-big" style="color:var(--info, #0ea5e9)">{{ lb.carried_forward_days || 0 }}</span><span class="lc-lbl">Carry Forward</span></div>
           <div class="lc-stat"><span class="lc-big" style="color:var(--success)">{{ lb.remaining_days }}</span><span class="lc-lbl">Remaining</span></div>
           <div class="lc-stat"><span class="lc-big" style="color:var(--warning)">{{ lb.used_days }}</span><span class="lc-lbl">Used</span></div>
           <div class="lc-stat"><span class="lc-big" style="color:var(--text2)">{{ lb.pending_days }}</span><span class="lc-lbl">Pending</span></div>
@@ -311,7 +333,7 @@
         </div>
       </div>
       <div class="empty-state" *ngIf="!leaveBalance.length" style="grid-column:1/-1">
-        <mat-icon>event_available</mat-icon><p>No leave allocations found</p>
+        <mat-icon>event_available</mat-icon><p>No leave allocations found for this contract year</p>
       </div>
     </div>
   </div>

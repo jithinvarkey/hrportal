@@ -50,7 +50,7 @@
 
   <!-- ── Main Tabs ───────────────────────────────────────────────────────── -->
   <div class="main-tabs">
-    <button *ngFor="let t of tabs" class="main-tab" [class.active]="activeTab===t.id" (click)="switchTab(t.id)" [hidden]="t.id === 'holidays' && !canManageHolidays">
+    <button *ngFor="let t of tabs" class="main-tab" [class.active]="activeTab===t.id" (click)="switchTab(t.id)">
       <mat-icon>{{ t.icon }}</mat-icon>
       {{ t.label }}
     </button>
@@ -343,7 +343,7 @@
       <div class="card-hdr"><span class="card-title"><mat-icon>star</mat-icon> Holidays {{ calYear }}</span></div>
       <div class="holiday-list">
         <div class="holiday-row" *ngFor="let h of holidays">
-          <div class="holiday-date">{{ h.date | date:'EEE, dd MMM' }}</div>
+          <div class="holiday-date">{{ formatHolidayDate(h.date, { weekday:'short', day:'2-digit', month:'short' }) }}</div>
           <div class="holiday-name">{{ h.name }}</div>
           <span class="status-badge badge-blue" *ngIf="h.is_recurring">Annual</span>
           <button class="row-btn" *ngIf="canManageHolidays" (click)="openHolidayForm(h)"><mat-icon style="color:var(--accent);font-size:16px">edit</mat-icon></button>
@@ -356,7 +356,7 @@
   <!-- ══════════════════════════════════════════════════════════════════════ -->
   <!-- TAB: BALANCES                                                          -->
   <!-- ══════════════════════════════════════════════════════════════════════ -->
-  <ng-container *ngIf="activeTab==='holidays' && canManageHolidays">
+  <ng-container *ngIf="activeTab==='holidays'">
     <div class="toolbar">
       <div class="filter-row" style="margin-left:0">
         <div class="search-wrap">
@@ -365,7 +365,7 @@
         </div>
         <button class="btn-outline" (click)="loadHolidayManagement()"><mat-icon>refresh</mat-icon></button>
       </div>
-      <button class="btn-primary" style="margin-left:auto" (click)="openHolidayForm()">
+      <button class="btn-primary" *ngIf="canManageHolidays" style="margin-left:auto" (click)="openHolidayForm()">
         <mat-icon>add</mat-icon> Add Holiday
       </button>
     </div>
@@ -378,15 +378,15 @@
       <div class="holiday-list" *ngIf="managedHolidays.length">
         <div class="holiday-row" *ngFor="let h of managedHolidays">
           <div class="holiday-date">
-            {{ h.date | date:'dd MMM yyyy' }}
-            <ng-container *ngIf="h.end_date && h.end_date.slice(0, 10) !== h.date.slice(0, 10)">
-              - {{ h.end_date | date:'dd MMM yyyy' }}
+            {{ formatHolidayDate(h.date) }}
+            <ng-container *ngIf="dateInputValue(h.end_date) && dateInputValue(h.end_date) !== dateInputValue(h.date)">
+              - {{ formatHolidayDate(h.end_date) }}
             </ng-container>
           </div>
           <div class="holiday-name">{{ h.name }}</div>
           <span class="status-badge badge-blue" *ngIf="h.is_recurring">Recurring</span>
           <span class="status-badge badge-gray" *ngIf="!h.is_recurring">One time</span>
-          <div class="row-actions">
+          <div class="row-actions" *ngIf="canManageHolidays">
             <button class="row-btn" matTooltip="Edit holiday" (click)="openHolidayForm(h)">
               <mat-icon style="color:var(--accent)">edit</mat-icon>
             </button>
@@ -411,6 +411,12 @@
       <div class="search-wrap" *ngIf="isHR || isMgr">
         <mat-icon class="search-ico">search</mat-icon>
         <input class="search-input" placeholder="Search employee…" [(ngModel)]="filterSearch" (keyup.enter)="loadAllBalances()">
+      </div>
+      <div class="balance-year-filter">
+        <label>Contract Year</label>
+        <select [(ngModel)]="balanceYear" (change)="onBalanceYearChange()">
+          <option *ngFor="let year of balanceYears" [ngValue]="year">{{ year }}</option>
+        </select>
       </div>
       <span *ngIf="!isHR && !isMgr" style="font-size:13px;color:var(--text2)">Your leave balance details</span>
       <button class="btn-outline" (click)="loadAllBalances()"><mat-icon>refresh</mat-icon></button>

@@ -131,6 +131,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/export',                        [EmployeeController::class, 'export']);
              Route::get('/stats',                         [EmployeeController::class, 'stats']);
              Route::get('/manager-options',               [EmployeeController::class, 'managerOptions']);
+             Route::get('/{id}/leave-balances',            [EmployeeController::class, 'leaveBalances'])->whereNumber('id');
              Route::get('/{id}',                          [EmployeeController::class, 'show']);
             Route::put('/{id}',                          [EmployeeController::class, 'update']);
             Route::delete('/{id}',                       [EmployeeController::class, 'destroy']);

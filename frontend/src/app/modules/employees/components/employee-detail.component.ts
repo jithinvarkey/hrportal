@@ -18,6 +18,10 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
   employee: any   = null;
   documents:    any[] = [];
   leaveBalance: any[] = [];
+  leaveBalanceLoading = false;
+  leaveBalancePeriods: any[] = [];
+  selectedLeavePeriod = '';
+  selectedLeavePeriodLabel = '';
   onboarding:    any[] = [];
   showTaskForm   = false;
   taskForm:  any = { title:'', category:'hr_documents', description:'', due_date:'', sort_order:0 };
@@ -111,7 +115,7 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
         next: r => {
           this.employee     = r.employee || r;
           this.loading      = false;
-          this.leaveBalance = this.employee?.leave_allocations || [];
+          this.leaveBalance = [];
           this.onboarding   = this.employee?.onboarding_tasks || [];
           this.dependents   = this.employee?.dependents || [];
           const ownEmployeeId = this.auth.getUser()?.employee?.id || this.auth.getUser()?.employee_id;
@@ -140,6 +144,9 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
     }
     if (tabId === 'contracts') {
       this.loadContracts();
+    }
+    if (tabId === 'leave' && !this.leaveBalancePeriods.length) {
+      this.loadLeaveBalances();
     }
     if (tabId === 'onboarding') {
       this.loadOnboarding();
@@ -340,6 +347,36 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
   pctLeave(alloc: any): number {
     if (!alloc?.allocated_days) return 0;
     return Math.round((alloc.used_days / alloc.allocated_days) * 100);
+  }
+
+  isAnnualLeaveBalance(balance: any): boolean {
+    const name = String(balance?.leave_type?.name || '').toLowerCase();
+    const code = String(balance?.leave_type?.code || '').toLowerCase();
+    return code === 'al' || name.includes('annual');
+  }
+
+  loadLeaveBalances(periodStart = ''): void {
+    if (!this.employeeId) return;
+    this.leaveBalanceLoading = true;
+    const params: any = {};
+    const selected = periodStart || this.selectedLeavePeriod;
+    if (selected) params.period_start = selected;
+
+    this.http.get<any>(`/api/v1/employees/${this.employeeId}/leave-balances`, { params })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: r => {
+          this.leaveBalance = r?.balances || [];
+          this.leaveBalancePeriods = r?.periods || [];
+          this.selectedLeavePeriod = r?.selected_period?.start_date || selected || '';
+          this.selectedLeavePeriodLabel = r?.selected_period?.label || '';
+          this.leaveBalanceLoading = false;
+        },
+        error: () => {
+          this.leaveBalance = [];
+          this.leaveBalanceLoading = false;
+        },
+      });
   }
   fmtSize(bytes: number): string {
     if (!bytes) return '—';
