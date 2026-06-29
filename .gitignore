@@ -9,3 +9,4 @@ backend/.env.example
 frontend/codex-ng-serve.out.log
 /backend/bootstrap/cache
 /backend/public/storage
+frontend/ng-serve-profile.out.log
