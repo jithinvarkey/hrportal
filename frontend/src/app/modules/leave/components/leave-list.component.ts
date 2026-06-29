@@ -476,7 +476,6 @@ export class LeaveListComponent implements OnInit {
 
   // ── Holidays ──────────────────────────────────────────────────────────────
   loadHolidayManagement() {
-    if (!this.canManageHolidays) return;
     this.holidayLoading = true;
     this.http.get<any>('/api/v1/leave/holidays', { params: { year: this.holidayYear, manage: '1' } }).subscribe({
       next: r => { this.managedHolidays = r?.holidays || []; this.holidayLoading = false; },

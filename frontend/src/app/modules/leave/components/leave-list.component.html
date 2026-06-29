@@ -50,7 +50,7 @@
 
   <!-- ── Main Tabs ───────────────────────────────────────────────────────── -->
   <div class="main-tabs">
-    <button *ngFor="let t of tabs" class="main-tab" [class.active]="activeTab===t.id" (click)="switchTab(t.id)" [hidden]="t.id === 'holidays' && !canManageHolidays">
+    <button *ngFor="let t of tabs" class="main-tab" [class.active]="activeTab===t.id" (click)="switchTab(t.id)">
       <mat-icon>{{ t.icon }}</mat-icon>
       {{ t.label }}
     </button>
@@ -356,7 +356,7 @@
   <!-- ══════════════════════════════════════════════════════════════════════ -->
   <!-- TAB: BALANCES                                                          -->
   <!-- ══════════════════════════════════════════════════════════════════════ -->
-  <ng-container *ngIf="activeTab==='holidays' && canManageHolidays">
+  <ng-container *ngIf="activeTab==='holidays'">
     <div class="toolbar">
       <div class="filter-row" style="margin-left:0">
         <div class="search-wrap">
@@ -365,7 +365,7 @@
         </div>
         <button class="btn-outline" (click)="loadHolidayManagement()"><mat-icon>refresh</mat-icon></button>
       </div>
-      <button class="btn-primary" style="margin-left:auto" (click)="openHolidayForm()">
+      <button class="btn-primary" *ngIf="canManageHolidays" style="margin-left:auto" (click)="openHolidayForm()">
         <mat-icon>add</mat-icon> Add Holiday
       </button>
     </div>
@@ -386,7 +386,7 @@
           <div class="holiday-name">{{ h.name }}</div>
           <span class="status-badge badge-blue" *ngIf="h.is_recurring">Recurring</span>
           <span class="status-badge badge-gray" *ngIf="!h.is_recurring">One time</span>
-          <div class="row-actions">
+          <div class="row-actions" *ngIf="canManageHolidays">
             <button class="row-btn" matTooltip="Edit holiday" (click)="openHolidayForm(h)">
               <mat-icon style="color:var(--accent)">edit</mat-icon>
             </button>
