@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\ContractResource;
 use App\Models\Contract;
 use App\Models\Employee;
+use App\Services\XlsxReportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -94,6 +95,84 @@ class ContractController extends Controller {
      */
 
     
+    public function downloadActiveEmployeeContractsReport(Request $request, XlsxReportService $xlsxReports) {
+        if (!$this->canManageContracts()) {
+            return response()->json(['message' => 'You do not have permission to download this report.'], 403);
+        }
+
+        $today = now()->toDateString();
+
+        $query = Contract::with([
+                'employee.department',
+                'employee.unit',
+                'employee.designation',
+                'department',
+                'approvedBy',
+            ])
+            ->where('status', 'active')
+            ->whereDate('start_date', '<=', $today)
+            ->where(function ($q) use ($today) {
+                $q->whereNull('end_date')->orWhereDate('end_date', '>=', $today);
+            })
+            ->whereHas('employee', fn($q) => $q->where('status', 'active'))
+            ->when($request->type, fn($q) => $q->where('type', $request->type))
+            ->when($request->search, function ($q) use ($request) {
+                $search = "%{$request->search}%";
+                $q->where(function ($sub) use ($search) {
+                    $sub->where('reference', 'like', $search)
+                        ->orWhere('position', 'like', $search)
+                        ->orWhereHas('employee', function ($employee) use ($search) {
+                            $employee->where('first_name', 'like', $search)
+                                ->orWhere('last_name', 'like', $search)
+                                ->orWhere('employee_code', 'like', $search)
+                                ->orWhere('email', 'like', $search);
+                        });
+                });
+            })
+            ->orderBy(Employee::select('employee_code')->whereColumn('employees.id', 'employee_contracts.employee_id'))
+            ->orderBy('start_date', 'desc');
+
+        $headers = [
+            'Employee ID', 'Employee Name', 'Email', 'Phone', 'Employee Department',
+            'Unit', 'Designation', 'Contract Reference', 'Contract Type',
+            'Contract Department', 'Contract Position', 'Contract Status',
+            'Start Date', 'End Date', 'Days Remaining', 'Salary', 'Currency',
+            'Approved By', 'Approved At',
+        ];
+
+        $rows = $query->get()->map(function (Contract $contract) {
+            $endDate = $contract->end_date;
+
+            return [
+                $contract->employee?->employee_code,
+                $contract->employee?->full_name,
+                $contract->employee?->email,
+                $contract->employee?->phone,
+                $contract->employee?->department?->name,
+                $contract->employee?->unit?->name,
+                $contract->employee?->designation?->title,
+                $contract->reference,
+                str_replace('_', ' ', (string) $contract->type),
+                $contract->department?->name,
+                $contract->position,
+                $contract->status,
+                optional($contract->start_date)->format('Y-m-d'),
+                optional($endDate)->format('Y-m-d'),
+                $endDate ? now()->startOfDay()->diffInDays($endDate, false) : '',
+                $contract->salary,
+                $contract->currency,
+                $contract->approvedBy?->name,
+                optional($contract->approved_at)->format('Y-m-d H:i'),
+            ];
+        })->toArray();
+
+        return $xlsxReports->download(
+            'active-employee-contract-details-report-' . now()->format('Y-m-d') . '.xlsx',
+            $headers,
+            $rows
+        );
+    }
+
     public function stats(): JsonResponse
 {
     $safe = fn(callable $fn) => rescue($fn, 0, false);

@@ -406,6 +406,36 @@ export class ContractListComponent implements OnInit, OnDestroy {
     });
   }
 
+  downloadActiveEmployeeContractsReport(): void {
+    const params: any = {};
+    if (this.searchControl.value) params.search = this.searchControl.value;
+    if (this.typeFilter) params.type = this.typeFilter;
+
+    this.http.get(`${this.api}/active-employee-contracts-report`, {
+      params,
+      responseType: 'blob',
+      observe: 'response',
+    }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: response => this.downloadBlob(
+        response,
+        `active-employee-contract-details-report-${new Date().toISOString().slice(0, 10)}.xlsx`
+      ),
+    });
+  }
+
+  private downloadBlob(response: any, fallbackFilename: string): void {
+    const blob = response.body as Blob;
+    const disposition = response.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    const filename = match?.[1] || fallbackFilename;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   loadStats(): void {
     this.statsLoading = true;
     this.http.get<ContractStats>(`${this.api}/stats`).pipe(takeUntil(this.destroy$)).subscribe({

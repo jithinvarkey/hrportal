@@ -1513,10 +1513,10 @@ class LeaveController extends Controller {
                 ? max(0, $contractCarryForward - $carryForwardTaken)
                 : 0.0;
             $annualTakenAfterCarryForward = max(0, $contractTaken - $carryForwardTaken);
-            $balanceUntilReportDate = max(0, round(
+            $balanceUntilReportDate = round(
                 $earnedUntilReportDate + $activeCarryForwardRemaining - $annualTakenAfterCarryForward,
                 2
-            ));
+            );
 
             $rows[] = [
                 $employee->employee_code,

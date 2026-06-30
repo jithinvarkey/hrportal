@@ -410,6 +410,7 @@ Route::prefix('v1')->group(function () {
         // ── Contracts ──────────────────────────────────────────────────────
         Route::prefix('contracts')->group(function () {
             Route::get('/stats',           [ContractController::class, 'stats']);
+            Route::get('/active-employee-contracts-report', [ContractController::class, 'downloadActiveEmployeeContractsReport']);
             Route::get('/',                [ContractController::class, 'index']);
             Route::post('/',               [ContractController::class, 'store']);
             Route::get('/{id}',            [ContractController::class, 'show'])->whereNumber('id');
