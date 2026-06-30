@@ -31,7 +31,7 @@ class Loan extends Model {
     ];
     public function employee()        { return $this->belongsTo(Employee::class); }
     public function loanType()        { return $this->belongsTo(LoanType::class); }
-    public function installments()    { return $this->hasMany(LoanInstallment::class)->orderBy('installment_no'); }
+    public function installments()    { return $this->hasMany(LoanInstallment::class)->orderBy('due_date')->orderBy('installment_no'); }
     public function managerApprover() { return $this->belongsTo(User::class,'manager_approved_by'); }
     public function hrApprover()      { return $this->belongsTo(User::class,'hr_approved_by'); }
     public function financeApprover() { return $this->belongsTo(User::class,'finance_approved_by'); }

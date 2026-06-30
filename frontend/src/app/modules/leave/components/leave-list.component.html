@@ -84,6 +84,9 @@
           <option value="">All Types</option>
           <option *ngFor="let t of leaveTypes" [value]="t.id">{{ t.name }}</option>
         </select>
+        <button class="btn-outline" *ngIf="isHR" (click)="downloadLeaveDetailsReport()">
+          <mat-icon>download</mat-icon> Leave Report
+        </button>
       </div>
     </div>
 
@@ -421,6 +424,9 @@
           <option *ngFor="let year of balanceYears" [ngValue]="year">{{ year }}</option>
         </select>
       </div>
+      <button class="btn-outline" *ngIf="isHR" (click)="downloadAnnualBalanceReport()">
+        <mat-icon>download</mat-icon> Annual Report
+      </button>
       <span *ngIf="!isHR && !isMgr" style="font-size:13px;color:var(--text2)">Your leave balance details</span>
       <button class="btn-outline" (click)="loadAllBalances()"><mat-icon>refresh</mat-icon></button>
     </div>

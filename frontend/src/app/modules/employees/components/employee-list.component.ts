@@ -248,6 +248,27 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
     this.loadEmployees();
   }
 
+  downloadEmployeeDetailsReport(): void {
+    const params: any = {
+      search: this.searchControl.value ?? '',
+      status: this.statusFilter.value ?? '',
+      department_id: this.deptFilter.value ?? '',
+      unit_id: this.unitFilter.value ?? '',
+      employment_type: this.typeFilter.value ?? '',
+    };
+
+    this.http.get('/api/v1/employees/details-report', {
+      params,
+      responseType: 'blob',
+      observe: 'response',
+    }).subscribe({
+      next: response => this.downloadBlob(
+        response,
+        `employee-details-report-${new Date().toISOString().slice(0, 10)}.xlsx`
+      ),
+    });
+  }
+
   /** Navigate to the employee detail page. */
   viewEmployee(id: number): void {
     this.router.navigate(['/employees', id]);
@@ -261,6 +282,19 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
   /** Navigate to the new-employee form. */
   addEmployee(): void {
     this.router.navigate(['/employees', 'new']);
+  }
+
+  private downloadBlob(response: any, fallbackFilename: string): void {
+    const blob = response.body as Blob;
+    const disposition = response.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    const filename = match?.[1] || fallbackFilename;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   /**

@@ -12,6 +12,7 @@ use App\Models\EmployeeDependent;
 use App\Models\LeaveAllocation;
 use App\Mail\EmployeeDocumentUploadedMail;
 use App\Services\EmployeeService;
+use App\Services\XlsxReportService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,7 +24,7 @@ use Illuminate\Support\Facades\Mail;
 
 class EmployeeController extends Controller {
 
-    public function __construct(protected EmployeeService $service) {
+    public function __construct(protected EmployeeService $service, protected XlsxReportService $xlsxReports) {
         
     }
 
@@ -669,5 +670,71 @@ class EmployeeController extends Controller {
 
     public function export(Request $request): mixed {
         return $this->service->export($request->all());
+    }
+
+    public function downloadDetailsReport(Request $request) {
+        if (!$this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff'])) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $query = Employee::with(['department', 'unit', 'designation', 'manager'])
+            ->when($request->department_id, fn($q) => $q->where('department_id', $request->department_id))
+            ->when($request->unit_id, fn($q) => $q->where('unit_id', $request->unit_id))
+            ->when($request->status, fn($q) => $q->where('status', $request->status))
+            ->when($request->employment_type, fn($q) => $q->where('employment_type', $request->employment_type))
+            ->when($request->search, fn($q) => $q->where(function ($sub) use ($request) {
+                $search = "%{$request->search}%";
+                $sub->where('first_name', 'like', $search)
+                    ->orWhere('last_name', 'like', $search)
+                    ->orWhere('email', 'like', $search)
+                    ->orWhere('phone', 'like', $search)
+                    ->orWhere('employee_code', 'like', $search);
+            }))
+            ->orderBy('employee_code');
+
+        $headers = [
+            'Employee ID', 'Full Name', 'Email', 'Phone', 'Department', 'Unit', 'Designation',
+            'Manager', 'Employment Type', 'Status', 'Hire Date', 'Date of Birth', 'Gender',
+            'Marital Status', 'Nationality', 'Address', 'City', 'Country', 'ID / Iqama',
+            'ID / Iqama Expiry', 'Passport Number', 'Passport Expiry', 'Bank Name',
+            'Bank Account / IBAN', 'Monthly Salary', 'Emergency Contact Name',
+            'Emergency Contact Phone',
+        ];
+
+        $rows = $query->get()->map(fn(Employee $employee) => [
+            $employee->employee_code,
+            $employee->full_name,
+            $employee->email,
+            $employee->phone,
+            $employee->department?->name,
+            $employee->unit?->name,
+            $employee->designation?->title,
+            $employee->manager?->full_name,
+            str_replace('_', ' ', (string) $employee->employment_type),
+            $employee->status,
+            optional($employee->hire_date)->format('Y-m-d'),
+            optional($employee->dob)->format('Y-m-d'),
+            $employee->gender,
+            $employee->marital_status,
+            $employee->nationality,
+            $employee->address,
+            $employee->city,
+            $employee->country,
+            $employee->national_id,
+            optional($employee->id_expiry_date)->format('Y-m-d'),
+            $employee->passport_number,
+            optional($employee->passport_expiry_date)->format('Y-m-d'),
+            $employee->bank_name,
+            $employee->bank_account,
+            $employee->salary,
+            $employee->emergency_contact_name,
+            $employee->emergency_contact_phone,
+        ])->toArray();
+
+        return $this->xlsxReports->download(
+            'employee-details-report-' . now()->format('Y-m-d') . '.xlsx',
+            $headers,
+            $rows
+        );
     }
 }

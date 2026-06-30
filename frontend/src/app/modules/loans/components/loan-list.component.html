@@ -49,6 +49,9 @@
           <option value="">All Types</option>
           <option *ngFor="let t of loanTypes" [value]="t.id">{{ t.name }}</option>
         </select>
+        <button class="btn-outline" *ngIf="isHR || isFinance" (click)="downloadLoanDetailsReport()">
+          <mat-icon>download</mat-icon> Loan Report
+        </button>
       </div>
     </div>
 

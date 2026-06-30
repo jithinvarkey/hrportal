@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Models\Employee;
 use App\Models\LeaveType;
 use App\Models\LeaveRequest;
 use App\Models\EmployeeRequest;
@@ -329,6 +330,90 @@ class LeaveController extends Controller {
         });
 
         return response()->json($paginated);
+    }
+
+    public function downloadDetailsReport(Request $request) {
+        if (!$this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff'])) {
+            return response()->json(['message' => 'You do not have permission to download this report.'], 403);
+        }
+
+        $user = auth()->user();
+
+        $query = LeaveRequest::with(['employee.department', 'leaveType', 'approver'])
+                ->when($request->needs_action, fn($q) => $q->whereIn('status', ['pending', 'manager_approved']))
+                ->when($request->needs_action && $user->employee, fn($q) => $q->where('employee_id', '!=', $user->employee->id))
+                ->when($request->needs_action, fn($q) => $q->whereDoesntHave('employee', fn($eq) => $eq->where('user_id', $user->id)))
+                ->when(!$request->needs_action && $request->status, fn($q) => $q->where('status', $request->status))
+                ->when($request->employee_id, fn($q) => $q->where('employee_id', $request->employee_id))
+                ->when($request->leave_type_id, fn($q) => $q->where('leave_type_id', $request->leave_type_id))
+                ->when($request->search, function ($q) use ($request) {
+                    $search = trim((string) $request->search);
+                    $q->where(function ($sub) use ($search) {
+                        $sub->where('reason', 'like', "%{$search}%")
+                            ->orWhereHas('employee', function ($employeeQuery) use ($search) {
+                                $employeeQuery->where('first_name', 'like', "%{$search}%")
+                                    ->orWhere('last_name', 'like', "%{$search}%")
+                                    ->orWhere('email', 'like', "%{$search}%")
+                                    ->orWhere('employee_code', 'like', "%{$search}%");
+                            });
+                    });
+                })
+                ->orderBy('created_at', 'desc')
+                ->orderByDesc('id');
+
+        $headers = [
+            'Employee ID', 'Employee Name', 'Department', 'Leave Type', 'Start Date',
+            'Start Time', 'End Date', 'End Time', 'Leave Days', 'Leave Hours',
+            'Half Day', 'Reason', 'Manager Approval Status', 'HR Status',
+            'Overall Status', 'Approved By', 'Approved At', 'Rejected Reason',
+            'Submitted At',
+        ];
+
+        $rows = $query->get()->map(function (LeaveRequest $leave) {
+            $status = (string) $leave->status;
+            $managerStatus = match ($status) {
+                'pending' => 'Pending',
+                'manager_approved', 'approved' => 'Approved',
+                'rejected' => 'Rejected',
+                'cancelled' => 'Cancelled',
+                default => ucfirst(str_replace('_', ' ', $status)),
+            };
+            $hrStatus = match ($status) {
+                'manager_approved' => 'Pending',
+                'approved' => 'Approved',
+                'rejected' => 'Rejected',
+                'cancelled' => 'Cancelled',
+                default => '',
+            };
+
+            return [
+                $leave->employee?->employee_code,
+                $leave->employee?->full_name,
+                $leave->employee?->department?->name,
+                $leave->leaveType?->name,
+                optional($leave->start_date)->format('Y-m-d'),
+                $leave->start_time,
+                optional($leave->end_date)->format('Y-m-d'),
+                $leave->end_time,
+                $leave->total_days,
+                $leave->total_hours,
+                $leave->is_half_day ? ($leave->half_day_period ?: 'Yes') : 'No',
+                $leave->reason,
+                $managerStatus,
+                $hrStatus,
+                ucfirst(str_replace('_', ' ', $status)),
+                $leave->approver?->name,
+                optional($leave->approved_at)->format('Y-m-d H:i'),
+                $leave->rejection_reason,
+                optional($leave->created_at)->format('Y-m-d H:i'),
+            ];
+        })->toArray();
+
+        return $this->xlsxDownload(
+            'leave-details-report-' . now()->format('Y-m-d') . '.xlsx',
+            $headers,
+            $rows
+        );
     }
 
     public function store(Request $request) {
@@ -838,6 +923,7 @@ class LeaveController extends Controller {
             $allocations = LeaveAllocation::with(['leaveType', 'employee'])
                     ->where('employee_id', $empId)
                     ->where('year', now()->year)
+                    ->whereHas('leaveType', fn($query) => $this->balanceSheetLeaveTypeScope($query))
                     ->get()
                     ->map(fn(LeaveAllocation $allocation) => $this->decorateAnnualBalanceForDate($allocation, now('Asia/Riyadh')->startOfDay(), true));
 
@@ -853,6 +939,7 @@ class LeaveController extends Controller {
         $allocations = LeaveAllocation::with(['leaveType', 'employee'])
                 ->where('employee_id', $empId)
                 ->whereIn('year', array_values(array_unique([$asOf->year, $annualPeriodYear])))
+                ->whereHas('leaveType', fn($query) => $this->balanceSheetLeaveTypeScope($query))
                 ->get()
                 ->filter(function (LeaveAllocation $allocation) use ($asOf, $annualPeriodYear) {
                     if (!$allocation->leaveType || !$this->isAnnualLeaveType($allocation->leaveType)) {
@@ -925,6 +1012,16 @@ class LeaveController extends Controller {
             )
             ->prepend($display)
             ->values();
+    }
+
+    private function balanceSheetLeaveTypeScope($query) {
+        return $query->where(function ($scope) {
+            $scope->where('is_annual', true)
+                ->orWhereIn(DB::raw('UPPER(code)'), ['AL', 'BE', 'PE'])
+                ->orWhere('name', 'like', '%Annual%')
+                ->orWhere('name', 'like', '%Business Excuse%')
+                ->orWhere('name', 'like', '%Personal%');
+        });
     }
 
     private function overlappingLeaveRequest(int $employeeId, string $startDate, string $endDate): ?LeaveRequest {
@@ -1264,6 +1361,7 @@ class LeaveController extends Controller {
         }
 
         $availableYears = LeaveAllocation::query()
+                ->whereHas('leaveType', fn($q) => $this->balanceSheetLeaveTypeScope($q))
                 ->when(!$isHRAdmin, fn($q) => $q->whereIn('employee_id', $visibleEmployeeIds->values()))
                 ->when($isHRAdmin && $request->department_id, fn($q) =>
                         $q->whereHas('employee', fn($eq) => $eq->where('department_id', $request->department_id))
@@ -1288,6 +1386,7 @@ class LeaveController extends Controller {
 
         $allocations = LeaveAllocation::with(['employee.department', 'leaveType'])
                 ->where('year', $year)
+                ->whereHas('leaveType', fn($q) => $this->balanceSheetLeaveTypeScope($q))
                 ->when(!$isHRAdmin, fn($q) => $q->whereIn('employee_id', $visibleEmployeeIds->values()))
                 ->when($isHRAdmin && $request->department_id, fn($q) =>
                         $q->whereHas('employee', fn($eq) => $eq->where('department_id', $request->department_id))
@@ -1311,6 +1410,260 @@ class LeaveController extends Controller {
         $response['selected_year'] = (int) $year;
 
         return response()->json($response);
+    }
+
+    public function downloadAnnualBalanceReport(Request $request) {
+        if (!$this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff'])) {
+            return response()->json(['message' => 'You do not have permission to download this report.'], 403);
+        }
+
+        $asOf = now('Asia/Riyadh')->startOfDay();
+        $annualTypeIds = LeaveType::query()
+            ->where('is_annual', true)
+            ->orWhere('code', 'AL')
+            ->orWhere('name', 'like', '%Annual%')
+            ->pluck('id');
+
+        if ($annualTypeIds->isEmpty()) {
+            return response()->json(['message' => 'Annual leave type is not configured.'], 404);
+        }
+
+        $employees = Employee::with(['department', 'unit', 'designation'])
+            ->whereNull('deleted_at')
+            ->where('status', 'active')
+            ->when($request->department_id, fn($query) => $query->where('department_id', $request->department_id))
+            ->when($request->search, fn($query) => $query->where(function ($sub) use ($request) {
+                $sub->where('first_name', 'like', "%{$request->search}%")
+                    ->orWhere('last_name', 'like', "%{$request->search}%")
+                    ->orWhere('employee_code', 'like', "%{$request->search}%")
+                    ->orWhere('email', 'like', "%{$request->search}%");
+            }))
+            ->orderBy('employee_code')
+            ->get();
+
+        $filename = 'annual-leave-balance-report-' . $asOf->format('Y-m-d') . '.xlsx';
+        $headers = [
+            'Employee Code',
+            'Employee Name',
+            'Department',
+            'Unit',
+            'Designation',
+            'Hire Date',
+            'Report Date',
+            'Total Allocated From Hire Date',
+            'Total Taken From Hire Date Until Now',
+            'Current Contract Start',
+            'Current Contract End',
+            'This Contract Allocated Leave',
+            'This Contract Carry Forward Leave',
+            'This Contract Taken Leave Until Now',
+            'Leave Balance Until Report Date',
+        ];
+
+        $rows = [];
+
+        foreach ($employees as $employee) {
+            $hireDate = $employee->hire_date ? Carbon::parse($employee->hire_date)->startOfDay() : null;
+            $periodStart = $this->annualPeriodStart($employee, $asOf);
+            $periodEnd = $periodStart->copy()->addYear()->subDay()->startOfDay();
+
+            $allocations = LeaveAllocation::query()
+                ->where('employee_id', $employee->id)
+                ->whereIn('leave_type_id', $annualTypeIds)
+                ->when($hireDate, fn($query) => $query->where(function ($scope) use ($hireDate) {
+                    $scope->whereNull('accrual_year_start')
+                        ->orWhereDate('accrual_year_start', '>=', $hireDate->toDateString());
+                }))
+                ->get();
+
+            $totalAllocated = (float) $allocations
+                ->filter(fn($allocation) => !$allocation->accrual_year_start || Carbon::parse($allocation->accrual_year_start)->lte($asOf))
+                ->sum('allocated_days');
+
+            $currentAllocation = $allocations->first(fn($allocation) =>
+                $allocation->accrual_year_start
+                    && Carbon::parse($allocation->accrual_year_start)->isSameDay($periodStart)
+            ) ?: LeaveAllocation::query()
+                ->where('employee_id', $employee->id)
+                ->whereIn('leave_type_id', $annualTypeIds)
+                ->where('year', $periodStart->year)
+                ->first();
+
+            $contractAllocated = $currentAllocation
+                ? (float) $currentAllocation->allocated_days
+                : (float) $this->annualEntitlement($employee, LeaveType::find($annualTypeIds->first()), $periodStart);
+            $contractCarryForward = (float) ($currentAllocation?->carried_forward_days ?? 0);
+
+            $totalTaken = $this->approvedAnnualLeaveTaken($employee->id, $annualTypeIds, $hireDate ?: $periodStart);
+            $contractTaken = $this->approvedAnnualLeaveTaken($employee->id, $annualTypeIds, $periodStart, $periodEnd);
+            $balanceDate = $asOf->copy()->min($periodEnd)->max($periodStart);
+            $earnedUntilReportDate = min($contractAllocated, round(
+                $this->countWorkingDays($periodStart, $balanceDate) * ($contractAllocated / 260),
+                2
+            ));
+            $carryForwardExpiryDate = $this->carryForwardExpiryDate($periodStart);
+            $carryForwardWindowEnd = $periodEnd->copy()->min($carryForwardExpiryDate);
+            $carryForwardTaken = $carryForwardWindowEnd->gte($periodStart)
+                ? min(
+                    $contractCarryForward,
+                    $this->approvedAnnualLeaveTaken($employee->id, $annualTypeIds, $periodStart, $carryForwardWindowEnd)
+                )
+                : 0.0;
+            $activeCarryForwardRemaining = $balanceDate->lte($carryForwardExpiryDate)
+                ? max(0, $contractCarryForward - $carryForwardTaken)
+                : 0.0;
+            $annualTakenAfterCarryForward = max(0, $contractTaken - $carryForwardTaken);
+            $balanceUntilReportDate = max(0, round(
+                $earnedUntilReportDate + $activeCarryForwardRemaining - $annualTakenAfterCarryForward,
+                2
+            ));
+
+            $rows[] = [
+                $employee->employee_code,
+                $employee->full_name,
+                $employee->department?->name ?? '',
+                $employee->unit?->name ?? '',
+                $employee->designation?->title ?? '',
+                $hireDate?->toDateString() ?? '',
+                $asOf->toDateString(),
+                $this->formatReportNumber($totalAllocated),
+                $this->formatReportNumber($totalTaken),
+                $periodStart->toDateString(),
+                $periodEnd->toDateString(),
+                $this->formatReportNumber($contractAllocated),
+                $this->formatReportNumber($contractCarryForward),
+                $this->formatReportNumber($contractTaken),
+                $this->formatReportNumber($balanceUntilReportDate),
+            ];
+        }
+
+        return $this->xlsxDownload($filename, $headers, $rows);
+    }
+
+    private function approvedAnnualLeaveTaken(int $employeeId, $annualTypeIds, Carbon $from, ?Carbon $to = null): float {
+        $used = 0.0;
+        $requests = LeaveRequest::query()
+            ->where('employee_id', $employeeId)
+            ->whereIn('leave_type_id', $annualTypeIds)
+            ->where('status', 'approved')
+            ->whereDate('end_date', '>=', $from->toDateString())
+            ->when($to, fn($query) => $query->whereDate('start_date', '<=', $to->toDateString()))
+            ->get();
+
+        foreach ($requests as $leave) {
+            $leaveStart = Carbon::parse($leave->start_date)->startOfDay();
+            $leaveEnd = Carbon::parse($leave->end_date)->startOfDay();
+            if ($leaveStart->gte($from) && (!$to || $leaveEnd->lte($to))) {
+                $used += (float) $leave->total_days;
+                continue;
+            }
+
+            $start = $leaveStart->max($from);
+            $end = $to ? $leaveEnd->min($to) : $leaveEnd;
+            if ($end->gte($start)) {
+                $used += $this->leaveDaysWithin($leave, $start, $end);
+            }
+        }
+
+        return round($used, 2);
+    }
+
+    private function formatReportNumber(float $value): string {
+        return rtrim(rtrim(number_format($value, 2, '.', ''), '0'), '.');
+    }
+
+    private function xlsxDownload(string $filename, array $headers, array $rows) {
+        $path = tempnam(sys_get_temp_dir(), 'annual_leave_report_');
+        $zip = new \ZipArchive();
+        $zip->open($path, \ZipArchive::OVERWRITE);
+        $zip->addFromString('[Content_Types].xml', $this->xlsxContentTypesXml());
+        $zip->addFromString('_rels/.rels', $this->xlsxRootRelsXml());
+        $zip->addFromString('xl/workbook.xml', $this->xlsxWorkbookXml());
+        $zip->addFromString('xl/_rels/workbook.xml.rels', $this->xlsxWorkbookRelsXml());
+        $zip->addFromString('xl/worksheets/sheet1.xml', $this->xlsxSheetXml($headers, $rows));
+        $zip->close();
+
+        return response()->download($path, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
+    }
+
+    private function xlsxSheetXml(array $headers, array $rows): string {
+        $allRows = array_merge([$headers], $rows);
+        $lastColumn = $this->xlsxColumnName(count($headers));
+        $lastRow = max(1, count($allRows));
+        $xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+            . 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            . '<dimension ref="A1:' . $lastColumn . $lastRow . '"/>'
+            . '<sheetViews><sheetView workbookViewId="0"/></sheetViews>'
+            . '<sheetFormatPr defaultRowHeight="15"/>'
+            . '<cols>';
+
+        for ($i = 1; $i <= count($headers); $i++) {
+            $width = $i <= 2 ? 24 : 18;
+            $xml .= '<col min="' . $i . '" max="' . $i . '" width="' . $width . '" customWidth="1"/>';
+        }
+
+        $xml .= '</cols><sheetData>';
+
+        foreach ($allRows as $rowIndex => $row) {
+            $excelRow = $rowIndex + 1;
+            $xml .= '<row r="' . $excelRow . '">';
+            foreach (array_values($row) as $columnIndex => $value) {
+                $cell = $this->xlsxColumnName($columnIndex + 1) . $excelRow;
+                $xml .= '<c r="' . $cell . '" t="inlineStr"><is><t>' . $this->xlsxEscape((string) $value) . '</t></is></c>';
+            }
+            $xml .= '</row>';
+        }
+
+        return $xml . '</sheetData><pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>';
+    }
+
+    private function xlsxColumnName(int $index): string {
+        $name = '';
+        while ($index > 0) {
+            $index--;
+            $name = chr(65 + ($index % 26)) . $name;
+            $index = intdiv($index, 26);
+        }
+        return $name;
+    }
+
+    private function xlsxEscape(string $value): string {
+        return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
+
+    private function xlsxContentTypesXml(): string {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            . '<Default Extension="xml" ContentType="application/xml"/>'
+            . '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+            . '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            . '</Types>';
+    }
+
+    private function xlsxRootRelsXml(): string {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+            . '</Relationships>';
+    }
+
+    private function xlsxWorkbookXml(): string {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+            . 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            . '<sheets><sheet name="Annual Leave Balance" sheetId="1" r:id="rId1"/></sheets>'
+            . '</workbook>';
+    }
+
+    private function xlsxWorkbookRelsXml(): string {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+            . '</Relationships>';
     }
 
     public function holidays(Request $request) {

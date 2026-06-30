@@ -8,6 +8,7 @@
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn-outline" (click)="clearFilters()"><mat-icon>filter_list_off</mat-icon> Clear</button>
+      <button class="btn-outline" *ngIf="isHR" (click)="downloadEmployeeDetailsReport()"><mat-icon>download</mat-icon> Employee Report</button>
       <button class="btn-primary" *ngIf="isHR"  (click)="addEmployee()"><mat-icon>person_add_alt_1</mat-icon> Add Employee</button>
     </div>
   </div>
