@@ -168,6 +168,34 @@ export class LoanListComponent implements OnInit {
 
   changePageSize() { this.load(1); }
 
+  downloadLoanDetailsReport() {
+    const params: any = {};
+    if (this.activeStatus) params.status = this.activeStatus;
+    if (this.filterType) params.loan_type_id = this.filterType;
+    if (this.filterSearch) params.search = this.filterSearch;
+
+    this.http.get('/api/v1/loans/details-report', {
+      params,
+      responseType: 'blob',
+      observe: 'response',
+    }).subscribe({
+      next: response => this.downloadBlob(response, `loan-details-report-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    });
+  }
+
+  private downloadBlob(response: any, fallbackFilename: string): void {
+    const blob = response.body as Blob;
+    const disposition = response.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    const filename = match?.[1] || fallbackFilename;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   // ── View detail ───────────────────────────────────────────────────────
   viewLoan(loan: any) {
     this.http.get<any>(`/api/v1/loans/${loan.id}`).subscribe({

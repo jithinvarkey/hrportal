@@ -419,6 +419,52 @@ export class LeaveListComponent implements OnInit {
     this.loadAllBalances(1);
   }
 
+  downloadAnnualBalanceReport(): void {
+    const params: any = {};
+    if (this.filterSearch) params.search = this.filterSearch;
+    if (this.filterDept) params.department_id = this.filterDept;
+
+    this.http.get('/api/v1/leave/annual-balance-report', {
+      params,
+      responseType: 'blob',
+      observe: 'response',
+    }).subscribe({
+      next: response => this.downloadBlob(response, `annual-leave-balance-report-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    });
+  }
+
+  downloadLeaveDetailsReport(): void {
+    const params: any = {};
+    if (this.activeStatus === 'needs_action') {
+      params.needs_action = '1';
+    } else if (this.activeStatus) {
+      params.status = this.activeStatus;
+    }
+    if (this.filterType) params.leave_type_id = this.filterType;
+    if (this.filterSearch) params.search = this.filterSearch;
+
+    this.http.get('/api/v1/leave/details-report', {
+      params,
+      responseType: 'blob',
+      observe: 'response',
+    }).subscribe({
+      next: response => this.downloadBlob(response, `leave-details-report-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    });
+  }
+
+  private downloadBlob(response: any, fallbackFilename: string): void {
+    const blob = response.body as Blob;
+    const disposition = response.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    const filename = match?.[1] || fallbackFilename;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   // ── Calendar ──────────────────────────────────────────────────────────────
   loadCalendar() {
     this.loadingCalendar = true;

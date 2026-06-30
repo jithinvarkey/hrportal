@@ -11,6 +11,7 @@ use App\Models\LoanType;
 use App\Services\LoanService;
 use App\Services\LoanApprovalService;
 use App\Services\RequestActivityService;
+use App\Services\XlsxReportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -33,7 +34,7 @@ class LoanController extends Controller {
     protected $activityService;
     protected $approvalService;
 
-    public function __construct(LoanService $service, RequestActivityService $activityService, LoanApprovalService $approvalService) {
+    public function __construct(LoanService $service, RequestActivityService $activityService, LoanApprovalService $approvalService, protected XlsxReportService $xlsxReports) {
         $this->service = $service;
         $this->activityService = $activityService;
         $this->approvalService = $approvalService;
@@ -238,6 +239,74 @@ class LoanController extends Controller {
                 ->orderBy('id', 'desc');
 
         return response()->json($query->paginate($perPage));
+    }
+
+    public function downloadDetailsReport(Request $request) {
+        if (!$this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff', 'finance_manager'])) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $query = Loan::with(['employee.department', 'loanType', 'installments'])
+            ->when($request->status, function ($q, string $status) {
+                if ($status === 'pending_hr' && $this->approvalLevels() === 2) {
+                    return $q->whereIn('status', ['pending_hr', 'pending_manager']);
+                }
+
+                return $q->where('status', $status);
+            })
+            ->when($request->loan_type_id, fn($q) => $q->where('loan_type_id', $request->loan_type_id))
+            ->when($request->search, fn($q) =>
+                $q->whereHas('employee', fn($eq) =>
+                    $eq->where('first_name', 'like', "%{$request->search}%")
+                        ->orWhere('last_name', 'like', "%{$request->search}%")
+                        ->orWhere('employee_code', 'like', "%{$request->search}%")
+                        ->orWhere('email', 'like', "%{$request->search}%")
+                )
+            )
+            ->orderBy('created_at', 'desc')
+            ->orderBy('id', 'desc');
+
+        $headers = [
+            'Reference', 'Employee ID', 'Employee Name', 'Department', 'Loan Type',
+            'Requested Amount', 'Approved Amount', 'Monthly Installment',
+            'Installments', 'Paid Installments', 'Skipped Installments', 'Total Paid',
+            'Outstanding Balance', 'Status', 'Purpose', 'Requested Date',
+            'Manager Approved At', 'HR Approved At', 'Finance Approved At',
+            'Disbursed Date', 'First Installment Date', 'Rejected Reason',
+        ];
+
+        $rows = $query->get()->map(function (Loan $loan) {
+            return [
+                $loan->reference,
+                $loan->employee?->employee_code,
+                $loan->employee?->full_name,
+                $loan->employee?->department?->name,
+                $loan->loanType?->name,
+                $loan->requested_amount,
+                $loan->approved_amount,
+                $loan->monthly_installment,
+                $loan->getAttribute('installments'),
+                $loan->installments_paid,
+                $loan->installments_skipped,
+                $loan->total_paid,
+                $loan->balance_remaining,
+                str_replace('_', ' ', (string) $loan->status),
+                $loan->purpose,
+                optional($loan->created_at)->format('Y-m-d'),
+                optional($loan->manager_approved_at)->format('Y-m-d H:i'),
+                optional($loan->hr_approved_at)->format('Y-m-d H:i'),
+                optional($loan->finance_approved_at)->format('Y-m-d H:i'),
+                optional($loan->disbursed_date)->format('Y-m-d'),
+                optional($loan->first_installment_date)->format('Y-m-d'),
+                $loan->rejection_reason,
+            ];
+        })->toArray();
+
+        return $this->xlsxReports->download(
+            'loan-details-report-' . now()->format('Y-m-d') . '.xlsx',
+            $headers,
+            $rows
+        );
     }
 
     // ── Create Loan Request ───────────────────────────────────────────────

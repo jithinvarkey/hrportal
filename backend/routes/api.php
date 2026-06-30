@@ -129,7 +129,8 @@ Route::prefix('v1')->group(function () {
             Route::get('/',                              [EmployeeController::class, 'index']);
             Route::post('/',                             [EmployeeController::class, 'store']);
             Route::get('/export',                        [EmployeeController::class, 'export']);
-             Route::get('/stats',                         [EmployeeController::class, 'stats']);
+            Route::get('/details-report',                [EmployeeController::class, 'downloadDetailsReport']);
+            Route::get('/stats',                         [EmployeeController::class, 'stats']);
              Route::get('/manager-options',               [EmployeeController::class, 'managerOptions']);
              Route::get('/{id}/leave-balances',            [EmployeeController::class, 'leaveBalances'])->whereNumber('id');
              Route::get('/{id}',                          [EmployeeController::class, 'show']);
@@ -199,6 +200,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/types/{id}/visibility',  [LeaveController::class, 'saveTypeVisibility']);
             Route::put('/types/{id}',              [LeaveController::class, 'updateType']);
             Route::get('/requests',                [LeaveController::class, 'index']);
+            Route::get('/details-report',           [LeaveController::class, 'downloadDetailsReport']);
             Route::post('/requests',               [LeaveController::class, 'store']);
             Route::get('/requests/{id}',           [LeaveController::class, 'show']);
             Route::put('/requests/{id}',           [LeaveController::class, 'update']);
@@ -217,6 +219,7 @@ Route::prefix('v1')->group(function () {
             Route::put('/{id}',    [ExcuseLimitController::class, 'update']);
         });
             Route::get('/all-balances',            [LeaveController::class, 'allBalances']);
+            Route::get('/annual-balance-report',   [LeaveController::class, 'downloadAnnualBalanceReport']);
             Route::get('/holidays',                [LeaveController::class, 'holidays']);
             Route::post('/holidays',               [LeaveController::class, 'storeHoliday']);
             Route::put('/holidays/{id}',           [LeaveController::class, 'updateHoliday']);
@@ -337,6 +340,7 @@ Route::prefix('v1')->group(function () {
 
             // ── Loan CRUD ─────────────────────────────────────────────────
             Route::get('/',     [LoanController::class, 'index']);
+            Route::get('/details-report', [LoanController::class, 'downloadDetailsReport']);
             Route::post('/',    [LoanController::class, 'store']);
 
             // ── Numeric-ID routes ─────────────────────────────────────────
@@ -406,6 +410,7 @@ Route::prefix('v1')->group(function () {
         // ── Contracts ──────────────────────────────────────────────────────
         Route::prefix('contracts')->group(function () {
             Route::get('/stats',           [ContractController::class, 'stats']);
+            Route::get('/active-employee-contracts-report', [ContractController::class, 'downloadActiveEmployeeContractsReport']);
             Route::get('/',                [ContractController::class, 'index']);
             Route::post('/',               [ContractController::class, 'store']);
             Route::get('/{id}',            [ContractController::class, 'show'])->whereNumber('id');
