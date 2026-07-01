@@ -422,6 +422,23 @@ this.isAdmin = this.auth.isAdminRole();
     return `${riyadh.getFullYear()}-${String(riyadh.getMonth() + 1).padStart(2, '0')}-${String(riyadh.getDate()).padStart(2, '0')}`;
   }
 
+  displayDate(value: string | null | undefined): string {
+    if (!value) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return value.split('T')[0] || value;
+    }
+
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Riyadh',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(parsed);
+  }
+
   private firstOfMonth(): string {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
