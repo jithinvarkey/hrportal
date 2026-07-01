@@ -18,7 +18,7 @@
     <div class="today-left">
       <div class="today-meta">
         <span class="today-lbl">Today</span>
-        <span class="today-date">{{ todayLog?.date || todayStr() }}</span>
+        <span class="today-date">{{ todayLog?.date ? displayDate(todayLog.date) : todayStr() }}</span>
       </div>
 
       <div class="time-row" *ngIf="!loading">
@@ -180,7 +180,7 @@
                   </div>
                 </div>
               </td>
-              <td class="mono-cell">{{ r.date }}</td>
+              <td class="mono-cell">{{ displayDate(r.date) }}</td>
               <td class="mono-cell" [class.late-cell]="isLate(r.check_in)">
                 {{ r.check_in || '—' }}
                 <span class="late-tag" *ngIf="isLate(r.check_in)">late</span>

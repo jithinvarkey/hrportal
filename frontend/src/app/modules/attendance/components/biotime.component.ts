@@ -193,7 +193,12 @@ syncForm = {
 
   const deviceId = this.syncDeviceObj.id;
 
+  if (this.syncing[deviceId]) {
+    return;
+  }
+
   this.syncing[deviceId] = true;
+  this.cdr.markForCheck();
 
   const payload: any = {
     sync_type: this.syncForm.type
@@ -227,6 +232,7 @@ syncForm = {
       );
 
       this.loadDevices();
+      this.cdr.markForCheck();
     },
     error: err => {
 

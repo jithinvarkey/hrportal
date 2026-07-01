@@ -11,6 +11,7 @@
   padding: 9px 16px; border-radius: 9px; border: none;
   font-size: 13px; font-weight: 600; cursor: pointer;
   font-family: 'Inter', sans-serif;
+  &:disabled { opacity:.65; cursor:default; }
   mat-icon { font-size: 16px !important; width: 16px !important; height: 16px !important; }
 }
 .btn-primary { background: var(--accent); color: #fff; &:hover { background: #2563eb; } }
@@ -103,7 +104,14 @@
 .req { color:var(--danger); }
 .btn-outline { padding:9px 16px; border-radius:9px; border:1px solid var(--border2);
   background:transparent; color:var(--text2); font-size:13px; font-weight:600; cursor:pointer;
-  &:hover { background:var(--surface2); } }
+  &:hover:not([disabled]) { background:var(--surface2); }
+  &:disabled { opacity:.55; cursor:default; } }
+.btn-spinner {
+  width:16px; height:16px; border-radius:50%;
+  border:2px solid rgba(255,255,255,.45); border-top-color:#fff;
+  animation:spin .75s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
 .icon-btn { border:none; background:transparent; color:var(--text3); cursor:pointer;
   display:flex; align-items:center; &:hover { color:var(--text); } }
 .form-err { display:flex; align-items:center; gap:6px; padding:9px 11px; border-radius:8px; font-size:12px;

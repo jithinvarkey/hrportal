@@ -249,15 +249,18 @@
   <div class="modal-footer">
 
     <button class="btn-outline"
+            [disabled]="syncDeviceObj && syncing[syncDeviceObj.id]"
             (click)="closeSyncModal()">
       Cancel
     </button>
 
     <button class="btn btn-primary"
+            [disabled]="syncDeviceObj && syncing[syncDeviceObj.id]"
             (click)="syncDevice()">
 
-      <mat-icon>sync</mat-icon>
-      Start Sync
+      <span class="btn-spinner" *ngIf="syncDeviceObj && syncing[syncDeviceObj.id]"></span>
+      <mat-icon *ngIf="!syncDeviceObj || !syncing[syncDeviceObj.id]">sync</mat-icon>
+      {{ syncDeviceObj && syncing[syncDeviceObj.id] ? 'Syncing...' : 'Start Sync' }}
 
     </button>
 
