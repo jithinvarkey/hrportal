@@ -18,13 +18,17 @@ class AuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $request->validate([
-            'email'    => 'required|email',
+            'email'    => 'required_without:login|string|max:255',
+            'login'    => 'nullable|string|max:255',
             'password' => 'required|string|min:6',
         ]);
 
-        if (!Auth::attempt($request->only('email', 'password'))) {
-            $user = User::where('email', strtolower($request->email))->first();
+        $user = $this->userForLogin((string) ($request->input('login') ?: $request->input('email')));
 
+        if (
+            !$user ||
+            !Auth::attempt(['email' => $user->email, 'password' => $request->password])
+        ) {
             if (!$user || !$this->attemptLegacyMd5Login($user, $request->password)) {
                 throw ValidationException::withMessages([
                     'email' => ['The provided credentials are incorrect.'],
@@ -148,5 +152,48 @@ class AuthController extends Controller
         ])->save();
 
         return true;
+    }
+
+    private function userForLogin(string $login): ?User
+    {
+        $login = trim($login);
+
+        if ($login === '') {
+            return null;
+        }
+
+        $employeeCodeCandidates = $this->employeeCodeCandidates($login);
+        $email = strtolower($login);
+
+        return User::query()
+            ->whereRaw('LOWER(email) = ?', [$email])
+            ->orWhereHas('employee', function ($query) use ($employeeCodeCandidates) {
+                $query->whereIn('employee_code', $employeeCodeCandidates);
+            })
+            ->with('employee')
+            ->first();
+    }
+
+    /**
+     * Accept both migrated codes like EMP182 and padded seeded codes like EMP0001.
+     */
+    private function employeeCodeCandidates(string $value): array
+    {
+        $value = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', trim($value)) ?? '');
+
+        if ($value === '') {
+            return [];
+        }
+
+        $withoutPrefix = str_starts_with($value, 'EMP') ? substr($value, 3) : $value;
+        $numericPart = ltrim($withoutPrefix, '0');
+        $numericPart = $numericPart === '' ? '0' : $numericPart;
+
+        return array_values(array_unique(array_filter([
+            $value,
+            str_starts_with($value, 'EMP') ? $value : 'EMP' . $value,
+            'EMP' . $withoutPrefix,
+            ctype_digit($withoutPrefix) ? 'EMP' . str_pad($numericPart, 4, '0', STR_PAD_LEFT) : null,
+        ])));
     }
 }
