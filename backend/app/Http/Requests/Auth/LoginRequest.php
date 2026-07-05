@@ -32,7 +32,8 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email'    => ['required', 'email:rfc'],
+            'email'    => ['required_without:login', 'string', 'max:255'],
+            'login'    => ['nullable', 'string', 'max:255'],
             'password' => ['required', 'string', 'min:6', 'max:255'],
         ];
     }
@@ -45,8 +46,7 @@ class LoginRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'email.required'    => 'An email address is required.',
-            'email.email'       => 'Please provide a valid email address.',
+            'email.required_without' => 'An email address or employee number is required.',
             'password.required' => 'A password is required.',
             'password.min'      => 'Password must be at least 6 characters.',
         ];

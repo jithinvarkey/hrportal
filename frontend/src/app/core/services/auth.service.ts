@@ -33,10 +33,15 @@ export class AuthService {
 
   constructor(private http: HttpClient) { }
 
-  login(email: string, password: string): Observable<any> {
+  login(login: string, password: string): Observable<any> {
+    const identifier = login.trim();
+    const payload = identifier.includes('@')
+      ? { email: identifier, login: identifier, password }
+      : { login: identifier, password };
+
     return this.http.get('/sanctum/csrf-cookie', { withCredentials: true }).pipe(
       switchMap(() =>
-        this.http.post<any>(`${this.apiUrl}/auth/login`, { email, password },
+        this.http.post<any>(`${this.apiUrl}/auth/login`, payload,
           { headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' } }
         )
       ),

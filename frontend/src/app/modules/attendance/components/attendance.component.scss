@@ -280,19 +280,27 @@
   display:inline-flex; align-items:center; gap:6px; padding:8px 16px;
   border-radius:10px; background:transparent; color:var(--text2);
   border:1px solid var(--border2); font-size:13px; font-weight:600; cursor:pointer; transition:all .15s;
-  &:hover { border-color:var(--accent); color:var(--accent); }
+  &:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+  &:disabled { opacity:.5; cursor:not-allowed; }
 }
 .icon-btn {
   width:30px; height:30px; border-radius:8px; border:1px solid var(--border2);
   background:transparent; color:var(--text3);
   display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .14s;
-  &:hover { background:var(--surface2); color:var(--text); }
+  &:hover:not(:disabled) { background:var(--surface2); color:var(--text); }
+  &:disabled { opacity:.45; cursor:not-allowed; }
   mat-icon { font-size:15px!important; width:15px!important; height:15px!important; }
+}
+.btn-spinner {
+  width:16px; height:16px; border-radius:50%;
+  border:2px solid rgba(255,255,255,.45); border-top-color:#fff;
+  animation:spin .75s linear infinite;
 }
 
 /* ── Skeleton ────────────────────────────────────────────────────── */
 .sk { background:var(--surface2); animation:pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 0%,100%{opacity:.35} 50%{opacity:.8} }
+@keyframes spin { to { transform:rotate(360deg); } }
 
 /* ── Edit Modal ─────────────────────────────────────────────────────── */
 .modal-backdrop { position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;animation:fadeIn .15s ease; }

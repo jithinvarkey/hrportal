@@ -288,8 +288,8 @@ this.isAdmin = this.auth.isAdminRole();
   openEdit(row: any): void {
     this.editingRow = row;
     this.editForm.patchValue({
-      check_in:  row.check_in  ?? '',
-      check_out: row.check_out ?? '',
+      check_in:  this.timeForInput(row.check_in),
+      check_out: this.timeForInput(row.check_out),
       status:    row.status    ?? 'present',
       notes:     row.notes     ?? '',
     });
@@ -301,7 +301,15 @@ this.isAdmin = this.auth.isAdminRole();
   saveEdit(): void {
     if (this.editForm.invalid || !this.editingRow) return;
     this.savingEdit = true;
-    this.http.put<any>(`${this.api}/${this.editingRow.id}`, this.editForm.value)
+    this.cdr.markForCheck();
+
+    const payload = {
+      ...this.editForm.value,
+      check_in: this.timeForApi(this.editForm.value.check_in),
+      check_out: this.timeForApi(this.editForm.value.check_out),
+    };
+
+    this.http.put<any>(`${this.api}/${this.editingRow.id}`, payload)
       .pipe(takeUntil(this.destroy$)).subscribe({
         next: (r) => {
           // Update row in place
@@ -314,7 +322,7 @@ this.isAdmin = this.auth.isAdminRole();
           this.cdr.markForCheck();
         },
         error: (err) => {
-          this.errorMsg   = err?.error?.message ?? 'Update failed.';
+          this.errorMsg   = err?.error?.message ?? this.firstValidationError(err) ?? 'Update failed.';
           this.savingEdit = false; this.cdr.markForCheck();
         },
       });
@@ -437,6 +445,40 @@ this.isAdmin = this.auth.isAdminRole();
       month: '2-digit',
       day: '2-digit',
     }).format(parsed);
+  }
+
+  private timeForInput(value: string | null | undefined): string {
+    const normalized = this.timeForApi(value);
+    return normalized ?? '';
+  }
+
+  private timeForApi(value: string | null | undefined): string | null {
+    if (!value) return null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+
+    const direct = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (direct) {
+      return `${direct[1].padStart(2, '0')}:${direct[2]}:${direct[3] ?? '00'}`;
+    }
+
+    const meridiem = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AP]M)$/i);
+    if (meridiem) {
+      let hour = Number(meridiem[1]);
+      const suffix = meridiem[4].toUpperCase();
+      if (suffix === 'PM' && hour < 12) hour += 12;
+      if (suffix === 'AM' && hour === 12) hour = 0;
+      return `${String(hour).padStart(2, '0')}:${meridiem[2]}:${meridiem[3] ?? '00'}`;
+    }
+
+    return raw;
+  }
+
+  private firstValidationError(err: any): string | null {
+    const errors = err?.error?.errors;
+    if (!errors) return null;
+    const first = Object.values(errors)[0] as any;
+    return Array.isArray(first) ? first[0] : String(first || '');
   }
 
   private firstOfMonth(): string {

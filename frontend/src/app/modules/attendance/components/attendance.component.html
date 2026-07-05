@@ -391,29 +391,29 @@
 </div>
 
 <!-- Edit Attendance Modal -->
-<div class="modal-backdrop" *ngIf="editingRow" (click)="cancelEdit()"></div>
+<div class="modal-backdrop" *ngIf="editingRow" (click)="!savingEdit && cancelEdit()"></div>
 <div class="modal-panel" *ngIf="editingRow" [formGroup]="editForm">
   <div class="modal-hdr">
     <h3>
       <mat-icon>edit_calendar</mat-icon>
       Edit — {{ editingRow.employee?.first_name }} {{ editingRow.employee?.last_name }}
     </h3>
-    <button class="icon-btn" (click)="cancelEdit()"><mat-icon>close</mat-icon></button>
+    <button class="icon-btn" [disabled]="savingEdit" (click)="cancelEdit()"><mat-icon>close</mat-icon></button>
   </div>
   <div class="modal-body">
     <div class="edit-date-banner">
       <mat-icon>calendar_today</mat-icon>
-      {{ editingRow.date }}
+      {{ displayDate(editingRow.date) }}
       <span class="source-badge src-{{ editingRow.source }}">{{ editingRow.source }}</span>
     </div>
     <div class="two-col">
       <div class="field-group">
         <label class="field-label">Check-in Time</label>
-        <input class="field-input" type="time" formControlName="check_in">
+        <input class="field-input" type="time" step="1" formControlName="check_in">
       </div>
       <div class="field-group">
         <label class="field-label">Check-out Time</label>
-        <input class="field-input" type="time" formControlName="check_out">
+        <input class="field-input" type="time" step="1" formControlName="check_out">
       </div>
     </div>
     <div class="field-group">
@@ -429,9 +429,10 @@
     </div>
   </div>
   <div class="modal-footer">
-    <button class="btn-outline" (click)="cancelEdit()">Cancel</button>
+    <button class="btn-outline" [disabled]="savingEdit" (click)="cancelEdit()">Cancel</button>
     <button class="btn-primary" (click)="saveEdit()" [disabled]="savingEdit || editForm.invalid">
-      <mat-icon>{{ savingEdit ? 'hourglass_empty' : 'save' }}</mat-icon>
+      <span class="btn-spinner" *ngIf="savingEdit"></span>
+      <mat-icon *ngIf="!savingEdit">save</mat-icon>
       {{ savingEdit ? 'Saving…' : 'Save Changes' }}
     </button>
   </div>
