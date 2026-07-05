@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Models\LoginOtp;
 use App\Models\User;
+use App\Services\OtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -15,6 +17,13 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+    private $otpService;
+
+    public function __construct(OtpService $otpService)
+    {
+        $this->otpService = $otpService;
+    }
+
     public function login(Request $request): JsonResponse
     {
         $request->validate([
@@ -25,25 +34,76 @@ class AuthController extends Controller
 
         $user = $this->userForLogin((string) ($request->input('login') ?: $request->input('email')));
 
-        if (
-            !$user ||
-            !Auth::attempt(['email' => $user->email, 'password' => $request->password])
-        ) {
+        if (!$user || !$this->passwordIsValid($user, (string) $request->password)) {
             if (!$user || !$this->attemptLegacyMd5Login($user, $request->password)) {
                 throw ValidationException::withMessages([
                     'email' => ['The provided credentials are incorrect.'],
                 ]);
             }
-
-            Auth::login($user);
         }
 
-        $user  = $request->user();
+        if ($this->isOtpExempt($user)) {
+            $token = $user->createToken('hrms-token')->plainTextToken;
+
+            return response()->json([
+                'token' => $token,
+                'user' => $this->userPayload($user),
+            ]);
+        }
+
+        $challenge = $this->otpService->createChallenge($user->load('employee'), LoginOtp::PURPOSE_LOGIN);
+
+        return response()->json([
+            'otp_required' => true,
+            'challenge_token' => $challenge->challenge_token,
+            'expires_in' => $this->otpService->expiresInSeconds($challenge),
+            'message' => 'OTP sent to your email' . ($this->hasMobileNumber($user) ? ' and mobile number.' : '.'),
+        ]);
+    }
+
+    public function verifyLoginOtp(Request $request): JsonResponse
+    {
+        $request->validate([
+            'challenge_token' => 'required|string',
+            'otp' => 'required|string|size:6',
+        ]);
+
+        $challenge = $this->otpService->verify(
+            (string) $request->input('challenge_token'),
+            (string) $request->input('otp'),
+            LoginOtp::PURPOSE_LOGIN
+        );
+
+        $user = $challenge->user;
         $token = $user->createToken('hrms-token')->plainTextToken;
 
         return response()->json([
             'token' => $token,
             'user'  => $this->userPayload($user),
+        ]);
+    }
+
+    public function resendOtp(Request $request): JsonResponse
+    {
+        $request->validate([
+            'challenge_token' => 'required|string',
+            'purpose' => 'required|string|in:login,password_reset',
+        ]);
+
+        $challenge = $this->otpService->findChallenge(
+            (string) $request->input('challenge_token'),
+            (string) $request->input('purpose')
+        );
+
+        if (!$challenge) {
+            throw ValidationException::withMessages(['otp' => ['This OTP request is invalid.']]);
+        }
+
+        $challenge = $this->otpService->resend($challenge);
+
+        return response()->json([
+            'message' => 'A new OTP has been sent.',
+            'expires_in' => $this->otpService->expiresInSeconds($challenge),
         ]);
     }
 
@@ -89,12 +149,48 @@ class AuthController extends Controller
     public function forgotPassword(Request $request): JsonResponse
     {
         $request->validate(['email' => 'required|email']);
-        $status = Password::sendResetLink($request->only('email'));
-        return response()->json(['message' => __($status)]);
+
+        $user = User::query()
+            ->with('employee')
+            ->whereRaw('LOWER(email) = ?', [strtolower((string) $request->input('email'))])
+            ->first();
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'If an account exists for that email, an OTP has been sent.',
+            ]);
+        }
+
+        $challenge = $this->otpService->createChallenge($user, LoginOtp::PURPOSE_PASSWORD_RESET);
+
+        return response()->json([
+            'otp_required' => true,
+            'challenge_token' => $challenge->challenge_token,
+            'expires_in' => $this->otpService->expiresInSeconds($challenge),
+            'message' => 'OTP sent to your email' . ($this->hasMobileNumber($user) ? ' and mobile number.' : '.'),
+        ]);
     }
 
     public function resetPassword(Request $request): JsonResponse
     {
+        if ($request->filled('challenge_token') || $request->filled('otp')) {
+            $request->validate([
+                'challenge_token' => 'required|string',
+                'otp' => 'required|string|size:6',
+                'password' => 'required|min:8|confirmed',
+            ]);
+
+            $challenge = $this->otpService->verify(
+                (string) $request->input('challenge_token'),
+                (string) $request->input('otp'),
+                LoginOtp::PURPOSE_PASSWORD_RESET
+            );
+
+            $challenge->user->forceFill(['password' => Hash::make((string) $request->input('password'))])->save();
+
+            return response()->json(['message' => 'Password has been reset successfully.']);
+        }
+
         $request->validate([
             'token'    => 'required',
             'email'    => 'required|email',
@@ -152,6 +248,25 @@ class AuthController extends Controller
         ])->save();
 
         return true;
+    }
+
+    private function passwordIsValid(User $user, string $password): bool
+    {
+        return Hash::check($password, (string) $user->password);
+    }
+
+    private function hasMobileNumber(User $user): bool
+    {
+        if (!$user->employee) {
+            return false;
+        }
+
+        return (bool) ($user->employee->phone ?: $user->employee->work_phone);
+    }
+
+    private function isOtpExempt(User $user): bool
+    {
+        return (bool) $user->otp_exempt || $user->hasRole('super_admin');
     }
 
     private function userForLogin(string $login): ?User

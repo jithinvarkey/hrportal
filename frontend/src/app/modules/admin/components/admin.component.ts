@@ -44,7 +44,7 @@ export class AdminComponent implements OnInit {
   editablePerms: Set<string> = new Set();
 
   // ── Table columns ─────────────────────────────────────────────────────
-  userColumns  = ['user','role','employee','actions'];
+  userColumns  = ['user','role','employee','otp','actions'];
   roleColumns  = ['role','users','description','actions'];
 
   tabs = [
@@ -84,8 +84,15 @@ export class AdminComponent implements OnInit {
     subject: 'Reminder: Submit current month leave entries',
     body: 'Dear {{first_name}},\n\nPlease make sure all leave requests for {{month_name}} {{year}} are submitted in HRMS before payroll processing. Any missing or unsubmitted leave entries may be deducted from salary as per company policy.\n\nRegards,\nHuman Resources',
   };
+  unifonicSettings = {
+    enabled: false,
+    api_url: 'https://el.cloud.unifonic.com/rest/SMS/messages',
+    app_sid: '',
+    sender: '',
+  };
   ticketSettingsSaving = false;
   leaveReminderSaving = false;
+  unifonicSaving = false;
   settingsLoading = false;
   settingsSaving = false;
   settingsMessage = '';
@@ -218,7 +225,7 @@ export class AdminComponent implements OnInit {
     if (id === 'units')        this.loadUnits();
     if (id === 'departments')  this.loadDepartments();
     if (id === 'designations') { this.loadDesignations(); this.loadDepartments(); }
-    if (id === 'settings')     { this.loadLoanSettings(); this.loadAnnualTicketSettings(); this.loadMonthlyLeaveReminderSettings(); }
+    if (id === 'settings')     { this.loadLoanSettings(); this.loadAnnualTicketSettings(); this.loadMonthlyLeaveReminderSettings(); this.loadUnifonicSettings(); }
   }
 
   onMigrationFile(event: Event) {
@@ -329,6 +336,28 @@ export class AdminComponent implements OnInit {
     });
   }
 
+  loadUnifonicSettings() {
+    this.http.get<any>('/api/v1/admin/settings/unifonic').subscribe({
+      next: r => this.unifonicSettings = { ...this.unifonicSettings, ...r.settings },
+      error: err => this.settingsError = this.firstError(err) || 'Failed to load Unifonic settings.'
+    });
+  }
+
+  saveUnifonicSettings() {
+    this.unifonicSaving = true; this.settingsMessage = ''; this.settingsError = '';
+    this.http.put<any>('/api/v1/admin/settings/unifonic', this.unifonicSettings).subscribe({
+      next: r => {
+        this.unifonicSettings = { ...this.unifonicSettings, ...r.settings };
+        this.settingsMessage = r.message;
+        this.unifonicSaving = false;
+      },
+      error: err => {
+        this.settingsError = this.firstError(err) || 'Failed to save Unifonic settings.';
+        this.unifonicSaving = false;
+      }
+    });
+  }
+
   refreshAdminData() {
     this.loadOverview();
     this.loadRoles();
@@ -341,10 +370,10 @@ export class AdminComponent implements OnInit {
   openUserForm(user?: any) {
     if (user) {
       this.userEditId = user.id;
-      this.userForm = { name: user.name, email: user.email, password: '', role: user.roles?.[0]?.name || 'employee', employee_id: user.employee?.id || '' };
+      this.userForm = { name: user.name, email: user.email, password: '', role: user.roles?.[0]?.name || 'employee', employee_id: user.employee?.id || '', otp_exempt: !!user.otp_exempt };
     } else {
       this.userEditId = null;
-      this.userForm = { name:'', email:'', password:'', role:'employee', employee_id:'' };
+      this.userForm = { name:'', email:'', password:'', role:'employee', employee_id:'', otp_exempt:false };
     }
     this.formError = ''; this.showUserForm = true;
   }
@@ -378,6 +407,21 @@ export class AdminComponent implements OnInit {
     this.http.post(`/api/v1/admin/users/${userId}/assign-role`, { role }).subscribe({
       next: () => this.loadUsers(this.currentPage)
     });
+  }
+
+  toggleOtpExemption(user: any) {
+    const current = this.isOtpExempt(user);
+    this.http.put<any>(`/api/v1/admin/users/${user.id}/otp-exemption`, { otp_exempt: !current }).subscribe({
+      next: r => {
+        this.settingsMessage = r.message;
+        this.loadUsers(this.currentPage);
+      },
+      error: err => this.adminError = this.firstError(err) || 'Failed to update OTP exemption.'
+    });
+  }
+
+  isOtpExempt(user: any): boolean {
+    return !!user?.otp_exempt || this.roleName(user?.roles?.[0]) === 'super_admin';
   }
 
   // ── Role permissions editor ────────────────────────────────────────

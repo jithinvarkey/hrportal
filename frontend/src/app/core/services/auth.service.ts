@@ -52,6 +52,38 @@ export class AuthService {
     );
   }
 
+  verifyLoginOtp(challengeToken: string, otp: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/auth/verify-login-otp`, {
+      challenge_token: challengeToken,
+      otp,
+    }).pipe(
+      tap(res => {
+        if (res.token) localStorage.setItem(this.tokenKey, res.token);
+        if (res.user) localStorage.setItem(this.userKey, JSON.stringify(res.user));
+      })
+    );
+  }
+
+  resendOtp(challengeToken: string, purpose: 'login' | 'password_reset'): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/auth/resend-otp`, {
+      challenge_token: challengeToken,
+      purpose,
+    });
+  }
+
+  forgotPassword(email: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/auth/forgot-password`, { email });
+  }
+
+  resetPasswordWithOtp(challengeToken: string, otp: string, password: string, passwordConfirmation: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/auth/reset-password`, {
+      challenge_token: challengeToken,
+      otp,
+      password,
+      password_confirmation: passwordConfirmation,
+    });
+  }
+
 
   logout(): void {
 

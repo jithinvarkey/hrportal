@@ -102,3 +102,37 @@
   mat-icon { font-size: 18px; width: 18px; height: 18px; }
   &:hover { text-decoration: underline; }
 }
+
+.otp-intro {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+  color: #555;
+  margin-bottom: 10px;
+
+  mat-icon {
+    font-size: 42px;
+    width: 42px;
+    height: 42px;
+    color: #1B3A6B;
+  }
+
+  p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  strong {
+    color: #1B3A6B;
+    font-size: 18px;
+  }
+}
+
+.otp-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+}

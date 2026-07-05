@@ -177,6 +177,21 @@
             <span *ngIf="!u.employee" style="font-size:11px;color:var(--text3)">Not linked</span>
           </td>
         </ng-container>
+        <ng-container matColumnDef="otp">
+          <th mat-header-cell *matHeaderCellDef>OTP Login</th>
+          <td mat-cell *matCellDef="let u">
+            <button
+              type="button"
+              class="otp-toggle"
+              [class.exempt]="isOtpExempt(u)"
+              [disabled]="roleName(u.roles?.[0])==='super_admin'"
+              [matTooltip]="roleName(u.roles?.[0])==='super_admin' ? 'Super Admin is always excluded from OTP login' : (isOtpExempt(u) ? 'Click to require OTP login' : 'Click to exclude from OTP login')"
+              (click)="toggleOtpExemption(u)">
+              <mat-icon>{{ isOtpExempt(u) ? 'shield' : 'lock' }}</mat-icon>
+              {{ isOtpExempt(u) ? 'Excluded' : 'Required' }}
+            </button>
+          </td>
+        </ng-container>
         <ng-container matColumnDef="actions">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let u">
@@ -189,7 +204,7 @@
         <tr mat-header-row *matHeaderRowDef="userColumns; sticky:true"></tr>
         <tr mat-row *matRowDef="let row; columns:userColumns;" class="data-row"></tr>
         <tr class="mat-row" *matNoDataRow>
-          <td class="mat-cell empty-state" colspan="4">
+          <td class="mat-cell empty-state" colspan="5">
             <mat-spinner *ngIf="loading" diameter="28"></mat-spinner>
             <ng-container *ngIf="!loading"><mat-icon>people</mat-icon><span>No users found</span></ng-container>
           </td>
@@ -587,6 +602,47 @@
       <div class="settings-actions"><button class="btn-primary" (click)="saveAnnualTicketSettings()" [disabled]="ticketSettingsSaving"><mat-icon>{{ ticketSettingsSaving ? 'hourglass_empty' : 'save' }}</mat-icon>{{ ticketSettingsSaving ? 'Saving...' : 'Save Ticket Policy' }}</button></div>
     </div>
 
+    <div class="settings-panel unifonic-panel">
+      <div class="settings-heading">
+        <div class="settings-icon"><mat-icon>sms</mat-icon></div>
+        <div>
+          <div class="settings-title">Unifonic SMS OTP</div>
+          <div class="settings-sub">Mobile OTP delivery for login and forgot password.</div>
+        </div>
+      </div>
+
+      <div class="ticket-policy-grid">
+        <div class="policy-group">
+          <strong>Connection</strong>
+          <label>Enabled
+            <select [(ngModel)]="unifonicSettings.enabled">
+              <option [ngValue]="true">Yes</option>
+              <option [ngValue]="false">No</option>
+            </select>
+          </label>
+          <label>API URL
+            <input [(ngModel)]="unifonicSettings.api_url">
+          </label>
+        </div>
+        <div class="policy-group">
+          <strong>Credentials</strong>
+          <label>AppSid
+            <input type="password" autocomplete="new-password" [(ngModel)]="unifonicSettings.app_sid">
+          </label>
+          <label>SenderID
+            <input [(ngModel)]="unifonicSettings.sender">
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-actions">
+        <button class="btn-primary" (click)="saveUnifonicSettings()" [disabled]="unifonicSaving">
+          <mat-icon>{{ unifonicSaving ? 'hourglass_empty' : 'save' }}</mat-icon>
+          {{ unifonicSaving ? 'Saving...' : 'Save SMS Settings' }}
+        </button>
+      </div>
+    </div>
+
     <div class="settings-panel">
       <div class="settings-heading">
         <div class="settings-icon"><mat-icon>event_note</mat-icon></div>
@@ -725,6 +781,13 @@
       </select>
       <div class="field-hint">Linking an employee enables payslip, leave balance, and other self-service data.</div>
     </div>
+    <label class="otp-form-option">
+      <input type="checkbox" [(ngModel)]="userForm.otp_exempt" [disabled]="userForm.role==='super_admin'">
+      <span>
+        <strong>Exclude from OTP login</strong>
+        <small>Super Admin users are always excluded automatically.</small>
+      </span>
+    </label>
     <!-- Role permissions preview -->
     <div class="role-preview" *ngIf="userForm.role">
       <div class="rp-label">Role Access Preview</div>
