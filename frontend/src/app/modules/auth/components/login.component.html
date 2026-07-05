@@ -9,7 +9,7 @@
       <p>Human Resources Management System</p>
     </div>
 
-    <form [formGroup]="form" (ngSubmit)="onSubmit()" class="login-form">
+    <form *ngIf="!otpStep" [formGroup]="form" (ngSubmit)="onSubmit()" class="login-form">
 
       <mat-form-field appearance="outline" class="full-width">
         <mat-label>Email or Employee Number</mat-label>
@@ -32,9 +32,9 @@
         <a routerLink="/auth/forgot-password">Forgot password?</a>
       </div>
 
-      <div class="error-banner" *ngIf="error$ | async as error">
+      <div class="error-banner" *ngIf="errorMsg">
         <mat-icon>error_outline</mat-icon>
-        {{ error }}
+        {{ errorMsg }}
       </div>
 
       <button
@@ -42,11 +42,47 @@
         color="primary"
         type="submit"
         class="login-btn"
-        [disabled]="form.invalid || (loading$ | async)">
-        <mat-spinner diameter="20" *ngIf="loading$ | async; else btnText"></mat-spinner>
+        [disabled]="form.invalid || loading">
+        <mat-spinner diameter="20" *ngIf="loading; else btnText"></mat-spinner>
         <ng-template #btnText>Sign In</ng-template>
       </button>
 
+    </form>
+
+    <form *ngIf="otpStep" [formGroup]="otpForm" (ngSubmit)="verifyOtp()" class="login-form">
+      <div class="otp-intro">
+        <mat-icon>mark_email_read</mat-icon>
+        <p>Enter the 6-digit OTP sent to your email and mobile number if available.</p>
+        <strong>{{ expiryLabel }}</strong>
+      </div>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>OTP Code</mat-label>
+        <input matInput type="text" formControlName="otp" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+        <mat-icon matPrefix>pin</mat-icon>
+        <mat-error *ngIf="otpForm.get('otp')?.hasError('required')">OTP is required</mat-error>
+        <mat-error *ngIf="otpForm.get('otp')?.hasError('pattern')">Enter the 6-digit OTP</mat-error>
+      </mat-form-field>
+
+      <div class="error-banner" *ngIf="errorMsg">
+        <mat-icon>error_outline</mat-icon>
+        {{ errorMsg }}
+      </div>
+
+      <button
+        mat-raised-button
+        color="primary"
+        type="submit"
+        class="login-btn"
+        [disabled]="otpForm.invalid || loading || expiresIn === 0">
+        <mat-spinner diameter="20" *ngIf="loading; else verifyText"></mat-spinner>
+        <ng-template #verifyText>Verify OTP</ng-template>
+      </button>
+
+      <div class="otp-actions">
+        <button mat-button type="button" (click)="backToLogin()">Back</button>
+        <button mat-button color="primary" type="button" (click)="resendOtp()" [disabled]="resendCoolingDown">Resend OTP</button>
+      </div>
     </form>
 
     <div class="login-footer">

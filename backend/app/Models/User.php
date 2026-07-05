@@ -13,13 +13,14 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
-    protected $fillable = ['name', 'email', 'password', 'legacy_password_md5'];
+    protected $fillable = ['name', 'email', 'password', 'legacy_password_md5', 'otp_exempt'];
 
     protected $hidden = ['password', 'legacy_password_md5', 'remember_token'];
 
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password'          => 'hashed',
+        'otp_exempt'         => 'boolean',
     ];
 
     /**

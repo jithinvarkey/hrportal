@@ -2,28 +2,28 @@
 [32mv[39m Building...
 [1mInitial chunk files[22m[2m | [22m[1mNames[22m               [2m | [22m [1mRaw size[22m
 [32mchunk-LPZZEUZG.js[39m  [2m | [22m[2m-[22m                   [2m | [22m [36m95.65 kB[39m[2m | [22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m                [2m | [22m [36m19.81 kB[39m[2m | [22m
+[32mstyles.css[39m         [2m | [22m[2mstyles[22m              [2m | [22m [36m18.62 kB[39m[2m | [22m
 [32mpolyfills.js[39m       [2m | [22m[2mpolyfills[22m           [2m | [22m [36m95 bytes[39m[2m | [22m
 [1m [22m                  [2m | [22m[1mInitial total[22m       [2m | [22m[1m134.18 kB[22m
 [1mLazy chunk files[22m   [2m | [22m[1mNames[22m               [2m | [22m [1mRaw size[22m
-[32mstyles.css[39m         [2m | [22m[2mstyles[22m              [2m | [22m [36m18.62 kB[39m[2m | [22m
 [32mchunk-OB7ODXYK.js[39m  [2m | [22m[2mleave-module[22m        [2m | [22m[36m506.06 kB[39m[2m | [22m
 [32mchunk-GMUZBY6Q.js[39m  [2m | [22m[2memployees-module[22m    [2m | [22m[36m433.39 kB[39m[2m | [22m
-[32mmain.js[39m            [2m | [22m[2mmain[22m                [2m | [22m [36m19.81 kB[39m[2m | [22m
-[32mchunk-WRILORK2.js[39m  [2m | [22m[2mrecruitment-module[22m  [2m | [22m[36m337.89 kB[39m[2m | [22m
-[32mchunk-HN6X7AZN.js[39m  [2m | [22m[2mrequests-module[22m     [2m | [22m[36m287.97 kB[39m[2m | [22m
-[32mchunk-544QSBQV.js[39m  [2m | [22m[2mcontracts-module[22m    [2m | [22m[36m300.88 kB[39m[2m | [22m
-[32mchunk-NNNI6KIA.js[39m  [2m | [22m[2mloans-module[22m        [2m | [22m[36m278.98 kB[39m[2m | [22m
-[32mchunk-CXKJ77PK.js[39m  [2m | [22m[2mattendance-module[22m   [2m | [22m[36m319.31 kB[39m[2m | [22m
 [32mchunk-XILYEE2D.js[39m  [2m | [22m[2madmin-module[22m        [2m | [22m[36m334.43 kB[39m[2m | [22m
+[32mchunk-CXKJ77PK.js[39m  [2m | [22m[2mattendance-module[22m   [2m | [22m[36m319.31 kB[39m[2m | [22m
+[32mchunk-544QSBQV.js[39m  [2m | [22m[2mcontracts-module[22m    [2m | [22m[36m300.88 kB[39m[2m | [22m
+[32mchunk-HN6X7AZN.js[39m  [2m | [22m[2mrequests-module[22m     [2m | [22m[36m287.97 kB[39m[2m | [22m
+[32mchunk-WRILORK2.js[39m  [2m | [22m[2mrecruitment-module[22m  [2m | [22m[36m337.89 kB[39m[2m | [22m
+[32mchunk-NNNI6KIA.js[39m  [2m | [22m[2mloans-module[22m        [2m | [22m[36m278.98 kB[39m[2m | [22m
 [32mchunk-YF3X4MXX.js[39m  [2m | [22m[2mseparations-module[22m  [2m | [22m[36m228.82 kB[39m[2m | [22m
-[32mchunk-GQPZUSMI.js[39m  [2m | [22m[2mperformance-module[22m  [2m | [22m[36m173.54 kB[39m[2m | [22m
 [32mchunk-VGKMA7H2.js[39m  [2m | [22m[2mpayroll-module[22m      [2m | [22m[36m174.68 kB[39m[2m | [22m
+[32mchunk-GQPZUSMI.js[39m  [2m | [22m[2mperformance-module[22m  [2m | [22m[36m173.54 kB[39m[2m | [22m
 [32mchunk-D37ALLXK.js[39m  [2m | [22m[2mannouncements-module[22m[2m | [22m[36m163.26 kB[39m[2m | [22m
+[32mchunk-EOEQ3ZLO.js[39m  [2m | [22m[2mauth-module[22m         [2m | [22m[36m154.58 kB[39m[2m | [22m
 [32mchunk-BRAF2Z4R.js[39m  [2m | [22m[2massets-module[22m       [2m | [22m[36m157.47 kB[39m[2m | [22m
-[32mchunk-HAEAEDET.js[39m  [2m | [22m[2mauth-module[22m         [2m | [22m[36m154.78 kB[39m[2m | [22m
 [32mchunk-754DOUAB.js[39m  [2m | [22m[2mpolicies-module[22m     [2m | [22m[36m154.09 kB[39m[2m | [22m
 [2m...and 5 more lazy chunks files. Use "--verbose" to show all the files.[22m
-Application bundle generation complete. [12.717 seconds] - 2026-07-05T09:17:02.247Z
+Application bundle generation complete. [13.776 seconds] - 2026-07-05T09:12:47.906Z
 Watch mode enabled. Watching for file changes...
 NOTE: Raw file sizes do not reflect development server per-request transformations.
-  [32m?[39m  [1mLocal[22m:   [36mhttp://localhost:[1m4200[22m/[39m
+  [32m?[39m  [1mLocal[22m:   [36mhttp://localhost:[1m4202[22m/[39m

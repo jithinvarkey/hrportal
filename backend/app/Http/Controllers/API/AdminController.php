@@ -19,6 +19,7 @@ use App\Models\User;
 use App\Services\LoanApprovalService;
 use App\Services\AnnualTicketService;
 use App\Services\MonthlyLeaveReminderService;
+use App\Services\UnifonicSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
@@ -31,16 +32,47 @@ class AdminController extends Controller
     protected $loanApprovalService;
     protected $annualTicketService;
     protected $monthlyLeaveReminderService;
+    protected $unifonicSettingsService;
 
     public function __construct(
         LoanApprovalService $loanApprovalService,
         AnnualTicketService $annualTicketService,
-        MonthlyLeaveReminderService $monthlyLeaveReminderService
+        MonthlyLeaveReminderService $monthlyLeaveReminderService,
+        UnifonicSettingsService $unifonicSettingsService
     )
     {
         $this->loanApprovalService = $loanApprovalService;
         $this->annualTicketService = $annualTicketService;
         $this->monthlyLeaveReminderService = $monthlyLeaveReminderService;
+        $this->unifonicSettingsService = $unifonicSettingsService;
+    }
+
+    public function unifonicSettings(): JsonResponse
+    {
+        if (!$this->isSuperAdmin()) {
+            return response()->json(['message' => 'Only a super admin can manage SMS settings.'], 403);
+        }
+
+        return response()->json(['settings' => $this->unifonicSettingsService->settings()]);
+    }
+
+    public function updateUnifonicSettings(Request $request): JsonResponse
+    {
+        if (!$this->isSuperAdmin()) {
+            return response()->json(['message' => 'Only a super admin can manage SMS settings.'], 403);
+        }
+
+        $data = $request->validate([
+            'enabled' => 'required|boolean',
+            'api_url' => 'required|url|max:255',
+            'app_sid' => 'required|string|max:255',
+            'sender' => 'required|string|max:100',
+        ]);
+
+        return response()->json([
+            'message' => 'Unifonic SMS settings updated.',
+            'settings' => $this->unifonicSettingsService->updateSettings($data),
+        ]);
     }
 
     public function monthlyLeaveReminderSettings(): JsonResponse
@@ -271,12 +303,14 @@ class AdminController extends Controller
             'password'    => 'required|min:8',
             'role'        => 'required|exists:roles,name',
             'employee_id' => 'nullable|exists:employees,id',
+            'otp_exempt'  => 'sometimes|boolean',
         ]);
 
         $user = User::create([
             'name'     => $request->name,
             'email'    => $request->email,
             'password' => Hash::make($request->password),
+            'otp_exempt' => (bool) $request->boolean('otp_exempt'),
         ]);
         $user->assignRole($request->role);
 
@@ -293,9 +327,10 @@ class AdminController extends Controller
         $request->validate([
             'name'  => 'sometimes|string|max:120',
             'email' => "sometimes|email|unique:users,email,{$id}",
+            'otp_exempt' => 'sometimes|boolean',
         ]);
 
-        $user->update($request->only('name', 'email'));
+        $user->update($request->only('name', 'email', 'otp_exempt'));
 
         if ($request->filled('password')) {
             $user->update(['password' => Hash::make($request->password)]);
@@ -319,6 +354,25 @@ class AdminController extends Controller
         $user->tokens()->delete();
 
         return response()->json(['message' => 'User tokens revoked. User must re-login.']);
+    }
+
+    public function updateUserOtpExemption(Request $request, int $id): JsonResponse
+    {
+        if (!$this->isSuperAdmin()) {
+            return response()->json(['message' => 'Only a super admin can manage OTP exemptions.'], 403);
+        }
+
+        $data = $request->validate([
+            'otp_exempt' => 'required|boolean',
+        ]);
+
+        $user = User::with('roles', 'employee.department', 'employee.designation')->findOrFail($id);
+        $user->forceFill(['otp_exempt' => (bool) $data['otp_exempt']])->save();
+
+        return response()->json([
+            'message' => $user->otp_exempt ? 'User excluded from OTP login.' : 'User will be required to verify OTP.',
+            'user' => $user->fresh('roles', 'employee.department', 'employee.designation'),
+        ]);
     }
 
     // ── Roles ─────────────────────────────────────────────────────────────

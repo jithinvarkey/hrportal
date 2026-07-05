@@ -42,6 +42,8 @@ Route::prefix('v1')->group(function () {
     // ── Public Auth ──────────────────────────────────────────────────────
     Route::prefix('auth')->group(function () {
         Route::post('login',           [AuthController::class, 'login']);
+        Route::post('verify-login-otp',[AuthController::class, 'verifyLoginOtp']);
+        Route::post('resend-otp',      [AuthController::class, 'resendOtp']);
         Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
         Route::post('reset-password',  [AuthController::class, 'resetPassword']);
     });
@@ -449,6 +451,8 @@ Route::prefix('v1')->group(function () {
               Route::put('/settings/annual-tickets',          [AdminController::class, 'updateAnnualTicketSettings']);
               Route::get('/settings/monthly-leave-reminder',   [AdminController::class, 'monthlyLeaveReminderSettings']);
               Route::put('/settings/monthly-leave-reminder',   [AdminController::class, 'updateMonthlyLeaveReminderSettings']);
+              Route::get('/settings/unifonic',                 [AdminController::class, 'unifonicSettings']);
+              Route::put('/settings/unifonic',                 [AdminController::class, 'updateUnifonicSettings']);
               Route::post('/legacy-migration/import',           [LegacyMigrationController::class, 'import']);
 
             Route::prefix('users')->group(function () {
@@ -458,6 +462,7 @@ Route::prefix('v1')->group(function () {
                 Route::put('/{id}',     [AdminController::class, 'updateUser'])->whereNumber('id');
                 Route::post('/{id}/assign-role',    [AdminController::class, 'assignRole'])->whereNumber('id');
                 Route::post('/{id}/toggle-status',  [AdminController::class, 'toggleUserStatus'])->whereNumber('id');
+                Route::put('/{id}/otp-exemption',   [AdminController::class, 'updateUserOtpExemption'])->whereNumber('id');
             });
 
             Route::prefix('roles')->group(function () {
