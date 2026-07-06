@@ -315,6 +315,27 @@
       <mat-icon>hourglass_empty</mat-icon><p>Loading leave balances...</p>
     </div>
 
+    <div class="leave-today-card" *ngIf="!leaveBalanceLoading && annualBalanceToday">
+      <div class="lt-icon">
+        <mat-icon>today</mat-icon>
+      </div>
+      <div class="lt-main">
+        <div class="lt-name">Annual Leave Today</div>
+        <div class="lt-value">
+          <span>{{ annualBalanceToday.remaining_days | number:'1.1-1' }}</span>
+          <small>days remaining</small>
+        </div>
+        <div class="lc-bar-track">
+          <div class="lc-bar-fill lt-fill" [style.width.%]="pctLeave(annualBalanceToday)"></div>
+        </div>
+        <div class="lt-meta">
+          <span>As of {{ annualBalanceToday.balance_as_of | date:'dd MMM yyyy' }}</span>
+          <span>Earned {{ annualBalanceToday.allocated_days | number:'1.1-1' }}</span>
+          <span>Taken this period {{ (annualBalanceToday.approved_taken_contract_period || annualBalanceToday.used_days) | number:'1.1-1' }}</span>
+        </div>
+      </div>
+    </div>
+
     <div class="leave-grid" *ngIf="!leaveBalanceLoading">
       <div class="leave-card" *ngFor="let lb of leaveBalance">
         <div class="lc-name">{{ lb.leave_type?.name || 'Leave' }}</div>

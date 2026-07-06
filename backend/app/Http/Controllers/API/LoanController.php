@@ -105,6 +105,15 @@ class LoanController extends Controller {
         return false;
     }
 
+    private function isOwnLoan(Loan $loan, $user): bool {
+        if ($user->employee && (int) $loan->employee_id === (int) $user->employee->id) {
+            return true;
+        }
+
+        $loan->loadMissing('employee');
+        return $loan->employee && (int) $loan->employee->user_id === (int) $user->id;
+    }
+
     // ── Loan Types ────────────────────────────────────────────────────────
 
     /**
@@ -215,7 +224,7 @@ class LoanController extends Controller {
                 ->when(!$isAdmin, function ($q) use ($user, $isMgr) {
                     if ($isMgr && $user->employee) {
                         $teamIds = $user->employee->subordinates()->pluck('id');
-                        $q->whereIn('employee_id', $teamIds->push($user->employee->id));
+                        $q->whereIn('employee_id', $teamIds);
                     } elseif ($user->employee) {
                         $q->where('employee_id', $user->employee->id);
                     }
@@ -238,7 +247,15 @@ class LoanController extends Controller {
                 ->orderBy('created_at', 'desc')
                 ->orderBy('id', 'desc');
 
-        return response()->json($query->paginate($perPage));
+        $paginated = $query->paginate($perPage);
+        $paginated->getCollection()->transform(function (Loan $loan) use ($user) {
+            $isOwn = $this->isOwnLoan($loan, $user);
+            $loan->setAttribute('can_approve', !$isOwn);
+            $loan->setAttribute('can_reject', !$isOwn);
+            return $loan;
+        });
+
+        return response()->json($paginated);
     }
 
     public function downloadDetailsReport(Request $request) {
@@ -394,6 +411,8 @@ class LoanController extends Controller {
         $data['installments'] = $loan->getRawOriginal('installments');
         $data['activities'] = $this->activityService->timeline($loan);
         $data['approval_levels'] = $this->approvalLevels();
+        $data['can_approve'] = !$this->isOwnLoan($loan, auth()->user());
+        $data['can_reject'] = $data['can_approve'];
 
         return response()->json(['loan' => $data]);
     }
@@ -416,6 +435,10 @@ class LoanController extends Controller {
 
         if (!$this->canApproveStage($loan->status)) {
             return response()->json(['message' => 'You are not authorized to approve this loan at its current stage.'], 403);
+        }
+
+        if ($this->isOwnLoan($loan, $user)) {
+            return response()->json(['message' => 'You cannot approve your own loan request.'], 403);
         }
 
         switch ($loan->status) {
@@ -527,6 +550,10 @@ class LoanController extends Controller {
             return response()->json(['message' => 'You are not authorized to reject this loan at its current stage.'], 403);
         }
 
+        if ($this->isOwnLoan($loan, auth()->user())) {
+            return response()->json(['message' => 'You cannot reject your own loan request.'], 403);
+        }
+
         $oldStatus = $loan->status;
         $loan->update([
             'status' => 'rejected',
@@ -556,9 +583,18 @@ class LoanController extends Controller {
      */
     public function cancel(int $id): JsonResponse {
         $loan = Loan::findOrFail($id);
+        $user = auth()->user();
 
         if (!in_array($loan->status, ['pending_manager', 'pending_hr', 'pending_finance'])) {
             return response()->json(['message' => 'Loan cannot be cancelled at this stage.'], 422);
+        }
+
+        $canCancelAsApprover = ($loan->status === 'pending_manager' && $this->hasAnyRoleDB(['super_admin', 'department_manager']))
+            || ($loan->status === 'pending_hr' && $this->hasAnyRoleDB(['super_admin', 'hr_manager']))
+            || ($loan->status === 'pending_finance' && $this->hasAnyRoleDB(['super_admin', 'finance_manager']));
+
+        if (!$this->isOwnLoan($loan, $user) && !$canCancelAsApprover) {
+            return response()->json(['message' => 'You are not authorized to cancel this loan request.'], 403);
         }
 
         $oldStatus = $loan->status;

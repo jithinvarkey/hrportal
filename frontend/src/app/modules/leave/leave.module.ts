@@ -12,7 +12,8 @@ import { LimitedCountPipe } from './pipes/limited-count.pipe';
 import { AnnualOnlyPipe } from './pipes/annual-only.pipe';
 
 const routes: Routes = [
-  { path: '', component: LeaveListComponent }
+  { path: '', component: LeaveListComponent },
+  { path: 'my', component: LeaveListComponent },
 ];
 
 @NgModule({

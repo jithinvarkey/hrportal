@@ -26,7 +26,25 @@
   </div>
 
   <!-- ── My Balance Cards ────────────────────────────────────────────────── -->
-  <div class="balance-row" *ngIf="myBalances.length">
+  <div class="balance-row" *ngIf="myBalances.length || annualBalanceToday">
+    <div class="bal-card annual-today-card" *ngIf="annualBalanceToday">
+      <div class="bal-type-dot today-dot"></div>
+      <div class="bal-content">
+        <div class="bal-name">Annual Leave Today</div>
+        <div class="bal-numbers">
+          <span class="bal-remain">{{ annualBalanceToday.remaining_days | number:'1.1-1' }}</span>
+          <span class="bal-total">days remaining</span>
+        </div>
+        <div class="bal-track">
+          <div class="bal-fill today-fill" [style.width.%]="balancePct(annualBalanceToday)"></div>
+        </div>
+        <div class="bal-meta">
+          <span>As of {{ annualBalanceToday.balance_as_of | date:'dd MMM yyyy' }}</span>
+          <span>Earned {{ annualBalanceToday.allocated_days | number:'1.1-1' }}</span>
+          <span>Taken this period {{ (annualBalanceToday.approved_taken_contract_period || annualBalanceToday.used_days) | number:'1.1-1' }}</span>
+        </div>
+      </div>
+    </div>
     <div class="bal-card" *ngFor="let b of myBalances">
       <div class="bal-type-dot" [style.background]="leaveTypeColor(b.leave_type?.name)"></div>
       <div class="bal-content">
@@ -52,7 +70,7 @@
   <!-- ── Main Tabs ───────────────────────────────────────────────────────── -->
   <div class="main-tabs">
     <ng-container *ngFor="let t of tabs">
-      <button *ngIf="t.id !== 'types' || isHR" class="main-tab" [class.active]="activeTab===t.id" (click)="switchTab(t.id)">
+      <button *ngIf="(t.id !== 'types' || isHR) && (t.id !== 'my_requests' || showMyRequestsTab)" class="main-tab" [class.active]="activeTab===t.id" (click)="switchTab(t.id)">
         <mat-icon>{{ t.icon }}</mat-icon>
         {{ t.label }}
       </button>
@@ -62,12 +80,12 @@
   <!-- ══════════════════════════════════════════════════════════════════════ -->
   <!-- TAB: REQUESTS                                                          -->
   <!-- ══════════════════════════════════════════════════════════════════════ -->
-  <ng-container *ngIf="activeTab==='requests'">
+  <ng-container *ngIf="activeTab==='requests' || activeTab==='my_requests'">
 
     <!-- Status tabs + filters -->
     <div class="toolbar">
       <div class="status-tabs">
-        <button *ngFor="let t of statusTabs" class="stab" [class.active]="activeStatus===t.id"
+        <button *ngFor="let t of requestStatusTabs()" class="stab" [class.active]="activeStatus===t.id"
           (click)="switchStatus(t.id)">
           {{ t.label }}
           <span class="stab-badge" *ngIf="statusCount(t.id) > 0">
@@ -220,7 +238,7 @@
             <mat-spinner *ngIf="loading" diameter="28"></mat-spinner>
             <ng-container *ngIf="!loading">
               <mat-icon>event_note</mat-icon>
-              <span>No {{ activeStatus || '' }} leave requests</span>
+              <span>No {{ activeTab==='my_requests' ? 'personal' : (activeStatus || '') }} leave requests</span>
             </ng-container>
           </td>
         </tr>
