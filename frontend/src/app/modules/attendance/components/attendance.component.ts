@@ -58,7 +58,8 @@ export class AttendanceComponent implements OnInit, OnDestroy {
   // ── Views ─────────────────────────────────────────────────────────────
   isHR             = false;
   isAdmin   = false;
-  activeTab: 'log' | 'manual' | 'settings' = 'log';
+  isMgr = false;
+  activeTab: 'log' | 'mine' | 'manual' | 'settings' = 'log';
   showSettings     = false;
   showManualEntry  = false;
   editingRow: any  = null;   // the row being inline-edited
@@ -118,7 +119,7 @@ const toArr = (v: any): string[] => !v ? [] : Array.isArray(v) ? v : Object.valu
 const roleValues = toArr(user?.roles);
 const permValues = toArr(user?.permissions);
 const rawUser = JSON.stringify(user ?? {});
-const isManager = ['department_manager'].some((r:string) => roleValues.includes(r) || rawUser.includes(r));
+this.isMgr = ['department_manager'].some((r:string) => roleValues.includes(r) || rawUser.includes(r));
 this.isHR = this.auth.isHRRole();
 
 this.isAdmin = this.auth.isAdminRole();
@@ -158,7 +159,7 @@ this.isAdmin = this.auth.isAdminRole();
 
     // Open specific tab via query param (e.g. ?tab=manual from dashboard)
     this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe(p => {
-      if (p['tab'] && ['log','manual','settings'].includes(p['tab'])) {
+      if (p['tab'] && ['log','mine','manual','settings'].includes(p['tab'])) {
         this.activeTab = p['tab'] as any;
         this.cdr.markForCheck();
       }
@@ -232,6 +233,7 @@ this.isAdmin = this.auth.isAdminRole();
     this.reportPage = page;
     const params = this.clean({
       ...this.filterForm.value,
+      scope: this.isMgr && !this.isHR && this.activeTab === 'mine' ? 'mine' : 'team',
       page,
       per_page: this.reportPerPage,
     });
@@ -249,6 +251,15 @@ this.isAdmin = this.auth.isAdminRole();
   }
 
   applyFilters(): void { this.loadReport(1); }
+
+  switchTab(tab: 'log' | 'mine' | 'manual' | 'settings'): void {
+    this.activeTab = tab;
+    this.editingRow = null;
+    if (tab === 'log' || tab === 'mine') {
+      this.loadReport(1);
+    }
+    this.cdr.markForCheck();
+  }
 
   changeReportPage(page: number): void {
     const lastPage = this.reportPagination?.last_page ?? 1;

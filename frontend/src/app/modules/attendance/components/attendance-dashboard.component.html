@@ -2,7 +2,7 @@
 <div class="dash-header">
   <div>
     <h1><mat-icon>fingerprint</mat-icon> Attendance Dashboard</h1>
-    <p>{{ isAdmin ? 'Organisation-wide attendance overview' : 'Your personal attendance summary' }}</p>
+    <p>{{ data?.type === 'department' ? 'Department attendance overview' : isAdmin ? 'Organisation-wide attendance overview' : 'Your personal attendance summary' }}</p>
   </div>
   <div class="header-right">
     <div class="live-clock">{{ clock }}</div>
@@ -66,7 +66,7 @@
 <!-- ══════════════════════════════════════════════════════════════════
      EMPLOYEE VIEW
 ══════════════════════════════════════════════════════════════════ -->
-<ng-container *ngIf="!loading && !isAdmin && data">
+<ng-container *ngIf="!loading && !isOverviewDashboard && data">
 
   <!-- Check-in card -->
   <div class="checkin-card">
@@ -229,14 +229,14 @@
 <!-- ══════════════════════════════════════════════════════════════════
      ADMIN VIEW
 ══════════════════════════════════════════════════════════════════ -->
-<ng-container *ngIf="!loading && isAdmin && data">
+<ng-container *ngIf="!loading && isOverviewDashboard && data">
 
   <!-- Presence ring + KPIs -->
   <div class="admin-top">
 
     <!-- Presence card -->
     <div class="dash-card presence-card">
-      <div class="card-title"><mat-icon>groups</mat-icon> Today's Presence</div>
+      <div class="card-title"><mat-icon>groups</mat-icon> {{ data.type === 'department' ? "Department Presence" : "Today's Presence" }}</div>
       <div class="presence-ring-wrap">
         <svg class="presence-ring" viewBox="0 0 120 120">
           <circle cx="60" cy="60" r="52" fill="none" stroke="#21262d" stroke-width="12"/>
@@ -263,7 +263,7 @@
       <div class="akpi-card" style="--c:#3b82f6">
         <mat-icon>people</mat-icon>
         <div class="akpi-val">{{ data.summary?.total_active ?? 0 }}</div>
-        <div class="akpi-lbl">Total active</div>
+        <div class="akpi-lbl">{{ data.type === 'department' ? 'Dept. active' : 'Total active' }}</div>
       </div>
       <div class="akpi-card" style="--c:#10b981">
         <mat-icon>how_to_reg</mat-icon>
