@@ -125,8 +125,8 @@ export class LeaveListComponent implements OnInit {
   typeColumns = ['name', 'code', 'days', 'paid', 'carry', 'actions'];
 
   tabs = [
-    { id: 'requests', label: 'Requests', icon: 'event_note' },
     { id: 'my_requests', label: 'My Requests', icon: 'person_pin' },
+    { id: 'requests', label: 'Team Requests', icon: 'event_note' },
     { id: 'calendar', label: 'Calendar', icon: 'calendar_month' },
     { id: 'balances', label: 'Balances', icon: 'account_balance_wallet' },
     { id: 'types', label: 'Leave Types', icon: 'tune' },
@@ -148,6 +148,11 @@ export class LeaveListComponent implements OnInit {
   ngOnInit() {
     const portalType = this.auth.getPortalType();
     this.showMyRequestsTab = portalType !== 'employee';
+    this.tabs = this.tabs.map(tab =>
+      tab.id === 'requests'
+        ? { ...tab, label: portalType === 'employee' ? 'Requests' : 'Team Requests' }
+        : tab
+    );
     const openPersonalTab = this.route.snapshot.url.some(segment => segment.path === 'my');
     if (openPersonalTab) {
       this.activeTab = 'my_requests';

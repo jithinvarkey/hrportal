@@ -73,8 +73,8 @@ export class LoanListComponent implements OnInit {
   instColumns = ['no', 'due_date', 'amount', 'status', 'actions'];
 
   tabs = [
-    { id: 'all', label: 'All Loans', icon: 'list_alt' },
-    { id: 'mine', label: 'My Loans', icon: 'person' },
+    { id: 'mine', label: 'My Requests', icon: 'person' },
+    { id: 'all', label: 'Team Requests', icon: 'list_alt' },
     { id: 'types', label: 'Loan Types', icon: 'tune' },
   ];
 
@@ -100,6 +100,11 @@ export class LoanListComponent implements OnInit {
   ngOnInit() {
     const portalType = this.auth.getPortalType();
     this.showMyLoansTab = portalType !== 'employee';
+    this.tabs = this.tabs.map(tab =>
+      tab.id === 'all'
+        ? { ...tab, label: portalType === 'employee' ? 'Requests' : 'Team Requests' }
+        : tab
+    );
     const openPersonalTab = this.route.snapshot.url.some(segment => segment.path === 'my')
       || portalType === 'employee';
     if (openPersonalTab) {

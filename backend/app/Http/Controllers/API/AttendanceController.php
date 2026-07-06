@@ -111,24 +111,23 @@ class AttendanceController extends Controller
         $isHR  = (bool) array_intersect($roles, ['super_admin','hr_manager','hr_staff']);
         $isMgr = in_array('department_manager', $roles);
 
-        // Get IDs of direct reports if manager
-        $subordinateIds = [];
-        if ($isMgr && $user->employee) {
-            $subordinateIds = \App\Models\Employee::where('manager_id', $user->employee->id)
-                ->pluck('id')->toArray();
-        }
+        $employeeId = $user->employee?->id;
+        $departmentId = $user->employee?->department_id;
+        $scope = $request->input('scope');
 
         $data = AttendanceLog::with('employee.department')
             ->when(!$isHR && !$isMgr && $user->employee, fn ($q) =>
                 // Regular employee: own records only
                 $q->where('employee_id', $user->employee->id)
             )
-            ->when($isMgr && !$isHR, fn ($q) =>
-                // Manager: own + all direct reports
-                $q->where(fn ($inner) =>
-                    $inner->where('employee_id', optional($user->employee)->id)
-                          ->orWhereIn('employee_id', $subordinateIds)
-                )
+            ->when($isMgr && !$isHR && $scope === 'mine' && $employeeId, fn ($q) =>
+                // Department manager personal tab: own records only
+                $q->where('employee_id', $employeeId)
+            )
+            ->when($isMgr && !$isHR && $scope !== 'mine', fn ($q) =>
+                // Department manager team tab: department employees, excluding own record
+                $q->whereHas('employee', fn ($e) => $e->where('department_id', $departmentId))
+                  ->when($employeeId, fn ($team) => $team->where('employee_id', '!=', $employeeId))
             )
             ->when($request->department_id, fn ($q) =>
                 $q->whereHas('employee', fn ($e) => $e->where('department_id', $request->department_id))
@@ -183,8 +182,16 @@ class AttendanceController extends Controller
     {
         $user = auth()->user();
 
-        if ($user->hasAnyRole(['super_admin', 'hr_manager', 'hr_staff', 'department_manager'])) {
+        if ($user->hasAnyRole(['super_admin', 'hr_manager', 'hr_staff'])) {
             return response()->json($this->adminDashboard());
+        }
+
+        if ($user->hasRole('department_manager')) {
+            return response()->json($this->adminDashboard(
+                $user->employee?->department_id,
+                $user->employee?->id,
+                'department'
+            ));
         }
 
         return response()->json($this->employeeDashboard($user->employee));
@@ -192,25 +199,33 @@ class AttendanceController extends Controller
 
     // ── Admin dashboard payload ───────────────────────────────────────────
 
-    private function adminDashboard(): array
+    private function adminDashboard(?int $departmentId = null, ?int $excludeEmployeeId = null, string $type = 'admin'): array
     {
         $today     = now()->toDateString();
         $weekStart = now()->startOfWeek(Carbon::SUNDAY)->toDateString();
         $monthStart = now()->startOfMonth()->toDateString();
+        $employeeIds = \App\Models\Employee::query()
+            ->where('status', 'active')
+            ->when($departmentId, fn ($q) => $q->where('department_id', $departmentId))
+            ->when($excludeEmployeeId, fn ($q) => $q->where('id', '!=', $excludeEmployeeId))
+            ->pluck('id');
 
         // Today's totals
-        $todayLogs    = AttendanceLog::whereDate('date', $today)->get();
+        $todayLogs    = AttendanceLog::whereDate('date', $today)
+            ->when($employeeIds->isNotEmpty() || $departmentId, fn ($q) => $q->whereIn('employee_id', $employeeIds))
+            ->get();
         $presentToday = $todayLogs->where('status', 'present')->count();
         $lateToday    = $todayLogs->where('status', 'late')->count();
         $absentToday  = $todayLogs->where('status', 'absent')->count();
 
         // Total active employees
-        $totalActive  = \App\Models\Employee::where('status', 'active')->count();
+        $totalActive  = $employeeIds->count();
         $notRecorded  = max(0, $totalActive - $todayLogs->count());
 
         // Attendance rate this month
         $monthLogs     = AttendanceLog::whereDate('date', '>=', $monthStart)
             ->whereDate('date', '<=', $today)
+            ->when($employeeIds->isNotEmpty() || $departmentId, fn ($q) => $q->whereIn('employee_id', $employeeIds))
             ->get();
         $monthPresent  = $monthLogs->whereIn('status', ['present', 'late'])->count();
         $monthTotal    = $monthLogs->count();
@@ -224,7 +239,9 @@ class AttendanceController extends Controller
         $weeklyTrend = [];
         for ($i = 6; $i >= 0; $i--) {
             $day   = now()->subDays($i);
-            $dayLogs = AttendanceLog::whereDate('date', $day->toDateString())->get();
+            $dayLogs = AttendanceLog::whereDate('date', $day->toDateString())
+                ->when($employeeIds->isNotEmpty() || $departmentId, fn ($q) => $q->whereIn('employee_id', $employeeIds))
+                ->get();
             $weeklyTrend[] = [
                 'day'     => $day->format('D'),
                 'date'    => $day->toDateString(),
@@ -238,6 +255,7 @@ class AttendanceController extends Controller
         // Department breakdown today
         $deptBreakdown = AttendanceLog::with('employee.department')
             ->whereDate('date', $today)
+            ->when($employeeIds->isNotEmpty() || $departmentId, fn ($q) => $q->whereIn('employee_id', $employeeIds))
             ->get()
             ->groupBy(fn ($log) => $log->employee?->department?->name ?? 'Unknown')
             ->map(fn ($logs, $dept) => [
@@ -252,6 +270,7 @@ class AttendanceController extends Controller
         // Late / absent employees today
         $alerts = AttendanceLog::with('employee.department')
             ->whereDate('date', $today)
+            ->when($employeeIds->isNotEmpty() || $departmentId, fn ($q) => $q->whereIn('employee_id', $employeeIds))
             ->whereIn('status', ['absent', 'late'])
             ->orderBy('status')
             ->limit(10)
@@ -265,12 +284,13 @@ class AttendanceController extends Controller
 
         // Employees currently checked in (no checkout yet)
         $checkedInNow = AttendanceLog::whereDate('date', $today)
+            ->when($employeeIds->isNotEmpty() || $departmentId, fn ($q) => $q->whereIn('employee_id', $employeeIds))
             ->whereNotNull('check_in')
             ->whereNull('check_out')
             ->count();
 
         return [
-            'type' => 'admin',
+            'type' => $type,
             'summary' => [
                 'total_active'    => $totalActive,
                 'present_today'   => $presentToday,

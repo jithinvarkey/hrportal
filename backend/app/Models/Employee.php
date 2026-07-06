@@ -67,6 +67,7 @@ class Employee extends Model
     public function designation()   { return $this->belongsTo(Designation::class); }
     public function manager()       { return $this->belongsTo(Employee::class, 'manager_id'); }
     public function subordinates()  { return $this->hasMany(Employee::class, 'manager_id'); }
+    public function directReports() { return $this->hasMany(Employee::class, 'manager_id'); }
     public function documents()     { return $this->hasMany(EmployeeDocument::class); }
     public function payslips()      { return $this->hasMany(Payslip::class); }
     public function leaveRequests() { return $this->hasMany(LeaveRequest::class); }

@@ -81,13 +81,16 @@
 
   <!-- ── Tab navigation ──────────────────────────────────────────────── -->
   <div class="tab-bar">
-    <button class="tab" [class.active]="activeTab==='log'" (click)="activeTab='log'">
-      <mat-icon>list_alt</mat-icon> Attendance Log
+    <button class="tab" [class.active]="activeTab==='log'" (click)="switchTab('log')">
+      <mat-icon>list_alt</mat-icon> {{ isMgr && !isHR ? 'Department Attendance' : 'Attendance Log' }}
     </button>
-    <button class="tab" [class.active]="activeTab==='manual'" *ngIf="isHR" (click)="activeTab='manual'">
+    <button class="tab" [class.active]="activeTab==='mine'" *ngIf="isMgr && !isHR" (click)="switchTab('mine')">
+      <mat-icon>person_pin</mat-icon> My Attendance
+    </button>
+    <button class="tab" [class.active]="activeTab==='manual'" *ngIf="isHR" (click)="switchTab('manual')">
       <mat-icon>edit_calendar</mat-icon> Manual Entry
     </button>
-    <button class="tab" [class.active]="activeTab==='settings'" *ngIf="isHR" (click)="activeTab='settings'">
+    <button class="tab" [class.active]="activeTab==='settings'" *ngIf="isHR" (click)="switchTab('settings')">
       <mat-icon>tune</mat-icon> Settings
     </button>
   </div>
@@ -95,7 +98,7 @@
   <!-- ══════════════════════════════════════════════════════════════════
        TAB: ATTENDANCE LOG
   ══════════════════════════════════════════════════════════════════ -->
-  <ng-container *ngIf="activeTab==='log'">
+  <ng-container *ngIf="activeTab==='log' || activeTab==='mine'">
 
     <!-- Filters -->
     <div class="filter-card" [formGroup]="filterForm">
@@ -143,6 +146,7 @@
         <span class="card-title">
           <mat-icon>table_chart</mat-icon> Records
           <span class="record-ct" *ngIf="!reportLoading">{{ reportPagination?.total || 0 }}</span>
+          <span class="record-scope" *ngIf="isMgr && !isHR">{{ activeTab === 'mine' ? 'My records' : 'Department employees' }}</span>
         </span>
       </div>
       <div class="table-wrap">

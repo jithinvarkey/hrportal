@@ -151,11 +151,15 @@ export class AttendanceDashboardComponent implements OnInit, AfterViewInit, OnDe
     return Math.round(((s.present_today + s.late_today) / s.total_active) * 100);
   }
 
+  get isOverviewDashboard(): boolean {
+    return ['admin', 'department'].includes(this.data?.type);
+  }
+
   // ── Charts ───────────────────────────────────────────────────────────
 
   private renderCharts(): void {
     this.destroyCharts();
-    if (this.isAdmin) {
+    if (this.isOverviewDashboard) {
       this.renderWeeklyAdminChart();
       this.renderDeptChart();
     } else {
