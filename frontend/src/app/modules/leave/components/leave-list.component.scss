@@ -36,6 +36,12 @@
 .bal-track   { height: 4px; background: var(--surface2); border-radius: 3px; overflow: hidden; margin-bottom: 5px; }
 .bal-fill    { height: 100%; border-radius: 3px; transition: width .4s ease; }
 .bal-meta    { font-size: 11px; color: var(--text3); display: flex; gap: 8px; }
+.annual-today-card {
+  border-color: rgba(59,130,246,.35);
+  background: linear-gradient(180deg, rgba(59,130,246,.08), var(--surface));
+}
+.today-dot { background: var(--accent); }
+.today-fill { background: var(--accent); }
 
 /* ── Main Tabs ─────────────────────────────────────────────────────────── */
 .main-tabs {

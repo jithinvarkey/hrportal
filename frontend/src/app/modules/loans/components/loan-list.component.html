@@ -26,9 +26,11 @@
 
   <!-- ── Main Tabs ─────────────────────────────────────────────────────── -->
   <div class="main-tabs">
-    <button *ngFor="let t of tabs" class="main-tab" [class.active]="activeTab===t.id" (click)="switchTab(t.id)">
-      <mat-icon>{{ t.icon }}</mat-icon>{{ t.label }}
-    </button>
+    <ng-container *ngFor="let t of tabs">
+      <button *ngIf="t.id !== 'mine' || showMyLoansTab" class="main-tab" [class.active]="activeTab===t.id" (click)="switchTab(t.id)">
+        <mat-icon>{{ t.icon }}</mat-icon>{{ t.label }}
+      </button>
+    </ng-container>
   </div>
 
   <!-- ══════════════════════════════════════════════════════════════════ -->

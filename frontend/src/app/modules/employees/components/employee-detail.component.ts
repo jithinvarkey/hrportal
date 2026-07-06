@@ -18,6 +18,7 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
   employee: any   = null;
   documents:    any[] = [];
   leaveBalance: any[] = [];
+  annualBalanceToday: any = null;
   leaveBalanceLoading = false;
   leaveBalancePeriods: any[] = [];
   selectedLeavePeriod = '';
@@ -147,6 +148,7 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
     }
     if (tabId === 'leave' && !this.leaveBalancePeriods.length) {
       this.loadLeaveBalances();
+      this.loadAnnualBalanceToday();
     }
     if (tabId === 'onboarding') {
       this.loadOnboarding();
@@ -346,13 +348,30 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
   }
   pctLeave(alloc: any): number {
     if (!alloc?.allocated_days) return 0;
-    return Math.round((alloc.used_days / alloc.allocated_days) * 100);
+    return Math.min(100, Math.round((alloc.used_days / alloc.allocated_days) * 100));
   }
 
   isAnnualLeaveBalance(balance: any): boolean {
     const name = String(balance?.leave_type?.name || '').toLowerCase();
     const code = String(balance?.leave_type?.code || '').toLowerCase();
-    return code === 'al' || name.includes('annual');
+    return balance?.leave_type?.is_annual === true || code === 'al' || name.includes('annual');
+  }
+
+  loadAnnualBalanceToday(): void {
+    if (!this.employeeId) return;
+    this.http.get<any>(`/api/v1/leave/balance/${this.employeeId}`, {
+      params: { as_of: this.dateInputValue(new Date()) },
+    })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: r => {
+          const balances = r?.balances || [];
+          this.annualBalanceToday = balances.find((b: any) => this.isAnnualLeaveBalance(b)) || null;
+        },
+        error: () => {
+          this.annualBalanceToday = null;
+        },
+      });
   }
 
   loadLeaveBalances(periodStart = ''): void {
@@ -377,6 +396,13 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
           this.leaveBalanceLoading = false;
         },
       });
+  }
+
+  private dateInputValue(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
   fmtSize(bytes: number): string {
     if (!bytes) return '—';

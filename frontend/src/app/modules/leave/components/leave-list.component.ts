@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { ActivatedRoute } from '@angular/router';
 import { finalize } from 'rxjs/operators';
 import { AuthService } from '../../../core/services/auth.service';
 
@@ -23,6 +24,7 @@ export class LeaveListComponent implements OnInit {
   requests: any[] = [];
   leaveTypes: any[] = [];
   myBalances: any[] = [];
+  annualBalanceToday: any = null;
   formBalances: any[] = [];
   allBalances: any[] = [];
   stats: any = {};
@@ -115,6 +117,7 @@ export class LeaveListComponent implements OnInit {
   isHR = false;
   canManageHolidays = false;
   isMgr = false;
+  showMyRequestsTab = true;
   userId = '';
   employeeId = '';
   currentUserName = '';
@@ -123,6 +126,7 @@ export class LeaveListComponent implements OnInit {
 
   tabs = [
     { id: 'requests', label: 'Requests', icon: 'event_note' },
+    { id: 'my_requests', label: 'My Requests', icon: 'person_pin' },
     { id: 'calendar', label: 'Calendar', icon: 'calendar_month' },
     { id: 'balances', label: 'Balances', icon: 'account_balance_wallet' },
     { id: 'types', label: 'Leave Types', icon: 'tune' },
@@ -139,12 +143,23 @@ export class LeaveListComponent implements OnInit {
     { id: '', label: 'All' },
   ];
 
-  constructor(private http: HttpClient, private auth: AuthService) { }
+  constructor(private http: HttpClient, private auth: AuthService, private route: ActivatedRoute) { }
 
   ngOnInit() {
+    const portalType = this.auth.getPortalType();
+    this.showMyRequestsTab = portalType !== 'employee';
+    const openPersonalTab = this.route.snapshot.url.some(segment => segment.path === 'my');
+    if (openPersonalTab) {
+      this.activeTab = 'my_requests';
+      this.activeStatus = '';
+    } else if (portalType === 'employee') {
+      this.activeTab = 'requests';
+      this.activeStatus = '';
+    }
     this.loadStats();
     this.loadTypes();
     this.loadMyBalance();
+    this.loadAnnualBalanceToday();
     this.load();
   }
 
@@ -178,7 +193,10 @@ export class LeaveListComponent implements OnInit {
     this.loading = true;
     this.currentPage = page;
     const params: any = { per_page: this.pageSize, page };
-    if (this.activeStatus === 'needs_action') {
+    if (this.activeTab === 'my_requests') {
+      params.own = '1';
+    }
+    if (this.activeStatus === 'needs_action' && this.activeTab !== 'my_requests') {
       params.needs_action = '1';
     } else if (this.activeStatus) {
       params.status = this.activeStatus;
@@ -193,6 +211,12 @@ export class LeaveListComponent implements OnInit {
   }
 
   switchStatus(id: string) { this.activeStatus = id; this.currentPage = 1; this.load(); }
+
+  requestStatusTabs(): any[] {
+    return this.activeTab === 'my_requests'
+      ? this.statusTabs.filter(t => t.id !== 'needs_action')
+      : this.statusTabs;
+  }
 
   changePageSize() { this.load(1); }
 
@@ -230,7 +254,7 @@ export class LeaveListComponent implements OnInit {
     this.http.post(`/api/v1/leave/requests/${r.id}/approve`, {})
       .pipe(finalize(() => this.clearActionLoading()))
       .subscribe({
-        next: () => { this.load(this.currentPage); this.loadStats(); this.loadMyBalance(); if (this.showDetail) this.showDetail = false; }
+        next: () => { this.load(this.currentPage); this.loadStats(); this.loadMyBalance(); this.loadAnnualBalanceToday(); if (this.showDetail) this.showDetail = false; }
       });
   }
 
@@ -261,7 +285,7 @@ export class LeaveListComponent implements OnInit {
     this.http.delete(`/api/v1/leave/requests/${r.id}`)
       .pipe(finalize(() => this.clearActionLoading()))
       .subscribe({
-        next: () => { this.load(this.currentPage); this.loadStats(); this.loadMyBalance(); if (this.showDetail) this.showDetail = false; }
+        next: () => { this.load(this.currentPage); this.loadStats(); this.loadMyBalance(); this.loadAnnualBalanceToday(); if (this.showDetail) this.showDetail = false; }
       });
   }
 
@@ -341,7 +365,7 @@ export class LeaveListComponent implements OnInit {
         this.submitting = false; this.showNewRequest = false;
         this.form = { leave_type_id: '', start_date: '', end_date: '', start_time: '08:00', end_time: '09:00', reason: '', employee_id: '', is_half_day: false, half_day_period: 'morning', requires_exit_reentry: false, requires_ticket: false, ticket_dependent_ids: [], destination_country: '' };
         this.selectedFile = null; this.excuseUsage = null;
-        this.load(1); this.loadStats(); this.loadMyBalance();
+        this.load(1); this.loadStats(); this.loadMyBalance(); this.loadAnnualBalanceToday();
       },
       error: err => { this.submitting = false; this.formError = err?.error?.message || 'Submission failed.'; }
     });
@@ -354,6 +378,21 @@ export class LeaveListComponent implements OnInit {
     if (!empId) return;
     this.http.get<any>(`/api/v1/leave/balance/${empId}`).subscribe({
       next: r => this.myBalances = r?.balances || []
+    });
+  }
+
+  loadAnnualBalanceToday() {
+    const user = JSON.parse(localStorage.getItem('hrms_user') || '{}');
+    const empId = user?.employee?.id || user?.employee_id;
+    if (!empId) return;
+    this.http.get<any>(`/api/v1/leave/balance/${empId}`, {
+      params: { as_of: this.dateInputValue(new Date()) }
+    }).subscribe({
+      next: r => {
+        const balances = r?.balances || [];
+        this.annualBalanceToday = balances.find((b: any) => this.isAnnualBalance(b)) || null;
+      },
+      error: () => this.annualBalanceToday = null
     });
   }
 
@@ -515,7 +554,11 @@ export class LeaveListComponent implements OnInit {
   // ── Tab switch ────────────────────────────────────────────────────────────
   switchTab(id: string) {
     if (id === 'types' && !this.isHR) return;
+    if (id === 'my_requests' && !this.isMgr) return;
     this.activeTab = id;
+    if (id === 'requests' && !this.activeStatus) this.activeStatus = 'needs_action';
+    if (id === 'my_requests' && this.activeStatus === 'needs_action') this.activeStatus = '';
+    if (id === 'requests' || id === 'my_requests') this.load(1);
     if (id === 'calendar') this.loadCalendar();
     if (id === 'balances') this.loadAllBalances();
     if (id === 'holidays') this.loadHolidayManagement();
@@ -709,6 +752,12 @@ export class LeaveListComponent implements OnInit {
     if (pct >= 80) return 'var(--danger)';
     if (pct >= 50) return 'var(--warning)';
     return 'var(--success)';
+  }
+
+  isAnnualBalance(b: any): boolean {
+    const code = String(b?.leave_type?.code || '').toUpperCase();
+    const name = String(b?.leave_type?.name || '').toLowerCase();
+    return b?.leave_type?.is_annual === true || code === 'AL' || name.includes('annual');
   }
 
   selectedTypeBalance(): any {

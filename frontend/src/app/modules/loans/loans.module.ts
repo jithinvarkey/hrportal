@@ -5,7 +5,10 @@ import { RouterModule, Routes } from '@angular/router';
 import { SharedModule } from '../../shared/shared.module';
 import { LoanListComponent } from './components/loan-list.component';
 
-const routes: Routes = [{ path: '', component: LoanListComponent }];
+const routes: Routes = [
+  { path: '', component: LoanListComponent },
+  { path: 'my', component: LoanListComponent },
+];
 
 @NgModule({
   declarations: [LoanListComponent],

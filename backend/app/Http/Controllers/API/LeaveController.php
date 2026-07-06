@@ -286,8 +286,15 @@ class LeaveController extends Controller {
         $isHRAdmin = (bool) array_intersect($userRoles, ['super_admin', 'hr_manager', 'hr_staff']);
         $isMgr = in_array('department_manager', $userRoles);
 
+        $ownOnly = $request->boolean('own');
+
         $query = LeaveRequest::with(['employee.department', 'leaveType'])
-                ->when(!$isHRAdmin, function ($q) use ($user, $isMgr) {
+                ->when($ownOnly, function ($q) use ($user) {
+                    $user->employee
+                        ? $q->where('employee_id', $user->employee->id)
+                        : $q->whereRaw('1 = 0');
+                })
+                ->when(!$ownOnly && !$isHRAdmin, function ($q) use ($user, $isMgr) {
                     if ($isMgr && $user->employee) {
                         $teamIds = $user->employee->subordinates()->pluck('id');
                         if (!request()->needs_action) {
@@ -298,11 +305,11 @@ class LeaveController extends Controller {
                         $q->where('employee_id', $user->employee->id);
                     }
                 })
-                ->when($request->needs_action, fn($q) => $q->whereIn('status',
+                ->when($request->needs_action && !$ownOnly, fn($q) => $q->whereIn('status',
                                 $isHRAdmin ? ['pending', 'manager_approved'] : ['pending']
                         ))
-                ->when($request->needs_action && $user->employee, fn($q) => $q->where('employee_id', '!=', $user->employee->id))
-                ->when($request->needs_action, fn($q) => $q->whereDoesntHave('employee', fn($eq) => $eq->where('user_id', $user->id)))
+                ->when($request->needs_action && !$ownOnly && $user->employee, fn($q) => $q->where('employee_id', '!=', $user->employee->id))
+                ->when($request->needs_action && !$ownOnly, fn($q) => $q->whereDoesntHave('employee', fn($eq) => $eq->where('user_id', $user->id)))
                 ->when(!$request->needs_action && $request->status, fn($q) => $q->where('status', $request->status))
                 ->when($request->employee_id, fn($q) => $q->where('employee_id', $request->employee_id))
                 ->when($request->leave_type_id, fn($q) => $q->where('leave_type_id', $request->leave_type_id))
@@ -1078,9 +1085,9 @@ class LeaveController extends Controller {
                 ->orWhere('name', 'like', '%Annual%')
         );
 
-        $usedDays = (float) (clone $base)->where('status', 'approved')->sum('total_days');
         $pendingDays = (float) (clone $base)->whereIn('status', ['pending', 'manager_approved'])->sum('total_days');
-        $usage = $this->annualUsageWithCarryForward($allocation, $periodStart, $balanceDate, $carriedForward);
+        $usage = $this->annualUsageWithCarryForward($allocation, $periodStart, $periodEnd, $carriedForward, $balanceDate);
+        $usedDays = $usage['total_used_days'];
         $remainingDays = max(0, round($usage['active_carry_forward_remaining'] + $accrued - $usage['annual_used_days'], 2));
 
         $allocation->setAttribute('allocated_days', $accrued);
@@ -1093,6 +1100,7 @@ class LeaveController extends Controller {
         $allocation->setAttribute('remaining_days', $remainingDays);
         $allocation->setAttribute('earned_until_as_of', $accrued);
         $allocation->setAttribute('approved_taken_until_as_of', $usedDays);
+        $allocation->setAttribute('approved_taken_contract_period', $usedDays);
         $allocation->setAttribute('annual_entitlement', $entitlement);
         $allocation->setAttribute('balance_as_of', $balanceDate->toDateString());
         $allocation->setAttribute('accrual_period_start', $periodStart->toDateString());

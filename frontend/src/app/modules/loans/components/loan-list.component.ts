@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 
 @Component({
@@ -91,11 +92,19 @@ export class LoanListComponent implements OnInit {
   isFinance = false;
   isMgr = false;
   isHR = false;
+  showMyLoansTab = true;
   approvalLevels = 3;
 
-  constructor(private http: HttpClient, private auth: AuthService) { }
+  constructor(private http: HttpClient, private auth: AuthService, private route: ActivatedRoute) { }
 
   ngOnInit() {
+    const portalType = this.auth.getPortalType();
+    this.showMyLoansTab = portalType !== 'employee';
+    const openPersonalTab = this.route.snapshot.url.some(segment => segment.path === 'my')
+      || portalType === 'employee';
+    if (openPersonalTab) {
+      this.activeTab = 'mine';
+    }
     this.loadStats();
     this.loadLoanTypes();
     this.load();
@@ -456,6 +465,10 @@ export class LoanListComponent implements OnInit {
 
 
   canApprove(loan: any): boolean {
+    if (loan?.can_approve === false || this.isOwnLoan(loan)) {
+      return false;
+    }
+
     if (this.auth.isSuperAdmin()) {
       return ['pending_manager', 'pending_hr', 'pending_finance'].includes(loan.status);
     }
@@ -478,6 +491,10 @@ export class LoanListComponent implements OnInit {
 
 
   canReject(loan: any): boolean {
+    if (loan?.can_reject === false || this.isOwnLoan(loan)) {
+      return false;
+    }
+
     if (this.auth.isSuperAdmin()) {
       return ['pending_manager', 'pending_hr', 'pending_finance'].includes(loan.status);
     }
@@ -499,6 +516,9 @@ export class LoanListComponent implements OnInit {
   }
 
   canCancel(loan: any): boolean {
+    if (this.isOwnLoan(loan)) {
+      return ['pending_manager', 'pending_hr', 'pending_finance'].includes(loan.status);
+    }
 
     if (this.isHR) {
       return ['pending_manager', 'pending_hr', 'pending_finance']
@@ -514,6 +534,10 @@ export class LoanListComponent implements OnInit {
     }
 
     return false;
+  }
+
+  isOwnLoan(loan: any): boolean {
+    return !!this.employeeId && String(loan?.employee_id ?? loan?.employee?.id) === String(this.employeeId);
   }
 
   canDisburse(loan: any): boolean {
