@@ -387,12 +387,16 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
         next: r => {
           this.leaveBalance = r?.balances || [];
           this.leaveBalancePeriods = r?.periods || [];
-          this.selectedLeavePeriod = r?.selected_period?.start_date || selected || '';
-          this.selectedLeavePeriodLabel = r?.selected_period?.label || '';
+          const fallbackPeriod = this.leaveBalancePeriods[0] || null;
+          this.selectedLeavePeriod = r?.selected_period?.start_date || selected || fallbackPeriod?.start_date || '';
+          this.selectedLeavePeriodLabel = r?.selected_period?.label || fallbackPeriod?.label || '';
           this.leaveBalanceLoading = false;
         },
         error: () => {
           this.leaveBalance = [];
+          this.leaveBalancePeriods = [];
+          this.selectedLeavePeriod = '';
+          this.selectedLeavePeriodLabel = '';
           this.leaveBalanceLoading = false;
         },
       });
@@ -651,6 +655,7 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
   maskedBankAccount(): string {
     const account = this.displayText(this.employee?.bank_account, '');
     if (!account) return '-';
+    if (this.isHR) return account;
     const tail = account.slice(-4);
     return tail ? `**** **** ${tail}` : '**** ****';
   }

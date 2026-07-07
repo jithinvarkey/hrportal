@@ -25,7 +25,7 @@ class PayrollService
 
     // Saudi standard allowance rates
     const HOUSING_RATE    = 0.25;   // 25% of basic
-    const TRANSPORT_FIXED = 400.00; // SAR 400/month fixed
+    const TRANSPORT_RATE   = 0.10;   // 10% of basic
 
     // Saudi working days Sun–Thu
     private const WORKING_DAYS = [0, 1, 2, 3, 4];
@@ -87,7 +87,7 @@ class PayrollService
 
         // ── Allowances ────────────────────────────────────────────────────
         $housingAllowance   = round($basicSalary * self::HOUSING_RATE, 2);
-        $transportAllowance = ($workingDays > $absentDays) ? self::TRANSPORT_FIXED : 0;
+        $transportAllowance = ($workingDays > $absentDays) ? round($basicSalary * self::TRANSPORT_RATE, 2) : 0;
 
         // ── Extra components from DB (bonuses etc.) ───────────────────────
         $components    = PayrollComponent::where('is_active', true)

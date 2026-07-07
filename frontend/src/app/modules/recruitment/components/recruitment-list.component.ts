@@ -17,7 +17,7 @@ import { AuthService } from '../../../core/services/auth.service';
 })
 export class RecruitmentListComponent implements OnInit, OnDestroy {
 
-  jobs: any[] = []; applications: any[] = []; departments: any[] = []; designations: any[] = [];
+  jobs: any[] = []; applications: any[] = []; departments: any[] = []; designations: any[] = []; employees: any[] = [];
   stats: any = {}; pagination: any = null; currentPage = 1;
   activeTab = 'jobs'; loading = false; appsLoading = false;
   statsLoading = true; submitting = false;
@@ -91,11 +91,17 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   // ── Offer & Interview ────────────────────────────────────────────────────
   showOfferForm    = false;
   showInterviewForm = false;
-  offerForm: any   = { offered_salary: '', notes: '' };
+  offerForm: any   = {
+    basic_salary: '',
+    housing_allowance: '',
+    transport_allowance: '',
+    other_allowance: '',
+    notes: '',
+  };
   offerSubmitting  = false;
   interviewForm: any = {
     round: 'HR', scheduled_at: '', duration_minutes: 60,
-    format: 'video', location_or_link: '', interviewers: '',
+    format: 'video', location_or_link: '', interviewer_employee_ids: [],
   };
   interviewSubmitting = false;
   editingNotes = false;
@@ -154,7 +160,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
       probation_period: [90],
       custom_tasks:     [''],
     });
-    this.loadStats(); this.loadJobs(); this.loadDepartments(); this.loadDesignations();
+    this.loadStats(); this.loadJobs(); this.loadDepartments(); this.loadDesignations(); this.loadEmployees();
     this.searchControl.valueChanges.pipe(debounceTime(400), distinctUntilChanged(), takeUntil(this.destroy$))
       .subscribe(() => this.loadJobs(1));
   }
@@ -195,6 +201,15 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     });
   }
 
+  loadEmployees(): void {
+    this.http.get<any>('/api/v1/employees', {
+      params: { per_page: 500, status: 'active', dashboard_scope: 1 },
+    }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: r => { this.employees = r?.data ?? []; this.cdr.markForCheck(); },
+      error: () => {},
+    });
+  }
+
   loadApplications(jobId?: number): void {
     this.appsLoading = true;
     const params: any = { per_page: 100 };
@@ -215,6 +230,21 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
 
   moveStage(app: any, stage: string, event: Event): void {
     event.stopPropagation();
+    if (stage === 'hired') {
+      this.openHireForm(app, event);
+      return;
+    }
+
+    if (stage === 'offer') {
+      this.openOfferForm(app);
+      return;
+    }
+
+    if (stage === 'interview') {
+      this.openInterviewForm(app);
+      return;
+    }
+
     this.http.put(`${this.api}/applications/${app.id}/stage`, { stage }).pipe(takeUntil(this.destroy$)).subscribe({
       next: (r: any) => {
         app.stage = stage;
@@ -228,31 +258,63 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     });
   }
 
-  openOfferForm(app: any): void {
+  openOfferForm(app: any, event?: Event): void {
+    event?.preventDefault();
+    event?.stopPropagation();
     this.selectedApp = app;
-    this.offerForm = { offered_salary: '', notes: '' };
+    this.showAppDetail = false;
+    this.showHireForm = false;
+    this.showInterviewForm = false;
+    const basic = Number(app.expected_salary || 0);
+    this.offerForm = {
+      basic_salary: basic || '',
+      housing_allowance: basic ? this.roundMoney(basic * 0.25) : '',
+      transport_allowance: basic ? this.roundMoney(basic * 0.10) : '',
+      other_allowance: '',
+      notes: '',
+    };
     this.offerSubmitting = false;
     this.showOfferForm = true;
-    this.cdr.markForCheck();
+    this.cdr.detectChanges();
+  }
+
+  onOfferBasicSalaryChange(value: any): void {
+    const basic = Number(value || 0);
+    this.offerForm.housing_allowance = basic ? this.roundMoney(basic * 0.25) : '';
+    this.offerForm.transport_allowance = basic ? this.roundMoney(basic * 0.10) : '';
+  }
+
+  offerGrossSalary(): number {
+    return this.roundMoney(
+      Number(this.offerForm.basic_salary || 0) +
+      Number(this.offerForm.housing_allowance || 0) +
+      Number(this.offerForm.transport_allowance || 0) +
+      Number(this.offerForm.other_allowance || 0)
+    );
+  }
+
+  private roundMoney(value: number): number {
+    return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
   }
 
   sendOffer(): void {
-    if (!this.offerForm.offered_salary) return;
+    if (!this.offerForm.basic_salary) return;
     this.offerSubmitting = true;
     this.http.post(`${this.api}/offer/${this.selectedApp.id}`, this.offerForm)
       .pipe(takeUntil(this.destroy$)).subscribe({
-        next: () => {
+        next: (r: any) => {
           this.offerSubmitting  = false;
           this.showOfferForm    = false;
           this.selectedApp.stage = 'offer';
-          this.successMsg = 'Offer sent successfully.';
+          this.successMsg = `Offer sent to ${r?.email_to || 'candidate'}${r?.email_cc ? ' and copied to ' + r.email_cc : ''}.`;
           this.loadStats();
           setTimeout(() => { this.successMsg = ''; this.cdr.markForCheck(); }, 3000);
           this.cdr.markForCheck();
         },
         error: (e: any) => {
           this.offerSubmitting = false;
-          this.errorMsg = e?.error?.message ?? 'Failed to send offer.';
+          const validation = e?.error?.errors ? Object.values(e.error.errors).flat().join(' ') : '';
+          this.errorMsg = validation || e?.error?.message || 'Failed to send offer.';
           this.cdr.markForCheck();
         },
       });
@@ -264,7 +326,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     now.setHours(10, 0, 0, 0);
     this.interviewForm = {
       round: 'HR', duration_minutes: 60, format: 'video',
-      location_or_link: '', interviewers: '',
+      location_or_link: '', interviewer_employee_ids: [],
       scheduled_at: now.toISOString().slice(0, 16),
     };
     this.interviewSubmitting = false;
@@ -272,16 +334,54 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  onInterviewFormatChange(format: string): void {
+    this.interviewForm.format = format;
+    this.interviewForm.location_or_link = '';
+  }
+
+  interviewLocationLabel(): string {
+    if (this.interviewForm.format === 'in_person') return 'Interview Location';
+    if (this.interviewForm.format === 'phone') return 'Phone / Call Details';
+    return 'Meeting Link';
+  }
+
+  interviewLocationPlaceholder(): string {
+    if (this.interviewForm.format === 'in_person') return 'e.g. Diamond office, Conference Room 3, Floor 2';
+    if (this.interviewForm.format === 'phone') return 'e.g. HR will call the applicant mobile number';
+    return 'e.g. https://meet.google.com/...';
+  }
+
+  isInterviewerSelected(employeeId: number): boolean {
+    return (this.interviewForm.interviewer_employee_ids || []).map(Number).includes(Number(employeeId));
+  }
+
+  toggleInterviewer(employeeId: number, checked: boolean): void {
+    const ids = new Set((this.interviewForm.interviewer_employee_ids || []).map(Number));
+    if (checked) ids.add(Number(employeeId));
+    else ids.delete(Number(employeeId));
+    this.interviewForm.interviewer_employee_ids = Array.from(ids);
+  }
+
+  selectedInterviewersText(): string {
+    const ids = new Set((this.interviewForm.interviewer_employee_ids || []).map(Number));
+    return this.employees
+      .filter(e => ids.has(Number(e.id)))
+      .map(e => `${e.first_name} ${e.last_name}`)
+      .join(', ');
+  }
+
   submitInterview(): void {
-    if (!this.interviewForm.scheduled_at) return;
+    if (!this.interviewForm.scheduled_at || !this.interviewForm.location_or_link || !this.interviewForm.interviewer_employee_ids?.length) return;
     this.interviewSubmitting = true;
     const body = { ...this.interviewForm, application_id: this.selectedApp.id };
     this.http.post(`${this.api}/interviews`, body).pipe(takeUntil(this.destroy$)).subscribe({
-      next: () => {
+      next: (r: any) => {
         this.interviewSubmitting  = false;
         this.showInterviewForm    = false;
-        this.selectedApp.stage    = 'interview';
-        this.successMsg = 'Interview scheduled.';
+        if (this.selectedApp) this.selectedApp.stage = 'interview';
+        const app = this.applications.find(a => a.id === this.selectedApp?.id);
+        if (app) app.stage = 'interview';
+        this.successMsg = r?.message || 'Interview scheduled and invitation email sent.';
         this.loadStats();
         setTimeout(() => { this.successMsg = ''; this.cdr.markForCheck(); }, 3000);
         this.cdr.markForCheck();
@@ -301,9 +401,14 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
       });
   }
 
-  openHireForm(app: any): void {
+  openHireForm(app: any, event?: Event): void {
+    event?.preventDefault();
+    event?.stopPropagation();
     this.selectedApp = app;
     this.errorMsg = '';
+    this.showAppDetail = false;
+    this.showOfferForm = false;
+    this.showInterviewForm = false;
     // Auto-suggest company email: first initial + last name @ dbroker.com.sa
     // e.g. "Jithin Varkey" → "j.varkey@dbroker.com.sa"
     const parts = (app.applicant_name || '').toLowerCase().trim().split(/\s+/);
@@ -321,7 +426,8 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
       probation_period: 90,
       custom_tasks:     '',
     });
-    this.showHireForm = true; this.cdr.markForCheck();
+    this.showHireForm = true;
+    this.cdr.detectChanges();
   }
 
   confirmHire(): void {

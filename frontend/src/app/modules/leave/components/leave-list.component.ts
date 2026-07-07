@@ -765,6 +765,12 @@ export class LeaveListComponent implements OnInit {
     return b?.leave_type?.is_annual === true || code === 'AL' || name.includes('annual');
   }
 
+  contractYearAllocation(b: any): number | null {
+    if (!this.isAnnualBalance(b)) return null;
+    const value = b?.contract_year_allocated_days ?? b?.annual_entitlement;
+    return value === null || value === undefined || value === '' ? null : Number(value);
+  }
+
   selectedTypeBalance(): any {
     if (!this.form.leave_type_id) return null;
     const balances = this.showNewRequest ? this.formBalances : this.myBalances;

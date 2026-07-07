@@ -20,3 +20,7 @@ case.
           ╵       [32m~~~~~~~~~~~~~[0m
 
 [39m[22m
+[1m[31m[2m10:35:09 AM[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/v1/notifications?limit=20[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)[39m[22m

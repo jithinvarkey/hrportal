@@ -36,17 +36,29 @@ class EmployeeService
     ) {}
 
     /**
-     * Generate a unique employee code in the format EMP0001.
+     * Generate the next employee number from the largest existing code.
      *
-     * Uses the total count of all employees (including soft-deleted) to ensure
-     * the sequence never repeats, even after deletions.
-     *
-     * @return string  e.g. "EMP0042"
+     * Existing legacy values like EMP0365 and plain values like 365 both count
+     * as 365. New values are stored without the EMP prefix.
      */
     public function generateCode(): string
     {
-        $count = Employee::withTrashed()->count() + 1;
-        return 'EMP' . str_pad((string) $count, 4, '0', STR_PAD_LEFT);
+        $max = Employee::withTrashed()
+            ->lockForUpdate()
+            ->pluck('employee_code')
+            ->map(fn ($code) => $this->employeeCodeNumber($code))
+            ->max();
+
+        return (string) (((int) $max) + 1);
+    }
+
+    private function employeeCodeNumber(mixed $code): int
+    {
+        $value = strtoupper(trim((string) $code));
+        $value = preg_replace('/^EMP/i', '', $value) ?? '';
+        $digits = preg_replace('/\D+/', '', $value) ?? '';
+
+        return $digits === '' ? 0 : (int) ltrim($digits, '0');
     }
 
     /**

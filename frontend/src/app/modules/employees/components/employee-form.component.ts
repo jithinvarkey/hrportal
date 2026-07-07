@@ -137,7 +137,7 @@ export class EmployeeFormComponent implements OnInit {
       // Financial — Salary breakdown
       salary:              ['', [Validators.required, Validators.min(0)]],
       housing_allowance:   [null],   // null = use default 25% of basic
-      transport_allowance: [null],   // null = use default SAR 400
+      transport_allowance: [null],   // null = use default 10% of basic
       other_allowances:    [0],
       mobile_allowance:    [0],
       food_allowance:      [0],
@@ -301,8 +301,9 @@ export class EmployeeFormComponent implements OnInit {
   }
 
   get computedTransport(): number {
+    const basic = parseFloat(this.form.get('salary')?.value) || 0;
     const override = this.form.get('transport_allowance')?.value;
-    return override !== null && override !== '' ? parseFloat(override) || 0 : 400;
+    return override !== null && override !== '' ? parseFloat(override) || 0 : Math.round(basic * 0.10 * 100) / 100;
   }
 
   get computedGross(): number {

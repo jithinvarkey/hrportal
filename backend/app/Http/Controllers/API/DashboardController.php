@@ -34,7 +34,7 @@ class DashboardController extends Controller
         $employee = Employee::where('user_id', $user->id)->first();
 
         if ($isGlobal) {
-            return ['type' => 'global', 'employee_ids' => null, 'department_id' => null, 'employee_id' => $employee?->id];
+            return ['type' => 'global', 'employee_ids' => null, 'department_id' => null, 'employee_id' => $employee?->id, 'direct_report_ids' => null];
         }
 
         if (in_array('department_manager', $roles, true) && $employee?->department_id) {
@@ -43,6 +43,7 @@ class DashboardController extends Controller
                 'employee_ids' => Employee::where('department_id', $employee->department_id)->pluck('id')->all(),
                 'department_id' => (int) $employee->department_id,
                 'employee_id' => $employee->id,
+                'direct_report_ids' => Employee::where('manager_id', $employee->id)->pluck('id')->all(),
             ];
         }
 
@@ -51,6 +52,7 @@ class DashboardController extends Controller
             'employee_ids' => $employee ? [$employee->id] : [],
             'department_id' => $employee?->department_id ? (int) $employee->department_id : null,
             'employee_id' => $employee?->id,
+            'direct_report_ids' => [],
         ];
     }
 
@@ -93,7 +95,16 @@ class DashboardController extends Controller
 
         // ── Leave ──────────────────────────────────────────────────────
         $leaveQuery = fn () => $this->applyEmployeeScope(DB::table('leave_requests'), $scope);
-        $pendingLeave  = $safe(fn () => $leaveQuery()->whereIn('status', ['pending', 'manager_approved'])->count());
+        $pendingLeave  = $safe(function () use ($scope, $leaveQuery) {
+            if ($scope['type'] === 'department') {
+                return DB::table('leave_requests')
+                    ->whereIn('employee_id', $scope['direct_report_ids'] ?? [])
+                    ->where('status', 'pending')
+                    ->count();
+            }
+
+            return $leaveQuery()->whereIn('status', ['pending', 'manager_approved'])->count();
+        });
         $approvedLeave = $safe(fn () => $leaveQuery()->where('status', 'approved')->count());
         $rejectedLeave = $safe(fn () => $leaveQuery()->where('status', 'rejected')->count());
         $onLeaveToday  = $safe(fn () => $leaveQuery()
@@ -191,7 +202,12 @@ class DashboardController extends Controller
         }, collect());
         $recentLeaves = $safe(function () use ($scope) {
             $query = $this->applyEmployeeScope(LeaveRequest::with(['employee', 'leaveType'])->latest(), $scope);
-            if ($scope['type'] !== 'personal') $query->whereIn('status', ['pending', 'manager_approved']);
+            if ($scope['type'] === 'department') {
+                $query->whereIn('employee_id', $scope['direct_report_ids'] ?? [])
+                    ->where('status', 'pending');
+            } elseif ($scope['type'] !== 'personal') {
+                $query->whereIn('status', ['pending', 'manager_approved']);
+            }
             if ($scope['type'] === 'global' && auth()->user()->employee) {
                 $query->where('employee_id', '!=', auth()->user()->employee->id);
             }

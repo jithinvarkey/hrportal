@@ -476,8 +476,11 @@
           </td>
         </ng-container>
         <ng-container matColumnDef="allocated">
-          <th mat-header-cell *matHeaderCellDef>Allocated</th>
-          <td mat-cell *matCellDef="let b" class="mono-val">{{ b.allocated_days }}</td>
+          <th mat-header-cell *matHeaderCellDef>Allocated / Earned</th>
+          <td mat-cell *matCellDef="let b" class="mono-val">
+            {{ b.allocated_days }}
+            <span *ngIf="contractYearAllocation(b) !== null">({{ contractYearAllocation(b) | number:'1.0-2' }})</span>
+          </td>
         </ng-container>
         <ng-container matColumnDef="carry_forward">
           <th mat-header-cell *matHeaderCellDef>Carry Forward</th>

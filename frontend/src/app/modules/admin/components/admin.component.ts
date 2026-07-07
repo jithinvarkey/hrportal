@@ -261,7 +261,13 @@ export class AdminComponent implements OnInit {
         }
       },
       error: err => {
-        this.migrationError = this.firstError(err) || 'Migration failed. Please check the file and try again.';
+        this.migrationSummary = err?.error?.summary || null;
+        this.migrationError = err?.status === 502
+          ? 'Server timed out while importing. The file may still be too large for the live web timeout; try Validate Only first, split the CSV into smaller files, or increase the server proxy/PHP timeout.'
+          : this.firstError(err)
+          || err?.error?.message
+          || err?.message
+          || 'Migration failed. Please check the file and try again.';
         this.migrationRunning = false;
       }
     });

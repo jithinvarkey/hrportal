@@ -147,7 +147,7 @@ class LetterController extends Controller
             : round($basic * 0.25, 2);
         $transport = $employee->transport_allowance !== null
             ? (float)$employee->transport_allowance
-            : 400.00;
+            : round($basic * 0.10, 2);
         $gross     = $basic + $housing + $transport
                    + (float)($employee->mobile_allowance ?? 0)
                    + (float)($employee->food_allowance   ?? 0)
