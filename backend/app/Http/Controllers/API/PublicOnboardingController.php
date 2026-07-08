@@ -16,13 +16,13 @@ use Illuminate\Support\Facades\Mail;
 class PublicOnboardingController extends Controller
 {
     private array $documentFields = [
-        'signed_offer_letter' => ['title' => 'Signed Offer Letter', 'type' => 'contract'],
-        'latest_cv' => ['title' => 'Latest CV', 'type' => 'other'],
-        'id_iqama' => ['title' => 'ID / Iqama', 'type' => 'id'],
-        'bank_details' => ['title' => 'Bank Details', 'type' => 'other'],
-        'hdf' => ['title' => 'HDF', 'type' => 'medical'],
-        'experience_certificate' => ['title' => 'Experience Certificate', 'type' => 'certificate'],
-        'passport_document' => ['title' => 'Passport Document', 'type' => 'passport'],
+        'signed_offer_letter' => ['title' => 'Signed Offer Letter', 'type' => 'contract', 'required' => true],
+        'signed_nda' => ['title' => 'Signed NDA', 'type' => 'contract', 'required' => true],
+        'id_iqama' => ['title' => 'Iqama / ID Copy', 'type' => 'id', 'required' => true],
+        'national_address' => ['title' => 'National Address Copy', 'type' => 'other', 'required' => true],
+        'passport_document' => ['title' => 'Passport Copy', 'type' => 'passport', 'required' => false],
+        'experience_letter' => ['title' => 'Experience Letter', 'type' => 'certificate', 'required' => false],
+        'educational_documents' => ['title' => 'Educational Documents', 'type' => 'certificate', 'required' => false],
     ];
 
     public function show(string $token): JsonResponse
@@ -81,13 +81,13 @@ class PublicOnboardingController extends Controller
             'passport_number' => 'nullable|string|max:50',
             'passport_expiry_date' => 'nullable|date',
             'bank_name' => 'required|string|max:100',
-            'bank_account' => 'required|string|max:50',
+            'bank_account' => ['required', 'string', 'max:24', 'regex:/^[SA0-9]+$/i'],
             'emergency_contact_name' => 'required|string|max:100',
             'emergency_contact_phone' => 'required|string|max:30',
         ];
 
-        foreach (array_keys($this->documentFields) as $field) {
-            $rules[$field] = 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,xls,xlsx|max:10240';
+        foreach ($this->documentFields as $field => $meta) {
+            $rules[$field] = ($meta['required'] ? 'required' : 'nullable') . '|file|mimes:pdf,doc,docx,jpg,jpeg,png,xls,xlsx|max:10240';
         }
 
         $data = $request->validate($rules);

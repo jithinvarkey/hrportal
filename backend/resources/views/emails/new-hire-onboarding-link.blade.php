@@ -16,10 +16,10 @@
         </a>
       </p>
       <p style="margin:0 0 18px">
-        The form asks for phone number, date of birth, address, bank details, ID/Iqama details, and optional passport details. You can also upload signed offer letter, latest CV, ID/Iqama, bank details, HDF, experience certificate, and passport document.
+        The form asks for phone number, date of birth, address, bank details, ID/Iqama details, and optional passport details.
       </p>
       <p style="margin:0 0 18px">
-        Your NDA is attached as a PDF document for review and signature.
+        Your prefilled NDA is attached as a PDF document for review and signature. Please upload the signed offer letter, signed NDA, Iqama/ID copy, and national address copy in the form. Passport copy, experience letter, and educational documents are optional.
       </p>
       @if($loginEmail)
         <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border:1px solid #e5e7eb;border-radius:6px">

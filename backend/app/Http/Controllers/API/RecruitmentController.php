@@ -246,7 +246,7 @@ class RecruitmentController extends Controller {
             $app->jobPosting->update(['status' => 'closed']);
         }
 
-        $onboardingUrl = $this->onboardingLinks->createAndEmailLink(
+        $onboarding = $this->onboardingLinks->createAndEmailLink(
             $result['employee'],
             $result['login_email'] ?? null,
             $result['temp_password'] ?? null
@@ -260,7 +260,14 @@ class RecruitmentController extends Controller {
             'temp_password'    => $result['temp_password'],
             'is_new_account'   => $result['is_new'],
             'onboarding_tasks' => $result['onboarding_tasks'],
-            'onboarding_url'   => $onboardingUrl,
+            'onboarding_url'   => $onboarding['url'] ?? null,
+            'onboarding_email' => [
+                'sent' => (bool) ($onboarding['email_sent'] ?? false),
+                'to' => $onboarding['email_to'] ?? null,
+                'cc' => $onboarding['email_cc'] ?? [],
+                'attachments' => collect($onboarding['attachments'] ?? [])->pluck('path')->values(),
+                'error' => $onboarding['error'] ?? null,
+            ],
         ], 201);
     }
 

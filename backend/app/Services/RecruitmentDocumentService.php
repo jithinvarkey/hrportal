@@ -8,6 +8,7 @@ use App\Models\JobApplication;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use setasign\Fpdi\Fpdi;
 
 class RecruitmentDocumentService
 {
@@ -31,14 +32,18 @@ class RecruitmentDocumentService
         $id = $subject instanceof Employee ? "employee-{$subject->id}" : "application-{$subject->id}";
         $path = "recruitment/nda/{$id}-nda.pdf";
 
-        $this->putPdf($path, 'recruitment.documents.nda', $payload);
+        if (is_file($this->ndaTemplatePath())) {
+            $this->putPrefilledNdaPdf($path, $payload);
+        } else {
+            $this->putPdf($path, 'recruitment.documents.nda', $payload);
+        }
 
         return $this->documentMeta($path, 'NDA.pdf');
     }
 
     public function generateJoiningDateForm(Employee $employee, array $data = []): array
     {
-        $employee->loadMissing(['department', 'designation']);
+        $employee->loadMissing(['department', 'designation', 'manager']);
         $payload = $this->payloadForEmployee($employee, $data);
         $path = "employees/{$employee->id}/documents/joining-date-form.pdf";
 
@@ -80,6 +85,52 @@ class RecruitmentDocumentService
         Storage::put($path, $pdf->output());
     }
 
+    private function putPrefilledNdaPdf(string $path, array $payload): void
+    {
+        $pdf = new Fpdi();
+        $pageCount = $pdf->setSourceFile($this->ndaTemplatePath());
+
+        for ($pageNumber = 1; $pageNumber <= $pageCount; $pageNumber++) {
+            $templateId = $pdf->importPage($pageNumber);
+            $size = $pdf->getTemplateSize($templateId);
+            $orientation = $size['width'] > $size['height'] ? 'L' : 'P';
+
+            $pdf->AddPage($orientation, [$size['width'], $size['height']]);
+            $pdf->useTemplate($templateId);
+
+            if ($pageNumber === 1) {
+                $this->stampNdaEmployeeDetails($pdf, $payload);
+            }
+        }
+
+        Storage::put($path, $pdf->Output('S'));
+    }
+
+    private function stampNdaEmployeeDetails(Fpdi $pdf, array $payload): void
+    {
+        $pdf->SetFont('Arial', 'B', 9);
+        $pdf->SetTextColor(0, 0, 0);
+
+        $name = trim((string) ($payload['name'] ?? ''));
+        $idNumber = trim((string) ($payload['national_id'] ?? ''));
+
+        if ($name !== '') {
+            $pdf->SetXY(68, 218);
+            $pdf->Cell(82, 5, $this->fpdfText($name), 0, 0, 'L');
+        }
+
+        if ($idNumber !== '') {
+            $pdf->SetXY(68, 236);
+            $pdf->Cell(82, 5, $this->fpdfText($idNumber), 0, 0, 'L');
+        }
+    }
+
+    private function fpdfText(string $value): string
+    {
+        $converted = @iconv('UTF-8', 'windows-1252//TRANSLIT//IGNORE', $value);
+        return $converted !== false ? $converted : preg_replace('/[^\x20-\x7E]/', '', $value);
+    }
+
     private function documentMeta(string $path, string $name): array
     {
         return [
@@ -118,8 +169,11 @@ class RecruitmentDocumentService
             'name' => $employee->full_name,
             'email' => $employee->email,
             'phone' => $employee->phone,
-            'position' => $employee->designation?->title,
-            'department' => $employee->department?->name,
+            'national_id' => $data['national_id'] ?? $employee->national_id,
+            'position' => $data['position'] ?? $employee->designation?->title,
+            'department' => $data['department'] ?? $employee->department?->name,
+            'nationality' => $data['nationality'] ?? $employee->nationality,
+            'manager_name' => $data['manager_name'] ?? $employee->manager?->full_name,
             'joining_date' => $data['joining_date'] ?? $data['hire_date'] ?? $employee->hire_date?->format('Y-m-d'),
             'salary' => $salary,
             'basic_salary' => $data['basic_salary'] ?? $salary,
@@ -146,10 +200,13 @@ class RecruitmentDocumentService
             'gross_salary' => $basic + $housing + $transport + $other,
             'logo' => $this->assetDataUri('diamond-logo.png'),
             'seal' => $this->assetDataUri('companyseal.jpg'),
-            'signature' => $this->assetDataUri('badrsign.png'),
+            'signature' => $this->assetDataUri('md_sign.png'),
+            'arabic_font_regular' => $this->fontDataUri('traditional-arabic.ttf'),
+            'arabic_font_bold' => $this->fontDataUri('traditional-arabic-bold.ttf'),
+            'ar' => fn (string $text): string => $this->shapeArabicForPdf($text),
             'contract_period' => $data['contract_period'] ?? 'Limited duration',
             'probation_period' => $data['probation_period'] ?? '3 months Renewable',
-            'annual_vacation' => $data['annual_vacation'] ?? 'As per company policy',
+            'annual_vacation' => $data['annual_vacation'] ?? '22 working days',
             'city_of_origin' => $data['city_of_origin'] ?? 'Riyadh',
             'medical_insurance' => $data['medical_insurance'] ?? 'As per company policy',
             'reference' => 'HR-' . now()->format('Ymd') . '-' . Str::upper(Str::random(5)),
@@ -166,4 +223,98 @@ class RecruitmentDocumentService
         $mime = str_ends_with(strtolower($filename), '.png') ? 'image/png' : 'image/jpeg';
         return "data:{$mime};base64," . base64_encode((string) file_get_contents($path));
     }
+
+    private function fontDataUri(string $filename): ?string
+    {
+        $path = resource_path("fonts/{$filename}");
+        if (!is_file($path)) {
+            return null;
+        }
+
+        return 'data:font/truetype;base64,' . base64_encode((string) file_get_contents($path));
+    }
+
+    private function ndaTemplatePath(): string
+    {
+        return resource_path('hr-templates/assets/nda-template.pdf');
+    }
+
+    private function shapeArabicForPdf(string $text): string
+    {
+        $forms = $this->arabicForms();
+        $chars = preg_split('//u', $text, -1, PREG_SPLIT_NO_EMPTY);
+        $shaped = [];
+
+        foreach ($chars as $index => $char) {
+            $code = mb_ord($char, 'UTF-8');
+            if (!isset($forms[$code])) {
+                $shaped[] = $char;
+                continue;
+            }
+
+            [$isolated, $final, $initial, $medial] = $forms[$code];
+            $previous = $index > 0 ? mb_ord($chars[$index - 1], 'UTF-8') : null;
+            $next = $index + 1 < count($chars) ? mb_ord($chars[$index + 1], 'UTF-8') : null;
+            $joinsPrevious = $previous !== null && isset($forms[$previous])
+                && $forms[$previous][2] !== null && $final !== null;
+            $joinsNext = $next !== null && isset($forms[$next])
+                && $initial !== null && $forms[$next][1] !== null;
+
+            $shaped[] = match (true) {
+                $joinsPrevious && $joinsNext && $medial !== null => $medial,
+                $joinsPrevious && $final !== null => $final,
+                $joinsNext && $initial !== null => $initial,
+                default => $isolated,
+            };
+        }
+
+        $runs = preg_split(
+            '/([\x{0600}-\x{06FF}\x{0750}-\x{077F}\x{08A0}-\x{08FF}\x{FB50}-\x{FDFF}\x{FE70}-\x{FEFF}]+)/u',
+            implode('', $shaped),
+            -1,
+            PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY,
+        );
+
+        return implode('', array_map(function (string $run): string {
+            return preg_match('/[\x{0600}-\x{06FF}\x{FB50}-\x{FDFF}\x{FE70}-\x{FEFF}]/u', $run)
+                ? implode('', array_reverse(preg_split('//u', $run, -1, PREG_SPLIT_NO_EMPTY)))
+                : $run;
+        }, array_reverse($runs)));
+    }
+
+    /** @return array<int, array{string, ?string, ?string, ?string}> */
+    private function arabicForms(): array
+    {
+        $hex = fn (string $value): string => mb_chr(hexdec($value), 'UTF-8');
+        $rows = [
+            0x0621 => ['FE80', null, null, null], 0x0622 => ['FE81', 'FE82', null, null],
+            0x0623 => ['FE83', 'FE84', null, null], 0x0624 => ['FE85', 'FE86', null, null],
+            0x0625 => ['FE87', 'FE88', null, null], 0x0626 => ['FE89', 'FE8A', 'FE8B', 'FE8C'],
+            0x0627 => ['FE8D', 'FE8E', null, null], 0x0628 => ['FE8F', 'FE90', 'FE91', 'FE92'],
+            0x0629 => ['FE93', 'FE94', null, null], 0x062A => ['FE95', 'FE96', 'FE97', 'FE98'],
+            0x062B => ['FE99', 'FE9A', 'FE9B', 'FE9C'], 0x062C => ['FE9D', 'FE9E', 'FE9F', 'FEA0'],
+            0x062D => ['FEA1', 'FEA2', 'FEA3', 'FEA4'], 0x062E => ['FEA5', 'FEA6', 'FEA7', 'FEA8'],
+            0x062F => ['FEA9', 'FEAA', null, null], 0x0630 => ['FEAB', 'FEAC', null, null],
+            0x0631 => ['FEAD', 'FEAE', null, null], 0x0632 => ['FEAF', 'FEB0', null, null],
+            0x0633 => ['FEB1', 'FEB2', 'FEB3', 'FEB4'], 0x0634 => ['FEB5', 'FEB6', 'FEB7', 'FEB8'],
+            0x0635 => ['FEB9', 'FEBA', 'FEBB', 'FEBC'], 0x0636 => ['FEBD', 'FEBE', 'FEBF', 'FEC0'],
+            0x0637 => ['FEC1', 'FEC2', 'FEC3', 'FEC4'], 0x0638 => ['FEC5', 'FEC6', 'FEC7', 'FEC8'],
+            0x0639 => ['FEC9', 'FECA', 'FECB', 'FECC'], 0x063A => ['FECD', 'FECE', 'FECF', 'FED0'],
+            0x0641 => ['FED1', 'FED2', 'FED3', 'FED4'], 0x0642 => ['FED5', 'FED6', 'FED7', 'FED8'],
+            0x0643 => ['FED9', 'FEDA', 'FEDB', 'FEDC'], 0x0644 => ['FEDD', 'FEDE', 'FEDF', 'FEE0'],
+            0x0645 => ['FEE1', 'FEE2', 'FEE3', 'FEE4'], 0x0646 => ['FEE5', 'FEE6', 'FEE7', 'FEE8'],
+            0x0647 => ['FEE9', 'FEEA', 'FEEB', 'FEEC'], 0x0648 => ['FEED', 'FEEE', null, null],
+            0x0649 => ['FEEF', 'FEF0', null, null], 0x064A => ['FEF1', 'FEF2', 'FEF3', 'FEF4'],
+            0x0671 => ['FB50', 'FB51', null, null], 0x067E => ['FB56', 'FB57', 'FB58', 'FB59'],
+            0x0686 => ['FB7A', 'FB7B', 'FB7C', 'FB7D'], 0x0698 => ['FB8A', 'FB8B', null, null],
+            0x06A4 => ['FB6A', 'FB6B', 'FB6C', 'FB6D'], 0x06A9 => ['FB8E', 'FB8F', 'FB90', 'FB91'],
+            0x06AF => ['FB92', 'FB93', 'FB94', 'FB95'], 0x06CC => ['FBFC', 'FBFD', 'FBFE', 'FBFF'],
+        ];
+
+        return array_map(fn (array $row): array => array_map(
+            fn ($form) => $form === null ? null : $hex($form),
+            $row,
+        ), $rows);
+    }
+
 }
