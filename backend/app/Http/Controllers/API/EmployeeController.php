@@ -324,9 +324,8 @@ class EmployeeController extends Controller {
 
     public function leaveBalances(Request $request, int $id): JsonResponse {
         $employee = Employee::findOrFail($id);
-        $authEmployeeId = (int) auth()->user()?->employee?->id;
 
-        if (!$this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff']) && $authEmployeeId !== $employee->id) {
+        if (!$this->canViewEmployeeLeaveBalances($employee)) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -402,6 +401,28 @@ class EmployeeController extends Controller {
         }
 
         return array_reverse($periods);
+    }
+
+    private function canViewEmployeeLeaveBalances(Employee $employee): bool {
+        if ($this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff'])) {
+            return true;
+        }
+
+        $authEmployee = auth()->user()?->employee;
+        if (!$authEmployee) {
+            return false;
+        }
+
+        if ((int) $authEmployee->id === (int) $employee->id) {
+            return true;
+        }
+
+        if ((int) $employee->manager_id === (int) $authEmployee->id) {
+            return true;
+        }
+
+        return $this->hasAnyRoleDB(['department_manager'])
+            && (int) $authEmployee->department_id === (int) $employee->department_id;
     }
 
     public function dependents(int $id): JsonResponse {

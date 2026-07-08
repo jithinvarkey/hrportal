@@ -1,26 +1,130 @@
 <?php
 namespace App\Services;
 
+use App\Mail\InterviewInviteMail;
+use App\Mail\RecruitmentOfferMail;
 use App\Models\JobApplication;
 use App\Models\Employee;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Collection;
 use Carbon\Carbon;
 
 class RecruitmentService
 {
-    public function __construct() {}
+    public function __construct(private RecruitmentDocumentService $documents) {}
 
-    public function sendInterviewInvite($interview): void
+    public function sendInterviewInvite($interview, Collection $interviewers): void
     {
-        // Mail::to($interview->application->applicant_email)->send(new InterviewInviteMail($interview));
+        $interview->loadMissing('application.jobPosting');
+        $email = $interview->application?->applicant_email;
+        $interviewerEmails = $interviewers
+            ->pluck('email')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if (!$email) {
+            Log::warning('Interview invite email skipped: applicant email missing.', [
+                'interview_id' => $interview->id,
+                'application_id' => $interview->application_id,
+            ]);
+            return;
+        }
+
+        if (empty($interviewerEmails)) {
+            Log::warning('Interview invite has no interviewer email recipients.', [
+                'interview_id' => $interview->id,
+                'application_id' => $interview->application_id,
+            ]);
+        }
+
+        $recipients = array_values(array_unique(array_filter(array_merge([$email], $interviewerEmails))));
+        $testEmail = config('mail.test_email');
+        $mail = Mail::to($recipients);
+
+        if ($testEmail && !in_array($testEmail, $recipients, true)) {
+            $mail->cc($testEmail);
+        }
+
+        $mail->send(new InterviewInviteMail($interview, $interviewers));
     }
 
     public function generateOfferLetter(JobApplication $app, array $data): array
     {
-        // PDF generation placeholder - implement view when ready
-        $path = "recruitment/offers/{$app->id}_offer.pdf";
-        return ['pdf_path' => $path, 'salary' => $data['offered_salary'] ?? null];
+        $app->loadMissing(['jobPosting.department', 'jobPosting.designation']);
+        $offer = $this->documents->generateOfferPdf($app, $data);
+
+        $mail = Mail::to($app->applicant_email);
+        $testEmail = config('mail.test_email');
+        $ccEmails = $this->offerCcEmails($app->applicant_email, $testEmail);
+
+        if (!empty($ccEmails)) {
+            $mail->cc($ccEmails);
+        }
+
+        try {
+            Log::info('Recruitment offer email sending.', [
+                'application_id' => $app->id,
+                'to' => $app->applicant_email,
+                'cc' => $ccEmails,
+                'offer_path' => $offer['path'] ?? null,
+            ]);
+
+            $mail->send(new RecruitmentOfferMail($app, [$offer]));
+
+            Log::info('Recruitment offer email sent.', [
+                'application_id' => $app->id,
+                'to' => $app->applicant_email,
+                'cc' => $ccEmails,
+                'offer_path' => $offer['path'] ?? null,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Recruitment offer email failed.', [
+                'application_id' => $app->id,
+                'to' => $app->applicant_email,
+                'cc' => $ccEmails,
+                'offer_path' => $offer['path'] ?? null,
+                'error' => $e->getMessage(),
+            ]);
+
+            throw ValidationException::withMessages([
+                'email' => 'Offer letter generated, but email sending failed: ' . $e->getMessage(),
+            ]);
+        }
+
+        $gross = (float) ($data['basic_salary'] ?? 0)
+            + (float) ($data['housing_allowance'] ?? 0)
+            + (float) ($data['transport_allowance'] ?? 0)
+            + (float) ($data['other_allowance'] ?? 0);
+
+        return [
+            'pdf_path' => $offer['path'],
+            'basic_salary' => $data['basic_salary'] ?? null,
+            'gross_salary' => $gross,
+            'cc' => $ccEmails,
+        ];
+    }
+
+    private function offerCcEmails(?string $applicantEmail, ?string $testEmail): array
+    {
+        $hrManagerEmails = User::whereHas('roles', fn ($query) => $query->where('name', 'hr_manager'))
+            ->pluck('email')
+            ->filter()
+            ->all();
+
+        return collect($hrManagerEmails)
+            ->push($testEmail)
+            ->filter()
+            ->map(fn ($email) => strtolower(trim((string) $email)))
+            ->reject(fn ($email) => $applicantEmail && $email === strtolower(trim($applicantEmail)))
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**
@@ -69,6 +173,8 @@ class RecruitmentService
         $departmentId = $data['department_id'] ?? $app->jobPosting?->department_id;
         $unitId = $data['unit_id'] ?? null;
 
+        $basicSalary = (float) ($data['salary'] ?? 0);
+
         $employee = Employee::create([
             'user_id'          => $user->id,
             'first_name'       => $firstName,
@@ -77,7 +183,10 @@ class RecruitmentService
             'phone'            => $app->applicant_phone,
             'hire_date'        => $data['hire_date']        ?? now()->toDateString(),
             'employment_type'  => $data['employment_type']  ?? $app->jobPosting?->employment_type ?? 'full_time',
-            'salary'           => $data['salary']           ?? 0,
+            'salary'           => $basicSalary,
+            'housing_allowance'=> round($basicSalary * 0.25, 2),
+            'transport_allowance'=> round($basicSalary * 0.10, 2),
+            'other_allowances' => 0,
             'department_id'    => $departmentId,
             'unit_id'          => $unitId,
             'designation_id'   => $data['designation_id']   ?? $app->jobPosting?->designation_id,
@@ -89,6 +198,7 @@ class RecruitmentService
 
         $this->createDefaultLeaveAllocations($employee);
         $onboardingTasks = $this->createOnboardingTasks($employee, $data);
+        $this->documents->storeJoiningDateFormDocument($employee, $data);
 
         return [
             'employee'         => $employee->load('department','designation'),
@@ -152,12 +262,24 @@ class RecruitmentService
         return $tasks;
     }
 
-    /** Generate next employee code e.g. EMP0042 */
+    /** Generate next employee number without the legacy EMP prefix. */
     private function generateEmployeeCode(): string
     {
-        $last = \App\Models\Employee::withTrashed()->orderBy('id', 'desc')->first();
-        $next = $last ? intval(substr($last->employee_code, 3)) + 1 : 1;
-        return 'EMP' . str_pad((string)$next, 4, '0', STR_PAD_LEFT);
+        $max = \App\Models\Employee::withTrashed()
+            ->pluck('employee_code')
+            ->map(fn ($code) => $this->employeeCodeNumber($code))
+            ->max();
+
+        return (string) (((int) $max) + 1);
+    }
+
+    private function employeeCodeNumber(mixed $code): int
+    {
+        $value = strtoupper(trim((string) $code));
+        $value = preg_replace('/^EMP/i', '', $value) ?? '';
+        $digits = preg_replace('/\D+/', '', $value) ?? '';
+
+        return $digits === '' ? 0 : (int) ltrim($digits, '0');
     }
 
     /** Create annual leave allocations for all active leave types */

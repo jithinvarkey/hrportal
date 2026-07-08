@@ -270,9 +270,10 @@
         <!-- Transport Allowance -->
         <div class="field-group">
           <label class="field-label">Transport Allowance (SAR)</label>
-          <input class="field-input" formControlName="transport_allowance" type="number" placeholder="Leave blank for default (SAR 400)">
+          <input class="field-input" formControlName="transport_allowance" type="number" placeholder="Leave blank for default (10% of basic)">
           <span class="field-hint">
-            Default: <strong>SAR 400.00</strong>. Enter a fixed amount to override.
+            Default: <strong>SAR {{ computedTransport | number:'1.2-2' }}</strong>
+            (10% of basic). Enter a fixed amount to override.
           </span>
         </div>
 

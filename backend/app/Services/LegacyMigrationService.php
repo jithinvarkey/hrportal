@@ -24,6 +24,7 @@ class LegacyMigrationService
     private const MODULE_ORDER = ['departments', 'job_positions', 'employees', 'employee_managers', 'leave_records', 'loan_records'];
     private array $departmentAliases = [];
     private array $unitAliases = [];
+    private ?string $skipReason = null;
 
     public function migrate(UploadedFile $file, string $scope = 'all', bool $dryRun = false): array
     {
@@ -46,13 +47,24 @@ class LegacyMigrationService
                 'skipped' => 0,
                 'failed' => 0,
                 'errors' => [],
+                'skipped_rows' => [],
             ];
 
             foreach ($rows as $index => $row) {
+                if ($index % 100 === 0) {
+                    @set_time_limit(120);
+                }
+
                 $line = $row['_line'] ?? ($index + 2);
+                $this->skipReason = null;
                 try {
                     if ($this->rowIsEmpty($row)) {
                         $moduleSummary['skipped']++;
+                        $moduleSummary['skipped_rows'][] = [
+                            'row' => $line,
+                            'message' => 'Empty row.',
+                            'data' => $this->publicRow($row),
+                        ];
                         continue;
                     }
 
@@ -68,6 +80,18 @@ class LegacyMigrationService
 
                     if ($result === 'skipped') {
                         $moduleSummary['skipped']++;
+                        $skippedRow = [
+                            'row' => $line,
+                            'message' => $this->skipReason ?: 'Skipped because no migration change was needed.',
+                            'data' => $this->publicRow($row),
+                        ];
+                        $moduleSummary['skipped_rows'][] = $skippedRow;
+                        Log::warning('Legacy migration row skipped.', [
+                            'module' => $module,
+                            'row' => $line,
+                            'reason' => $skippedRow['message'],
+                            'data' => $skippedRow['data'],
+                        ]);
                     } else {
                         $moduleSummary['success']++;
                     }
@@ -521,7 +545,22 @@ class LegacyMigrationService
     private function leaveRecord(array $row): string
     {
         $row = $this->normalizeLegacyAliases($row);
-        $employee = $this->employeeByCode($row['employee_code']);
+        $employeeCode = $this->cleanLegacyValue($row['employee_code'] ?? null);
+        $employeeEmail = $this->cleanLegacyValue($row['email'] ?? null);
+        $employee = $this->employeeByCodeOrEmail($employeeCode, $employeeEmail);
+        if (!$employee) {
+            $identifier = $employeeEmail ? "{$employeeCode} / {$employeeEmail}" : $employeeCode;
+            $this->skipReason = "Employee not found for code/email [{$identifier}].";
+            Log::warning('Legacy leave record skipped: employee not found.', [
+                'employee_code' => $employeeCode,
+                'employee_email' => $employeeEmail,
+                'leave_type' => $this->cleanLegacyValue($row['leave_type'] ?? null),
+                'start_date' => $this->cleanLegacyValue($row['start_date'] ?? null),
+            ]);
+
+            return 'skipped';
+        }
+
         $leaveType = $this->findOrCreateLeaveType($row['leave_type']);
         $startDate = $this->legacyDate($row['start_date'] ?? null);
         $endDate = $this->legacyDate($row['end_date'] ?? null);
@@ -597,7 +636,21 @@ class LegacyMigrationService
     private function loanRecord(array $row): string
     {
         $row = $this->normalizeLegacyAliases($row);
-        $employee = $this->employeeByCode($row['employee_code']);
+        $employee = $this->employeeByCodeOrEmail($row['employee_code'] ?? null, $row['email'] ?? null);
+        if (!$employee) {
+            $employeeCode = $this->cleanLegacyValue($row['employee_code'] ?? null);
+            $employeeEmail = $this->cleanLegacyValue($row['email'] ?? null);
+            $identifier = $employeeEmail ? "{$employeeCode} / {$employeeEmail}" : $employeeCode;
+            $this->skipReason = "Employee not found for code/email [{$identifier}].";
+            Log::warning('Legacy loan record skipped: employee not found.', [
+                'employee_code' => $employeeCode,
+                'employee_email' => $employeeEmail,
+                'loan_type' => $this->cleanLegacyValue($row['loan_type'] ?? null),
+                'loan_id' => $this->cleanLegacyValue($row['loan_id'] ?? null),
+            ]);
+
+            return 'skipped';
+        }
         $amount = $this->nullableDecimal($row['amount']) ?? 0;
         $installments = max(1, (int) ($row['installments'] ?? $row['installmentnumber'] ?? 1));
         $emiAmount = $this->nullableDecimal($row['emi_amount'] ?? null);
@@ -973,6 +1026,26 @@ class LegacyMigrationService
 
     private function employeeByCode(string $code): Employee
     {
+        $employee = $this->employeeByCodeOrNull($code);
+        if ($employee) {
+            return $employee;
+        }
+
+        throw new \InvalidArgumentException("Employee not found for code/email [{$code}].");
+    }
+
+    private function employeeByCodeOrEmail(?string $code, ?string $email): ?Employee
+    {
+        return $this->employeeByCodeOrNull($code) ?: $this->employeeByCodeOrNull($email);
+    }
+
+    private function employeeByCodeOrNull(?string $code): ?Employee
+    {
+        $code = $this->cleanLegacyValue($code);
+        if (!$code) {
+            return null;
+        }
+
         $formattedCode = $this->employeeCode($code);
 
         return Employee::where(function ($query) use ($code, $formattedCode) {
@@ -980,7 +1053,7 @@ class LegacyMigrationService
                     ->orWhere('employee_code', $code)
                     ->orWhere('email', $code);
             })
-            ->firstOrFail();
+            ->first();
     }
 
     private function findEmployeeForManagerMigration(?string $code, ?string $email, string $label, ?string $name = null, bool $allowMissing = false): ?Employee

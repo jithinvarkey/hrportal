@@ -2,30 +2,26 @@
 
 namespace App\Mail;
 
-use App\Models\Employee;
+use App\Models\JobApplication;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
 
-class NewHireOnboardingLinkMail extends Mailable
+class RecruitmentOfferMail extends Mailable
 {
     use Queueable, SerializesModels;
 
     public function __construct(
-        public Employee $employee,
-        public string $onboardingUrl,
-        public ?string $loginEmail = null,
-        public ?string $tempPassword = null,
-        public ?string $expiresAt = null,
+        public JobApplication $application,
         public array $attachmentsMeta = [],
     ) {
     }
 
     public function build(): self
     {
-        $mail = $this->subject('Complete your employee onboarding details')
-            ->view('emails.new-hire-onboarding-link');
+        $mail = $this->subject('Job Offer - Diamond Insurance Broker')
+            ->view('emails.recruitment-offer');
 
         foreach ($this->attachmentsMeta as $attachment) {
             $path = $attachment['path'] ?? null;

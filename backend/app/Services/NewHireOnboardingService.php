@@ -11,6 +11,10 @@ use Illuminate\Support\Str;
 
 class NewHireOnboardingService
 {
+    public function __construct(private RecruitmentDocumentService $documents)
+    {
+    }
+
     public function createAndEmailLink(Employee $employee, ?string $loginEmail = null, ?string $tempPassword = null): ?string
     {
         $rawToken = Str::random(64);
@@ -23,20 +27,19 @@ class NewHireOnboardingService
             'created_by' => auth()->id(),
         ]);
 
-        $frontendUrl = (string) config('app.frontend_url');
-        if (!$frontendUrl || $frontendUrl === (string) config('app.url')) {
-            $frontendUrl = env('FRONTEND_URL', 'http://127.0.0.1:4200');
-        }
+        $frontendUrl = (string) config('app.frontend_url', config('app.url'));
 
         $url = rtrim($frontendUrl, '/') . '/public/onboarding/' . $rawToken;
 
         try {
+            $attachments = $this->documents->onboardingAttachments($employee);
             Mail::to($employee->email)->send(new NewHireOnboardingLinkMail(
                 $employee,
                 $url,
                 $loginEmail,
                 $tempPassword,
-                $expiresAt->format('d M Y h:i A')
+                $expiresAt->format('d M Y h:i A'),
+                $attachments
             ));
         } catch (\Throwable $e) {
             Log::warning('New hire onboarding email failed.', [

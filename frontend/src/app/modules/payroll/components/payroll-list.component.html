@@ -108,7 +108,7 @@
     <button class="row-btn" (click)="showRunForm=false"><mat-icon>close</mat-icon></button>
   </div>
   <div class="modal-body">
-    <div class="info-note"><mat-icon>info_outline</mat-icon> Calculates Basic + Housing (25%) + Transport (SAR 400) + GOSI for all active employees.</div>
+    <div class="info-note"><mat-icon>info_outline</mat-icon> Calculates Basic + Housing (25%) + Transport (10%) + GOSI for all active employees.</div>
     <div class="field-group">
       <label class="field-label">Payroll Month <span class="req">*</span></label>
       <input class="field-input" type="month" [(ngModel)]="runForm.month">
@@ -328,7 +328,7 @@
           <span class="earn-amt">{{ fmtSAR(selectedSlip.housing_allowance) }}</span>
         </div>
         <div class="bs-row">
-          <span>Transport Allowance <small>(SAR 400 / month)</small></span>
+          <span>Transport Allowance <small>(10% of basic)</small></span>
           <span class="earn-amt">{{ fmtSAR(selectedSlip.transport_allowance) }}</span>
         </div>
         <div class="bs-row" *ngIf="selectedSlip.other_allowances > 0">

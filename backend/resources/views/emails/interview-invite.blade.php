@@ -42,28 +42,40 @@
       <tr style="background:#f9fafb">
         <td style="padding:10px 16px;font-size:12px;color:#6b7280;font-weight:bold;text-transform:uppercase;border-top:1px solid #e5e7eb">Type</td>
         <td style="padding:10px 16px;font-size:13px;color:#1a1a2e;border-top:1px solid #e5e7eb">
-          {{ ucfirst(str_replace('_',' ', $interview->type ?? 'In-person')) }}
+          {{ $interview->format === 'in_person' ? 'Face to Face' : ucfirst(str_replace('_',' ', $interview->format ?? 'in_person')) }}
         </td>
       </tr>
-      @if($interview->location)
+      @if($interview->location_or_link)
       <tr>
-        <td style="padding:10px 16px;font-size:12px;color:#6b7280;font-weight:bold;text-transform:uppercase;border-top:1px solid #e5e7eb">Location</td>
-        <td style="padding:10px 16px;font-size:13px;color:#1a1a2e;border-top:1px solid #e5e7eb">{{ $interview->location }}</td>
+        <td style="padding:10px 16px;font-size:12px;color:#6b7280;font-weight:bold;text-transform:uppercase;border-top:1px solid #e5e7eb">
+          {{ $interview->format === 'in_person' ? 'Interview Location' : 'Meeting Details' }}
+        </td>
+        <td style="padding:10px 16px;font-size:13px;color:#1a1a2e;border-top:1px solid #e5e7eb">
+          @if(str_starts_with((string) $interview->location_or_link, 'http'))
+            <a href="{{ $interview->location_or_link }}" style="color:#3b82f6">{{ $interview->location_or_link }}</a>
+          @else
+            {{ $interview->location_or_link }}
+          @endif
+        </td>
       </tr>
       @endif
-      @if($interview->meeting_link)
+      @if($interview->duration_minutes)
       <tr style="background:#f9fafb">
-        <td style="padding:10px 16px;font-size:12px;color:#6b7280;font-weight:bold;text-transform:uppercase;border-top:1px solid #e5e7eb">Meeting Link</td>
-        <td style="padding:10px 16px;font-size:13px;border-top:1px solid #e5e7eb">
-          <a href="{{ $interview->meeting_link }}" style="color:#3b82f6">{{ $interview->meeting_link }}</a>
-        </td>
+        <td style="padding:10px 16px;font-size:12px;color:#6b7280;font-weight:bold;text-transform:uppercase;border-top:1px solid #e5e7eb">Duration</td>
+        <td style="padding:10px 16px;font-size:13px;color:#1a1a2e;border-top:1px solid #e5e7eb">{{ $interview->duration_minutes }} minutes</td>
+      </tr>
+      @endif
+      @if(!empty($interview->interviewers))
+      <tr>
+        <td style="padding:10px 16px;font-size:12px;color:#6b7280;font-weight:bold;text-transform:uppercase;border-top:1px solid #e5e7eb">Interviewers</td>
+        <td style="padding:10px 16px;font-size:13px;color:#1a1a2e;border-top:1px solid #e5e7eb">{{ implode(', ', (array) $interview->interviewers) }}</td>
       </tr>
       @endif
     </table>
 
-    @if($interview->notes)
+    @if($interview->feedback)
     <div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:12px 16px;margin-bottom:20px;border-radius:0 8px 8px 0">
-      <p style="margin:0;font-size:13px;color:#374151"><strong>Notes from HR:</strong> {{ $interview->notes }}</p>
+      <p style="margin:0;font-size:13px;color:#374151"><strong>Notes from HR:</strong> {{ $interview->feedback }}</p>
     </div>
     @endif
 

@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { AuthService } from '../../../core/services/auth.service';
 
 @Component({
   standalone: false,
@@ -22,6 +23,13 @@ export class SeparationListComponent implements OnInit {
   statItems:    any[] = [];
   pagination:   any   = null;
   currentPage         = 1;
+  isHR = false;
+  isHRManager = false;
+  isFinanceManager = false;
+  isDeptManager = false;
+  isSuperAdmin = false;
+  isApprover = false;
+  currentEmployeeId: any = null;
 
   // ── Filters ──────────────────────────────────────────────────────────────
   filterSearch = '';
@@ -65,13 +73,14 @@ export class SeparationListComponent implements OnInit {
   displayedColumns = ['ref','employee','type','last_working_day','notice','status','actions'];
   templateColumns  = ['title','category','required','actions'];
 
-  tabs = [
+  allTabs = [
     { id:'all',       label:'All',          icon:'list_alt'     },
     { id:'pending',   label:'Pending',      icon:'hourglass_empty' },
     { id:'offboarding',label:'Offboarding', icon:'checklist'    },
     { id:'completed', label:'Completed',    icon:'task_alt'     },
     { id:'templates', label:'Checklist Setup', icon:'tune'      },
   ];
+  tabs = [...this.allTabs];
 
   statusTabs = [
     { id:'',               label:'All'              },
@@ -84,7 +93,7 @@ export class SeparationListComponent implements OnInit {
     { id:'cancelled',      label:'Cancelled'        },
   ];
 
-  separationTypes = [
+  allSeparationTypes = [
     { id:'resignation',      label:'Resignation',       icon:'exit_to_app',     color:'#f59e0b' },
     { id:'termination',      label:'Termination',       icon:'block',           color:'#ef4444' },
     { id:'end_of_contract',  label:'End of Contract',   icon:'event_busy',      color:'#6366f1' },
@@ -92,6 +101,7 @@ export class SeparationListComponent implements OnInit {
     { id:'abandonment',      label:'Abandonment',       icon:'person_off',      color:'#8b5cf6' },
     { id:'mutual_agreement', label:'Mutual Agreement',  icon:'handshake',       color:'#0ea5e9' },
   ];
+  separationTypes = [...this.allSeparationTypes];
 
   reasonCategories = [
     { id:'personal',          label:'Personal Reasons'     },
@@ -107,13 +117,25 @@ export class SeparationListComponent implements OnInit {
 
   checklistCategories = ['it','hr','finance','admin','general'];
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private auth: AuthService) {}
 
   ngOnInit() {
+    const user = this.auth.getUser();
+    this.currentEmployeeId = user?.employee?.id || user?.employee_id || null;
+    this.isHR = this.auth.isHRRole() || this.auth.isSuperAdmin();
+    this.isHRManager = this.auth.isHRManager() || this.auth.isSuperAdmin() || this.auth.hasRole('ceo');
+    this.isFinanceManager = this.auth.isFinanceManager();
+    this.isDeptManager = this.auth.isDeptManager();
+    this.isSuperAdmin = this.auth.isSuperAdmin() || this.auth.hasRole('ceo');
+    this.isApprover = this.isDeptManager || this.isHRManager || this.isFinanceManager || this.isSuperAdmin;
+    this.tabs = this.isApprover
+      ? [...this.allTabs]
+      : this.allTabs.filter(t => t.id === 'all');
+    this.separationTypes = this.isHR ? [...this.allSeparationTypes] : this.allSeparationTypes.filter(t => t.id === 'resignation');
     this.loadStats();
     this.load();
     this.loadEmployees();
-    this.loadTemplates();
+    if (this.isApprover) this.loadTemplates();
   }
 
   loadStats() {
@@ -144,6 +166,15 @@ export class SeparationListComponent implements OnInit {
   }
 
   loadEmployees() {
+    if (!this.isHR) {
+      const user = this.auth.getUser();
+      const employee = user?.employee;
+      if (employee) {
+        this.employees = [employee];
+        this.form.employee_id = employee.id;
+      }
+      return;
+    }
     this.http.get<any>('/api/v1/employees?per_page=500&status=active').subscribe({
       next: r => this.employees = r?.data || r?.employees || []
     });
@@ -154,6 +185,7 @@ export class SeparationListComponent implements OnInit {
   }
 
   switchTab(id: string) {
+    if (id === 'templates' && !this.isApprover) return;
     this.activeTab = id; this.activeStatus = '';
     if (id !== 'templates') this.load();
   }
@@ -177,13 +209,14 @@ export class SeparationListComponent implements OnInit {
   // ── New separation ──────────────────────────────────────────────────────
   openNew() {
     const d = new Date(); d.setDate(d.getDate() + 30);
-    this.form = { employee_id:'', type:'resignation', reason:'', reason_category:'personal',
+    this.form = { employee_id: this.isHR ? '' : this.currentEmployeeId, type:'resignation', reason:'', reason_category:'personal',
       last_working_day: d.toISOString().slice(0,10), notice_waived: false, notice_waived_reason:'', hr_notes:'' };
     this.formError = ''; this.settlementPreview = null;
     this.showNewForm = true;
   }
 
   onEmployeeOrTypeChange() {
+    if (!this.isHR) return;
     if (this.form.employee_id && this.form.last_working_day) {
       this.http.get<any>('/api/v1/separations/settlement-preview', { params: {
         employee_id: this.form.employee_id, type: this.form.type, last_working_day: this.form.last_working_day
@@ -192,6 +225,11 @@ export class SeparationListComponent implements OnInit {
   }
 
   submitSeparation() {
+    if (!this.isHR) {
+      this.form.type = 'resignation';
+      this.form.employee_id = this.currentEmployeeId;
+      this.form.hr_notes = '';
+    }
     if (!this.form.employee_id || !this.form.reason || !this.form.last_working_day) {
       this.formError = 'Employee, reason, and last working day are required.'; return;
     }
@@ -359,11 +397,36 @@ export class SeparationListComponent implements OnInit {
   }
 
   canApprove(sep: any): boolean {
-    return ['pending_manager','pending_hr','approved'].includes(sep.status);
+    if (!sep) return false;
+    if (sep.status === 'pending_manager') {
+      return this.isDirectManager(sep) || this.isSuperAdmin;
+    }
+    if (sep.status === 'pending_hr') {
+      return this.isHRManager || this.isFinanceManager || this.isSuperAdmin;
+    }
+    if (sep.status === 'approved') {
+      return this.isHRManager || this.isFinanceManager || this.isSuperAdmin;
+    }
+    return false;
   }
 
   canReject(sep: any): boolean {
-    return ['pending_manager','pending_hr'].includes(sep.status);
+    if (!sep) return false;
+    if (sep.status === 'pending_manager') {
+      return this.isDirectManager(sep) || this.isSuperAdmin;
+    }
+    if (sep.status === 'pending_hr') {
+      return this.isHRManager || this.isFinanceManager || this.isSuperAdmin;
+    }
+    return false;
+  }
+
+  canManageOffboarding(): boolean {
+    return this.isHRManager || this.isFinanceManager || this.isSuperAdmin;
+  }
+
+  private isDirectManager(sep: any): boolean {
+    return this.isDeptManager && Number(sep?.employee?.manager_id) === Number(this.currentEmployeeId);
   }
 
   avatarColor(name: string): string {

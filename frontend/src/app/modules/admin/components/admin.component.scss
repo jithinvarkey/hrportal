@@ -344,6 +344,8 @@
 .error-table{display:flex;flex-direction:column;}
 .error-row{display:grid;grid-template-columns:70px minmax(180px,1fr) minmax(260px,1.2fr);gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);
   &.header{background:var(--surface2);color:var(--text3);font-weight:800;text-transform:uppercase;letter-spacing:.04em;}
+  &.skipped{color:var(--warning);}
+  &.header.skipped{color:var(--warning);}
   span:last-child{font-family:'IBM Plex Mono',monospace;color:var(--text3);overflow:auto;}}
 @media(max-width:900px){.migration-grid{grid-template-columns:1fr}.summary-total{grid-template-columns:repeat(2,1fr)}.error-row{grid-template-columns:60px 1fr;span:last-child{grid-column:1 / -1;}}}
 .ticket-policy-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px;}

@@ -5,6 +5,7 @@ import { switchMap, tap } from 'rxjs/operators';
 
 export const ROLES = {
   SUPER_ADMIN: 'super_admin',
+  CEO: 'ceo',
   HR_MANAGER: 'hr_manager',
   HR_STAFF: 'hr_staff',
   IT_MANAGER: 'it_manager',
@@ -227,11 +228,12 @@ export class AuthService {
       },
       {
         path: '/separations', label: 'Separations', icon: 'exit_to_app',
-        perms: ['separations.view_all', 'separations.create']
+        roles: [ROLES.SUPER_ADMIN, ROLES.CEO, ROLES.HR_MANAGER, ROLES.HR_STAFF,
+        ROLES.FINANCE_MANAGER, ROLES.DEPT_MANAGER, ROLES.EMPLOYEE]
       },
       {
         path: '/recruitment', label: 'Recruitment', icon: 'work',
-        perms: ['recruitment.view']
+        roles: [ROLES.SUPER_ADMIN, ROLES.HR_MANAGER, ROLES.HR_STAFF, ROLES.DEPT_MANAGER]
       },
       {
         path: '/performance', label: 'Performance', icon: 'leaderboard',
