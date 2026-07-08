@@ -1034,6 +1034,14 @@ class LeaveController extends Controller {
         });
     }
 
+    private function annualLeaveTypeScope($query) {
+        return $query->where(function ($scope) {
+            $scope->where('is_annual', true)
+                ->orWhere(DB::raw('UPPER(code)'), 'AL')
+                ->orWhere('name', 'like', '%Annual%');
+        });
+    }
+
     private function overlappingLeaveRequest(int $employeeId, string $startDate, string $endDate): ?LeaveRequest {
         return LeaveRequest::with('leaveType')
             ->where('employee_id', $employeeId)
@@ -1207,7 +1215,7 @@ class LeaveController extends Controller {
     }
 
     private function carryForwardExpiryDate(Carbon $periodStart): Carbon {
-        return $periodStart->copy()->addMonthsNoOverflow(3)->subDay()->endOfDay();
+        return $periodStart->copy()->addMonthsNoOverflow(6)->subDay()->endOfDay();
     }
 
     private function leaveDaysWithin(LeaveRequest $request, Carbon $start, Carbon $end): float {
@@ -1375,7 +1383,7 @@ class LeaveController extends Controller {
         }
 
         $availableYears = LeaveAllocation::query()
-                ->whereHas('leaveType', fn($q) => $this->balanceSheetLeaveTypeScope($q))
+                ->whereHas('leaveType', fn($q) => $this->annualLeaveTypeScope($q))
                 ->when(!$isHRAdmin, fn($q) => $q->whereIn('employee_id', $visibleEmployeeIds->values()))
                 ->when($isHRAdmin && $request->department_id, fn($q) =>
                         $q->whereHas('employee', fn($eq) => $eq->where('department_id', $request->department_id))
@@ -1400,7 +1408,7 @@ class LeaveController extends Controller {
 
         $allocations = LeaveAllocation::with(['employee.department', 'leaveType'])
                 ->where('year', $year)
-                ->whereHas('leaveType', fn($q) => $this->balanceSheetLeaveTypeScope($q))
+                ->whereHas('leaveType', fn($q) => $this->annualLeaveTypeScope($q))
                 ->when(!$isHRAdmin, fn($q) => $q->whereIn('employee_id', $visibleEmployeeIds->values()))
                 ->when($isHRAdmin && $request->department_id, fn($q) =>
                         $q->whereHas('employee', fn($eq) => $eq->where('department_id', $request->department_id))

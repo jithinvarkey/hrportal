@@ -334,7 +334,7 @@ class LeaveService {
 
     private function annualUsageWithCarryForward(LeaveAllocation $allocation, Carbon $periodStart, Carbon $asOf, float $carriedForward): array {
         $balanceDate = $asOf->copy()->startOfDay();
-        $expiryDate = $periodStart->copy()->addMonthsNoOverflow(3)->subDay()->endOfDay();
+        $expiryDate = $periodStart->copy()->addMonthsNoOverflow(6)->subDay()->endOfDay();
         $windowEnd = $balanceDate->copy()->min($expiryDate);
         $usedDays = 0.0;
         $carryForwardWindowUsedDays = 0.0;
