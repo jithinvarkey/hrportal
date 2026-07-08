@@ -50,8 +50,8 @@
     min-height: 50px;
     text-align: justify;
   }
-  .signature-img { width: 115px; max-height: 48px; }
-  .seal-img { width: 92px; max-height: 60px; float: right; }
+  .signature-img { width: 125px; max-height: 52px; }
+  .seal-img { width: 145px; max-height: 95px; float: right; }
   .checkbox { font-family: DejaVu Sans, Arial, sans-serif; font-size: 13px; }
   .footer-note {
     font-size: 8.7px;

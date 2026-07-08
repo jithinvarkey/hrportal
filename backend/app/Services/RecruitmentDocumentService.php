@@ -146,7 +146,7 @@ class RecruitmentDocumentService
             'gross_salary' => $basic + $housing + $transport + $other,
             'logo' => $this->assetDataUri('diamond-logo.png'),
             'seal' => $this->assetDataUri('companyseal.jpg'),
-            'signature' => $this->assetDataUri('md_sign.png'),
+            'signature' => $this->assetDataUri('badrsign.png'),
             'contract_period' => $data['contract_period'] ?? 'Limited duration',
             'probation_period' => $data['probation_period'] ?? '3 months Renewable',
             'annual_vacation' => $data['annual_vacation'] ?? 'As per company policy',
