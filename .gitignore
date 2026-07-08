@@ -11,3 +11,5 @@ frontend/codex-ng-serve.out.log
 /backend/public/storage
 frontend/ng-serve-profile.out.log
 /frontend/dist
+frontend/ng-serve-current.err.log
+*.log
