@@ -16,6 +16,8 @@ class LegacyMigrationController extends Controller
 
     public function import(Request $request): JsonResponse
     {
+        $this->allowLongRunningImport();
+
         if (!$this->canMigrate()) {
             return response()->json(['message' => 'Only Super Admin or HR Manager can run legacy data migration.'], 403);
         }
@@ -36,6 +38,14 @@ class LegacyMigrationController extends Controller
             'message' => $request->boolean('dry_run') ? 'Migration file validated.' : 'Migration completed.',
             'summary' => $summary,
         ]);
+    }
+
+    private function allowLongRunningImport(): void
+    {
+        @ini_set('max_execution_time', '0');
+        @ini_set('memory_limit', '1024M');
+        @set_time_limit(0);
+        ignore_user_abort(true);
     }
 
     private function canMigrate(): bool

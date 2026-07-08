@@ -113,12 +113,13 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   // ── Build arrays once (called after stats load) ────────────────────────────
   private buildKpis() {
     const d = this.st || {};
+    const showRecruitment = d.scope !== 'personal';
     this.kpiItems = [
       { label: 'Total Employees',   value: d.employees?.total          ?? 0,    color: '#3b82f6', icon: 'group' },
       { label: 'On Leave Today',    value: d.leave?.on_leave_today     ?? 0,    color: '#f59e0b', icon: 'event_busy' },
       { label: 'Pending Leaves',    value: d.leave?.pending            ?? 0,    color: d.leave?.pending > 5 ? '#ef4444' : '#f59e0b', icon: 'pending_actions' },
       { label: 'Payroll Processed', value: d.payroll?.processed        ?? 0,    color: '#10b981', icon: 'payments' },
-      { label: 'Open Positions',    value: d.recruitment?.open_positions ?? 0,  color: '#6366f1', icon: 'work_outline' },
+      ...(showRecruitment ? [{ label: 'Open Positions', value: d.recruitment?.open_positions ?? 0, color: '#6366f1', icon: 'work_outline' }] : []),
       { label: 'Pending Reviews',   value: d.performance?.pending      ?? 0,    color: '#0ea5e9', icon: 'rate_review' },
       { label: 'Attendance Rate',   value: (d.attendance?.rate ?? 0) + '%',     color: d.attendance?.rate >= 90 ? '#10b981' : '#f59e0b', icon: 'fingerprint' },
       { label: 'Expiring Contracts',value: d.employees?.contracts_expiring ?? 0, color: d.employees?.contracts_expiring > 0 ? '#ef4444' : '#8b949e', icon: 'description' },
@@ -127,6 +128,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private buildStatCards() {
     const d = this.st || {};
+    const showRecruitment = d.scope !== 'personal';
     this.statItems = [
       {
         title: 'Workforce',  icon: 'people_alt', color: '#3b82f6',
@@ -153,12 +155,12 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
           { label: 'This Month', value: d.leave?.approved_this_month ?? 0, color: '#6366f1' },
         ],
         route: '/leave',
-        alert: d.leave?.pending > 5 ? `${d.leave.pending} requests waiting` : null,
+        alert: d.leave?.pending > 0 ? `${d.leave.pending} requests waiting` : null,
         alertColor: '#ef4444',
         progress: this.pct(d.leave?.approved, d.leave?.total),
         progressColor: '#10b981', progressLabel: '% Approval Rate',
       },
-      {
+      ...(showRecruitment ? [{
         title: 'Recruitment', icon: 'work', color: '#6366f1',
         main: d.recruitment?.open_positions ?? 0, mainLabel: 'Open Positions',
         items: [
@@ -171,7 +173,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
         alert: null,
         progress: this.pct(d.recruitment?.offers_sent, d.recruitment?.applicants),
         progressColor: '#6366f1', progressLabel: '% Offer Rate',
-      },
+      }] : []),
       {
         title: 'Performance', icon: 'insights', color: '#0ea5e9',
         main: d.performance?.pending ?? 0, mainLabel: 'Pending Reviews',

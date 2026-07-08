@@ -1,7 +1,7 @@
 <?php
 namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
-use App\Models\{JobPosting, JobApplication, Interview};
+use App\Models\{Employee, JobPosting, JobApplication, Interview};
 use App\Services\NewHireOnboardingService;
 use App\Services\RecruitmentService;
 use Illuminate\Http\Request;
@@ -133,15 +133,60 @@ class RecruitmentController extends Controller {
     public function updateStage(Request $request, $id) {
         $request->validate(['stage'=>'required|in:applied,screening,interview,offer,hired,rejected']);
         $app = JobApplication::findOrFail($id);
+
+        if ($request->stage === 'offer') {
+            return response()->json([
+                'message' => 'Please use Send Offer so the offer letter is generated and emailed.',
+            ], 422);
+        }
+
+        if ($request->stage === 'hired') {
+            return response()->json([
+                'message' => 'Please use Confirm Hire after the offer stage is complete.',
+            ], 422);
+        }
+
         $app->update(['stage' => $request->stage, 'hr_notes' => $request->hr_notes]);
         return response()->json(['application' => $app]);
     }
 
     public function scheduleInterview(Request $request) {
-        $request->validate(['application_id'=>'required|exists:job_applications,id','round'=>'required','scheduled_at'=>'required|date']);
-        $interview = Interview::create($request->all());
-        $this->service->sendInterviewInvite($interview);
-        return response()->json(['interview' => $interview], 201);
+        $data = $request->validate([
+            'application_id' => 'required|exists:job_applications,id',
+            'round' => 'required|string|max:100',
+            'scheduled_at' => 'required|date',
+            'duration_minutes' => 'nullable|integer|min:15|max:480',
+            'format' => 'nullable|in:video,in_person,phone',
+            'location_or_link' => 'required|string|max:500',
+            'interviewer_employee_ids' => 'required|array|min:1',
+            'interviewer_employee_ids.*' => 'integer|exists:employees,id',
+        ]);
+
+        $interviewers = Employee::query()
+            ->whereIn('id', $data['interviewer_employee_ids'])
+            ->where('status', 'active')
+            ->get(['id', 'first_name', 'last_name', 'email', 'employee_code']);
+
+        if ($interviewers->count() !== count(array_unique($data['interviewer_employee_ids']))) {
+            return response()->json([
+                'message' => 'Please select active employees only as interviewers.',
+            ], 422);
+        }
+
+        $data['interviewers'] = $interviewers
+            ->map(fn (Employee $employee) => trim($employee->first_name . ' ' . $employee->last_name))
+            ->filter()
+            ->values()
+            ->all();
+        unset($data['interviewer_employee_ids']);
+
+        $interview = Interview::create($data);
+        $interview->application()->update(['stage' => 'interview']);
+        $this->service->sendInterviewInvite($interview, $interviewers);
+        return response()->json([
+            'message' => 'Interview scheduled and invitation email sent.',
+            'interview' => $interview->fresh('application.jobPosting'),
+        ], 201);
     }
 
     public function updateInterview(Request $request, $id) {
@@ -151,10 +196,27 @@ class RecruitmentController extends Controller {
     }
 
     public function sendOffer(Request $request, $applicationId) {
+        $data = $request->validate([
+            'basic_salary' => 'required|numeric|min:0',
+            'housing_allowance' => 'nullable|numeric|min:0',
+            'transport_allowance' => 'nullable|numeric|min:0',
+            'other_allowance' => 'nullable|numeric|min:0',
+            'notes' => 'nullable|string|max:2000',
+        ]);
+
         $app = JobApplication::findOrFail($applicationId);
-        $offer = $this->service->generateOfferLetter($app, $request->all());
+        if (!$app->applicant_email) {
+            return response()->json(['message' => 'Applicant email is missing. Offer email cannot be sent.'], 422);
+        }
+
+        $offer = $this->service->generateOfferLetter($app, $data);
         $app->update(['stage' => 'offer']);
-        return response()->json(['message' => 'Offer letter sent', 'offer' => $offer]);
+        return response()->json([
+            'message' => 'Offer letter sent',
+            'offer' => $offer,
+            'email_to' => $app->applicant_email,
+            'email_cc' => $offer['cc'] ?? [],
+        ]);
     }
 
     public function hire(Request $request, $applicationId) {
@@ -171,6 +233,12 @@ class RecruitmentController extends Controller {
         ]);
 
         $app    = JobApplication::with('jobPosting')->findOrFail($applicationId);
+        if ($app->stage !== 'offer') {
+            return response()->json([
+                'message' => 'Hire confirmation is allowed only after the offer stage is complete.',
+            ], 422);
+        }
+
         $result = $this->service->hireApplicant($app, $request->all());
         $app->update(['stage' => 'hired']);
 

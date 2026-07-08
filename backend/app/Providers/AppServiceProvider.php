@@ -18,11 +18,8 @@ class AppServiceProvider extends ServiceProvider {
      * Bootstrap any application services.
      */
     public function boot(): void {
-        if (app()->environment('local')) {
-
-            Mail::alwaysTo(
-                    config('mail.test_email')
-            );
+        if (config('mail.force_test_email') && config('mail.test_email')) {
+            Mail::alwaysTo(config('mail.test_email'));
         }
     }
 }

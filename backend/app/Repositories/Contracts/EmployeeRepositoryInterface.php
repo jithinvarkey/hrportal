@@ -70,7 +70,7 @@ interface EmployeeRepositoryInterface
     public function allActive(): Collection;
 
     /**
-     * Generate a collision-safe, sequential employee code (e.g. EMP0042).
+     * Generate a collision-safe, sequential employee number (e.g. 366).
      *
      * Uses a database-level lock to prevent race conditions under concurrent
      * employee creation requests.

@@ -1001,12 +1001,15 @@ class LeaveController extends Controller {
         $pending = (float) $annual->sum(fn(LeaveAllocation $allocation) => (float) $allocation->pending_days);
         $usedHours = (float) $annual->sum(fn(LeaveAllocation $allocation) => (float) ($allocation->used_hours ?? 0));
         $pendingHours = (float) $annual->sum(fn(LeaveAllocation $allocation) => (float) ($allocation->pending_hours ?? 0));
-        $remaining = max(0, round($allocated + $usage['active_carry_forward_remaining'] - $usage['annual_used_days'] - $pending, 2));
+        $remaining = round($allocated + $usage['active_carry_forward_remaining'] - $usage['annual_used_days'] - $pending, 2);
 
         $display->setAttribute('allocated_days', $allocated);
         $display->setAttribute('annual_entitlement', $allocated);
-        $display->setAttribute('carried_forward_days', $usage['active_carry_forward_remaining']);
+        $display->setAttribute('carried_forward_days', $carriedForward);
+        $display->setAttribute('active_carried_forward_days', $usage['active_carry_forward_remaining']);
         $display->setAttribute('expired_carried_forward_days', $usage['expired_carry_forward_days']);
+        $display->setAttribute('carry_forward_used_days', $usage['carry_forward_used_days']);
+        $display->setAttribute('carry_forward_expiry_date', $this->carryForwardExpiryDate($periodStart)->toDateString());
         $display->setAttribute('used_days', $used);
         $display->setAttribute('pending_days', $pending);
         $display->setAttribute('remaining_days', $remaining);
@@ -1088,20 +1091,23 @@ class LeaveController extends Controller {
         $pendingDays = (float) (clone $base)->whereIn('status', ['pending', 'manager_approved'])->sum('total_days');
         $usage = $this->annualUsageWithCarryForward($allocation, $periodStart, $periodEnd, $carriedForward, $balanceDate);
         $usedDays = $usage['total_used_days'];
-        $remainingDays = max(0, round($usage['active_carry_forward_remaining'] + $accrued - $usage['annual_used_days'], 2));
+        $remainingDays = round($usage['active_carry_forward_remaining'] + $accrued - $usage['annual_used_days'], 2);
 
         $allocation->setAttribute('allocated_days', $accrued);
-        $allocation->setAttribute('carried_forward_days', $usage['active_carry_forward_remaining']);
+        $allocation->setAttribute('carried_forward_days', $carriedForward);
+        $allocation->setAttribute('active_carried_forward_days', $usage['active_carry_forward_remaining']);
         $allocation->setAttribute('expired_carried_forward_days', $usage['expired_carry_forward_days']);
         $allocation->setAttribute('used_days', $usedDays);
         $allocation->setAttribute('annual_used_days_after_carry_forward', $usage['annual_used_days']);
         $allocation->setAttribute('carry_forward_used_days', $usage['carry_forward_used_days']);
+        $allocation->setAttribute('carry_forward_expiry_date', $this->carryForwardExpiryDate($periodStart)->toDateString());
         $allocation->setAttribute('pending_days', $pendingDays);
         $allocation->setAttribute('remaining_days', $remainingDays);
         $allocation->setAttribute('earned_until_as_of', $accrued);
         $allocation->setAttribute('approved_taken_until_as_of', $usedDays);
         $allocation->setAttribute('approved_taken_contract_period', $usedDays);
         $allocation->setAttribute('annual_entitlement', $entitlement);
+        $allocation->setAttribute('contract_year_allocated_days', $entitlement);
         $allocation->setAttribute('balance_as_of', $balanceDate->toDateString());
         $allocation->setAttribute('accrual_period_start', $periodStart->toDateString());
         $allocation->setAttribute('accrual_period_end', $periodEnd->toDateString());
@@ -1137,7 +1143,7 @@ class LeaveController extends Controller {
         $usageEndDate = $includeFullPeriodUsage ? $periodEnd->copy() : $balanceDate->copy();
         $usage = $this->annualUsageWithCarryForward($allocation, $periodStart, $usageEndDate, $carriedForward, $balanceDate);
         $pending = (float) ($allocation->pending_days ?? 0);
-        $remaining = max(0, round((float) $allocation->allocated_days + $usage['active_carry_forward_remaining'] - $usage['annual_used_days'] - $pending, 2));
+        $remaining = round((float) $allocation->allocated_days + $usage['active_carry_forward_remaining'] - $usage['annual_used_days'] - $pending, 2);
 
         $allocation->setAttribute('remaining_days', $remaining);
         $allocation->setAttribute('active_carried_forward_days', $usage['active_carry_forward_remaining']);
@@ -1410,7 +1416,11 @@ class LeaveController extends Controller {
 
         $now = now('Asia/Riyadh')->startOfDay();
         $allocations->getCollection()->transform(function (LeaveAllocation $allocation) use ($now) {
-            return $this->decorateAnnualBalanceForDate($allocation, $now, true);
+            if ($allocation->leaveType && $this->isAnnualLeaveType($allocation->leaveType)) {
+                return $this->projectedAnnualAllocation($allocation, $now);
+            }
+
+            return $allocation;
         });
 
         $response = $allocations->toArray();

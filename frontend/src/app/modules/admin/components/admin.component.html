@@ -539,6 +539,14 @@
             <span>{{ e.data | json }}</span>
           </div>
         </div>
+        <div class="error-table" *ngIf="mod.skipped_rows?.length">
+          <div class="error-row header skipped"><span>Row</span><span>Skipped Reason</span><span>Data</span></div>
+          <div class="error-row skipped" *ngFor="let s of mod.skipped_rows">
+            <span>{{ s.row }}</span>
+            <span>{{ s.message }}</span>
+            <span>{{ s.data | json }}</span>
+          </div>
+        </div>
       </div>
     </div>
   </ng-container>

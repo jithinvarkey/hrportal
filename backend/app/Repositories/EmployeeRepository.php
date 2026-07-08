@@ -135,25 +135,27 @@ class EmployeeRepository implements EmployeeRepositoryInterface
     /**
      * {@inheritdoc}
      *
-     * Acquires a database advisory lock so that two concurrent requests
-     * cannot read the same "last code" and produce a duplicate.
-     *
-     * @throws \RuntimeException If the lock cannot be acquired within 5 s.
+     * Uses the largest numeric employee code and returns the next plain number.
      */
     public function nextEmployeeCode(): string
     {
         return DB::transaction(function (): string {
-            // Lock the employees table for the duration of this transaction
-            $last = Employee::withTrashed()
+            $max = Employee::withTrashed()
                 ->lockForUpdate()
-                ->orderByDesc('id')
-                ->value('employee_code');
+                ->pluck('employee_code')
+                ->map(fn ($code) => $this->employeeCodeNumber($code))
+                ->max();
 
-            $next = $last
-                ? (int) ltrim(substr($last, 3), '0') + 1
-                : 1;
-
-            return 'EMP' . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+            return (string) (((int) $max) + 1);
         });
+    }
+
+    private function employeeCodeNumber(mixed $code): int
+    {
+        $value = strtoupper(trim((string) $code));
+        $value = preg_replace('/^EMP/i', '', $value) ?? '';
+        $digits = preg_replace('/\D+/', '', $value) ?? '';
+
+        return $digits === '' ? 0 : (int) ltrim($digits, '0');
     }
 }

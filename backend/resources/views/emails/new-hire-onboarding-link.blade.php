@@ -18,6 +18,9 @@
       <p style="margin:0 0 18px">
         The form asks for phone number, date of birth, address, bank details, ID/Iqama details, and optional passport details. You can also upload signed offer letter, latest CV, ID/Iqama, bank details, HDF, experience certificate, and passport document.
       </p>
+      <p style="margin:0 0 18px">
+        Your NDA is attached as a PDF document for review and signature.
+      </p>
       @if($loginEmail)
         <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border:1px solid #e5e7eb;border-radius:6px">
           <tr><td style="padding:14px 16px;background:#f9fafb;color:#111827;font-weight:bold">Login Details</td></tr>

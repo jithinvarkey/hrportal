@@ -187,15 +187,24 @@
             <div class="ac-date">Applied {{ formatDate(a.created_at) }}</div>
             <div class="ac-actions" *ngIf="isHR" (click)="$event.stopPropagation()">
               <ng-container *ngFor="let ns of stages">
-                <!-- 'hired' goes through the full hire modal, not a direct stage move -->
-                <button *ngIf="ns.value !== s.value && ns.value !== 'rejected' && ns.value !== 'hired'"
+                <button *ngIf="s.value === 'offer' && ns.value === 'offer'"
+                        class="ac-move-btn offer" [matTooltip]="'Send / Resend Offer'"
+                        (click)="openOfferForm(a, $event)">
+                  <mat-icon>local_offer</mat-icon>
+                </button>
+                <button *ngIf="ns.value !== s.value && ns.value !== 'rejected' && ns.value !== 'hired' && ns.value !== 'offer'"
                         class="ac-move-btn" [matTooltip]="'Move to ' + ns.label"
                         (click)="moveStage(a, ns.value, $event)">
                   <mat-icon>{{ ns.icon }}</mat-icon>
                 </button>
-                <button *ngIf="ns.value === 'hired' && ns.value !== s.value"
+                <button *ngIf="ns.value === 'offer' && s.value !== 'offer'"
+                        class="ac-move-btn offer" [matTooltip]="'Send Offer'"
+                        (click)="openOfferForm(a, $event)">
+                  <mat-icon>local_offer</mat-icon>
+                </button>
+                <button *ngIf="ns.value === 'hired' && s.value === 'offer'"
                         class="ac-move-btn hire" [matTooltip]="'Confirm Hire'"
-                        (click)="openHireForm(a); $event.stopPropagation()">
+                        (click)="openHireForm(a, $event)">
                   <mat-icon>how_to_reg</mat-icon>
                 </button>
               </ng-container>
@@ -396,7 +405,7 @@
           </button>
         </ng-container>
         <ng-container *ngSwitchCase="'offer'">
-          <button class="btn-primary" (click)="openHireForm(selectedApp)">
+          <button class="btn-primary" (click)="openHireForm(selectedApp, $event)">
             <mat-icon>how_to_reg</mat-icon> Hire
           </button>
         </ng-container>
@@ -637,8 +646,9 @@
         <input class="field-input" type="date" formControlName="hire_date">
       </div>
       <div class="field-group">
-        <label class="field-label">Monthly Salary (SAR) <span class="req">*</span></label>
+        <label class="field-label">Basic Salary (SAR) <span class="req">*</span></label>
         <input class="field-input" type="number" placeholder="e.g. 8000" formControlName="salary">
+        <div class="field-hint">Housing and travel allowance will default to 25% and 10% of basic salary.</div>
       </div>
     </div>
     <div class="two-col">
@@ -891,19 +901,43 @@
       <div class="name-sub">{{ selectedApp.job_posting?.title }}</div>
     </div>
     <div class="field-group">
-      <label class="field-label">Offered Salary (SAR/month) <span class="req">*</span></label>
-      <input class="field-input" type="number" [(ngModel)]="offerForm.offered_salary"
-             placeholder="e.g. 8000">
+      <label class="field-label">Basic Salary (SAR/month) <span class="req">*</span></label>
+      <input class="field-input" type="number" [(ngModel)]="offerForm.basic_salary"
+             (ngModelChange)="onOfferBasicSalaryChange($event)" placeholder="e.g. 8000">
+    </div>
+    <div class="two-col">
+      <div class="field-group">
+        <label class="field-label">Housing Allowance</label>
+        <input class="field-input" type="number" [(ngModel)]="offerForm.housing_allowance"
+               placeholder="25% of basic">
+        <span class="field-hint">Default 25% of basic salary.</span>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Travel Allowance</label>
+        <input class="field-input" type="number" [(ngModel)]="offerForm.transport_allowance"
+               placeholder="10% of basic">
+        <span class="field-hint">Default 10% of basic salary.</span>
+      </div>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Other Allowance <span class="field-hint">(optional)</span></label>
+      <input class="field-input" type="number" [(ngModel)]="offerForm.other_allowance"
+             placeholder="e.g. 500">
+    </div>
+    <div class="salary-summary-box">
+      <span>Estimated Gross Salary</span>
+      <strong>SAR {{ offerGrossSalary() | number:'1.2-2' }}</strong>
     </div>
     <div class="field-group">
       <label class="field-label">Offer Notes <span class="field-hint">(optional)</span></label>
       <textarea class="field-textarea" rows="3" [(ngModel)]="offerForm.notes"
                 placeholder="Joining date, benefits, any special terms…"></textarea>
     </div>
+    <div class="field-err" *ngIf="errorMsg">{{ errorMsg }}</div>
   </div>
   <div class="modal-footer">
     <button class="btn-outline" (click)="showOfferForm=false">Cancel</button>
-    <button class="btn-primary" (click)="sendOffer()" [disabled]="offerSubmitting || !offerForm.offered_salary">
+    <button class="btn-primary" (click)="sendOffer()" [disabled]="offerSubmitting || !offerForm.basic_salary">
       <mat-icon>{{ offerSubmitting ? 'hourglass_empty' : 'send' }}</mat-icon>
       {{ offerSubmitting ? 'Sending…' : 'Send Offer' }}
     </button>
@@ -934,9 +968,9 @@
       </div>
       <div class="field-group">
         <label class="field-label">Format</label>
-        <select class="field-select-full" [(ngModel)]="interviewForm.format">
+        <select class="field-select-full" [ngModel]="interviewForm.format" (ngModelChange)="onInterviewFormatChange($event)">
           <option value="video">Video Call</option>
-          <option value="in_person">In Person</option>
+          <option value="in_person">Face to Face</option>
           <option value="phone">Phone</option>
         </select>
       </div>
@@ -952,20 +986,32 @@
       </div>
     </div>
     <div class="field-group">
-      <label class="field-label">{{ interviewForm.format === 'in_person' ? 'Location' : 'Meeting Link' }}</label>
+      <label class="field-label">{{ interviewLocationLabel() }} <span class="req">*</span></label>
       <input class="field-input" [(ngModel)]="interviewForm.location_or_link"
-             [placeholder]="interviewForm.format === 'in_person' ? 'e.g. Conference Room 3, Floor 2' : 'e.g. https://meet.google.com/...'">
+             [placeholder]="interviewLocationPlaceholder()">
     </div>
     <div class="field-group">
-      <label class="field-label">Interviewers <span class="field-hint">(names, comma-separated)</span></label>
-      <input class="field-input" [(ngModel)]="interviewForm.interviewers"
-             placeholder="e.g. Ahmed, Sara, Mohammed">
+      <label class="field-label">Interviewers <span class="req">*</span></label>
+      <div class="employee-checkbox-list">
+        <label class="employee-check-row" *ngFor="let e of employees">
+          <input type="checkbox"
+                 [checked]="isInterviewerSelected(e.id)"
+                 (change)="toggleInterviewer(e.id, $any($event.target).checked)">
+          <span>
+            <strong>{{ e.first_name }} {{ e.last_name }}</strong>
+            <small>{{ e.employee_code }}{{ e.department?.name ? ' - ' + e.department.name : '' }}</small>
+          </span>
+        </label>
+      </div>
+      <span class="field-hint" *ngIf="interviewForm.interviewer_employee_ids?.length">
+        Selected: {{ selectedInterviewersText() }}
+      </span>
     </div>
   </div>
   <div class="modal-footer">
     <button class="btn-outline" (click)="showInterviewForm=false">Cancel</button>
     <button class="btn-primary" (click)="submitInterview()"
-            [disabled]="interviewSubmitting || !interviewForm.scheduled_at">
+            [disabled]="interviewSubmitting || !interviewForm.scheduled_at || !interviewForm.location_or_link || !interviewForm.interviewer_employee_ids?.length">
       <mat-icon>{{ interviewSubmitting ? 'hourglass_empty' : 'event' }}</mat-icon>
       {{ interviewSubmitting ? 'Scheduling…' : 'Schedule Interview' }}
     </button>
