@@ -134,6 +134,7 @@ class DatabaseSeeder extends Seeder {
             'separations.view_all','separations.approve_manager',
             'requests.view_all','requests.approve_manager',
             'performance.view','performance.manage',
+            'recruitment.view','recruitment.manage',
             'attendance.view_all','attendance.checkin',
             'orgchart.view',
         ]);

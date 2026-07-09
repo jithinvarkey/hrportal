@@ -30,7 +30,7 @@ class AttendanceDeviceService
 
     /**
      * Fetch punch records from the device and store in device_attendance_logs.
-     * Returns summary: ['fetched'=>int, 'new'=>int, 'matched'=>int, 'unmatched'=>int]
+     * Returns summary: ['fetched'=>int, 'new'=>int, 'matched'=>int, 'unmatched'=>int, 'skipped_duplicates'=>int]
      */
     public function fetchFromDevice(AttendanceDevice $device, ?Carbon $since = null): array
     {
@@ -46,36 +46,43 @@ class AttendanceDeviceService
         $new       = 0;
         $matched   = 0;
         $unmatched = 0;
+        $skippedDuplicates = 0;
 
         // Build employee lookup map: employee_code/number → employee_id
         $empMap = $this->buildEmployeeMap($device->employee_number_field);
 
         foreach ($punches as $punch) {
             $empNum    = (string)($punch['employee_number'] ?? '');
-            $punchTime = Carbon::parse($punch['punch_time']);
+            $punchTime = Carbon::parse($punch['punch_time'])->setMicrosecond(0);
             $punchType = (int)($punch['punch_type'] ?? 0);
             $mode      = $punch['verification_mode'] ?? null;
-
-            // Skip if already stored
-            $exists = DeviceAttendanceLog::where('device_id', $device->id)
-                ->where('device_employee_number', $empNum)
-                ->where('punch_time', $punchTime)
-                ->exists();
-
-            if ($exists) continue;
 
             $empId = $empMap[$empNum] ?? null;
             if ($empId) $matched++; else $unmatched++;
 
-            DeviceAttendanceLog::create([
-                'device_id'               => $device->id,
-                'device_employee_number'  => $empNum,
-                'employee_id'             => $empId,
-                'punch_time'              => $punchTime,
-                'punch_type'              => $punchType,
-                'verification_mode'       => $mode,
-                'processed'               => false,
-            ]);
+            $rawLog = DeviceAttendanceLog::firstOrCreate(
+                [
+                    'device_id' => $device->id,
+                    'device_employee_number' => $empNum,
+                    'punch_time' => $punchTime,
+                ],
+                [
+                    'employee_id' => $empId,
+                    'punch_type' => $punchType,
+                    'verification_mode' => $mode,
+                    'processed' => false,
+                ]
+            );
+
+            if (!$rawLog->wasRecentlyCreated) {
+                $rawLog->forceFill([
+                    'employee_id' => $rawLog->employee_id ?: $empId,
+                    'processed' => false,
+                ])->save();
+                $skippedDuplicates++;
+                continue;
+            }
+
             $new++;
         }
 
@@ -86,7 +93,13 @@ class AttendanceDeviceService
             'last_sync_error'   => null,
         ]);
 
-        return compact('fetched','new','matched','unmatched');
+        return [
+            'fetched' => $fetched,
+            'new' => $new,
+            'matched' => $matched,
+            'unmatched' => $unmatched,
+            'skipped_duplicates' => $skippedDuplicates,
+        ];
     }
 
     /**
@@ -110,6 +123,15 @@ class AttendanceDeviceService
 
         foreach ($grouped as $key => $dayPunches) {
             [$empId, $date] = explode('|', $key);
+            $dayPunches = DeviceAttendanceLog::where('device_id', $device->id)
+                ->where('employee_id', $empId)
+                ->whereDate('punch_time', $date)
+                ->orderBy('punch_time')
+                ->get();
+
+            if ($dayPunches->isEmpty()) {
+                continue;
+            }
 
             // Determine check-in (first punch) and check-out (last punch)
             $sorted   = $dayPunches->sortBy('punch_time');
@@ -133,8 +155,8 @@ class AttendanceDeviceService
             $existing = AttendanceLog::where('employee_id', $empId)->where('date', $date)->first();
 
             if ($existing) {
-                // Only update from device if source is 'device' or no check-out yet
-                if ($existing->source === 'device' || !$existing->check_out) {
+                // Rebuild biometric/API rows from all raw punches for the day; avoid overwriting completed manual entries.
+                if ($existing->source !== 'manual' || !$existing->check_out) {
                     $existing->update([
                         'check_in'       => $checkIn,
                         'check_out'      => $checkOut ?? $existing->check_out,

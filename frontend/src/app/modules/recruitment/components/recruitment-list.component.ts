@@ -26,6 +26,9 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   hireResult: any = null;
   editJobId: number | null = null; selectedApp: any = null;
   selectedJobFilter: number | null = null; isHR = false;
+  isDeptManager = false;
+  canManageRecruitment = false;
+  managerDepartmentId: number | null = null;
 
   searchControl = new FormControl('');
   statusFilter = ''; stageFilter = '';
@@ -134,7 +137,13 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    const user = this.auth.getUser();
     this.isHR = this.auth.isHRRole();
+    this.isDeptManager = this.auth.isDeptManager();
+    this.canManageRecruitment = this.isHR || this.isDeptManager;
+    this.managerDepartmentId = this.isDeptManager && !this.isHR
+      ? Number(user?.employee?.departmentId ?? user?.employee?.department_id ?? 0) || null
+      : null;
     this.jobForm = this.fb.group({
       title:           ['', Validators.required],
       employment_type: ['full_time', Validators.required],
@@ -185,7 +194,13 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
 
   loadDepartments(): void {
     this.http.get<any>('/api/v1/departments').pipe(takeUntil(this.destroy$)).subscribe({
-      next: r => { this.departments = r?.data ?? r ?? []; this.cdr.markForCheck(); },
+      next: r => {
+        const departments = r?.data ?? r ?? [];
+        this.departments = this.managerDepartmentId
+          ? departments.filter((d: any) => Number(d.id) === Number(this.managerDepartmentId))
+          : departments;
+        this.cdr.markForCheck();
+      },
       error: () => {},
     });
   }
@@ -194,7 +209,8 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     this.http.get<any>('/api/v1/designations').pipe(takeUntil(this.destroy$)).subscribe({
       next: r => {
         this.designations = (Array.isArray(r) ? r : (r?.data ?? []))
-          .filter((d: any) => d?.is_active !== false);
+          .filter((d: any) => d?.is_active !== false)
+          .filter((d: any) => !this.managerDepartmentId || !d?.department_id || Number(d.department_id) === Number(this.managerDepartmentId));
         this.cdr.markForCheck();
       },
       error: () => {},
@@ -466,7 +482,12 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     if (job) {
       this.jobForm.patchValue({ ...job, department_id: job.department_id ?? '', designation_id: job.designation_id ?? '' });
     } else {
-      this.jobForm.reset({ employment_type: 'full_time', status: 'open', vacancies: 1 });
+      this.jobForm.reset({
+        employment_type: 'full_time',
+        status: 'open',
+        vacancies: 1,
+        department_id: this.managerDepartmentId ?? '',
+      });
     }
     this.showJobForm = true; this.cdr.markForCheck();
   }
@@ -564,7 +585,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     if (this.cvBankRating) params.rating = this.cvBankRating;
     if (this.cvBankSource) params.source = this.cvBankSource;
     if (this.cvBankPosition) params.position = this.cvBankPosition;
-    if (this.cvBankDepartment) params.department_id = this.cvBankDepartment;
+    if (this.cvBankDepartment && !this.managerDepartmentId) params.department_id = this.cvBankDepartment;
     this.http.get<any>(`${this.api}/cv-bank`, { params }).pipe(takeUntil(this.destroy$)).subscribe({
       next: r => { this.cvBankEntries = r.data ?? []; this.cvBankLoading = false; this.cdr.markForCheck(); },
       error: () => { this.cvBankLoading = false; this.cdr.markForCheck(); },
@@ -575,7 +596,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     this.cvForm = {
       applicant_name: '', applicant_email: '', applicant_phone: '',
       position_applied: '', nationality: '', experience_years: null,
-      department_id: '', skills: '', source: 'LinkedIn', expected_salary: null,
+      department_id: this.managerDepartmentId ?? '', skills: '', source: 'LinkedIn', expected_salary: null,
       available_from: '', notes: '', rating: 'hold',
     };
     this.cvFile = null;
@@ -692,7 +713,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     return this.designations.find(d => String(d.id) === String(id)) ?? null;
   }
   canDeleteCv(cv: any): boolean {
-    return this.isHR && !!cv?.is_cv_bank;
+    return this.canManageRecruitment && !!cv?.is_cv_bank;
   }
 
   appsByStage(stage: string): any[] { return this.applications.filter(a => a.stage === stage); }

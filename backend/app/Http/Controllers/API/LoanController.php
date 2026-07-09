@@ -114,6 +114,11 @@ class LoanController extends Controller {
         return $loan->employee && (int) $loan->employee->user_id === (int) $user->id;
     }
 
+    private function shouldLimitApprovalViewsToActiveEmployees(array $userRoles): bool {
+        return !in_array('super_admin', $userRoles, true)
+            && (in_array('department_manager', $userRoles, true) || in_array('hr_manager', $userRoles, true));
+    }
+
     // ── Loan Types ────────────────────────────────────────────────────────
 
     /**
@@ -217,6 +222,7 @@ class LoanController extends Controller {
         $perPage = min(max((int) $request->input('per_page', 10), 10), 100);
         $user = auth()->user();
         // FIX: Use raw DB query instead of Spatie hasRole() to avoid guard mismatch
+        $userRoles = $this->userRoles();
         $isAdmin = $this->hasAnyRoleDB(['super_admin', 'hr_manager', 'finance_manager']);
         $isMgr = $this->hasAnyRoleDB(['department_manager']);
 
@@ -236,6 +242,10 @@ class LoanController extends Controller {
 
                     return $q->where('status', $status);
                 })
+                ->when(
+                    $request->status === 'pending_manager' && $this->shouldLimitApprovalViewsToActiveEmployees($userRoles),
+                    fn($q) => $q->whereHas('employee', fn($employee) => $employee->where('status', 'active'))
+                )
                 ->when($request->loan_type_id, fn($q) => $q->where('loan_type_id', $request->loan_type_id))
                 ->when($request->search, fn($q) =>
                         $q->whereHas('employee', fn($eq) =>

@@ -498,8 +498,17 @@ class EmployeeController extends Controller {
     }
 
     private function canManageDependents(int $employeeId): bool {
+        $userEmployee = auth()->user()?->employee;
+
         return $this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff'])
-            || (int) auth()->user()->employee?->id === $employeeId;
+            || (int) $userEmployee?->id === $employeeId
+            || (
+                $this->hasAnyRoleDB(['department_manager'])
+                && $userEmployee
+                && Employee::whereKey($employeeId)
+                    ->where('department_id', $userEmployee->department_id)
+                    ->exists()
+            );
     }
 
     // ── Update ────────────────────────────────────────────────────────────

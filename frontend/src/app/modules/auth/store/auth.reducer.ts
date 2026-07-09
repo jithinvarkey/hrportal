@@ -4,8 +4,8 @@ import * as A from './auth.actions';
 
 export interface AuthState { user: any; token: string | null; loading: boolean; error: string | null; }
 const init: AuthState = {
-  user:    JSON.parse(localStorage.getItem('hrms_user') || 'null'),
-  token:   localStorage.getItem('hrms_token'),
+  user:    JSON.parse(sessionStorage.getItem('hrms_user') || localStorage.getItem('hrms_user') || 'null'),
+  token:   sessionStorage.getItem('hrms_token') || localStorage.getItem('hrms_token'),
   loading: false, error: null,
 };
 

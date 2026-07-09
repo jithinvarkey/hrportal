@@ -80,7 +80,7 @@ export class ProfileComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    // Immediately populate from localStorage while API loads
+    // Immediately populate from the current tab session while API loads
     const stored = this.auth.getUser();
     if (stored) { this.user = stored; }
 
@@ -164,7 +164,7 @@ export class ProfileComponent implements OnInit {
         this.editSuccess = 'Profile updated successfully.';
         this.user        = { ...this.user, name: this.editForm.name };
         // Refresh stored user
-        if (r.user) localStorage.setItem('hrms_user', JSON.stringify({ ...this.auth.getUser(), name: r.user.name }));
+        if (r.user) sessionStorage.setItem('hrms_user', JSON.stringify({ ...this.auth.getUser(), name: r.user.name }));
         this.cdr.markForCheck();
       },
       error: e => {

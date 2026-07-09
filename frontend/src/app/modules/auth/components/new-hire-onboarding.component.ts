@@ -8,6 +8,7 @@ type DocumentField = {
   field: string;
   title: string;
   type: string;
+  required?: boolean;
 };
 
 @Component({
@@ -48,7 +49,7 @@ export class NewHireOnboardingComponent implements OnInit {
       passport_number: ['', Validators.maxLength(50)],
       passport_expiry_date: [''],
       bank_name: ['', [Validators.required, Validators.maxLength(100)]],
-      bank_account: ['', [Validators.required, Validators.maxLength(50)]],
+      bank_account: ['', [Validators.required, Validators.maxLength(24), Validators.pattern(/^[SA0-9]+$/i)]],
       emergency_contact_name: ['', [Validators.required, Validators.maxLength(100)]],
       emergency_contact_phone: ['', [Validators.required, Validators.maxLength(30)]],
     });
@@ -80,12 +81,32 @@ export class NewHireOnboardingComponent implements OnInit {
     return this.files[field]?.name || 'No file selected';
   }
 
+  normalizeBankAccount(): void {
+    const control = this.form.get('bank_account');
+    const value = String(control?.value || '').toUpperCase().replace(/[^SA0-9]/g, '').slice(0, 24);
+    if (control && control.value !== value) {
+      control.setValue(value, { emitEvent: false });
+    }
+  }
+
+  private missingRequiredDocuments(): string[] {
+    return this.documents
+      .filter(doc => doc.required && !this.files[doc.field])
+      .map(doc => doc.title);
+  }
+
   submit(): void {
     this.error = '';
     this.success = '';
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       this.error = 'Please complete the required fields.';
+      return;
+    }
+
+    const missingDocuments = this.missingRequiredDocuments();
+    if (missingDocuments.length) {
+      this.error = `Please upload: ${missingDocuments.join(', ')}.`;
       return;
     }
 

@@ -497,9 +497,27 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
   }
 
   downloadDoc(doc: any): void {
-    const url = doc.file_url || doc.download_url ||
-      `/api/v1/employees/${this.employee.id}/documents/${doc.id}/download`;
-    window.open(url, '_blank');
+    if (!this.employee?.id || !doc?.id) return;
+    this.uploadError = '';
+    this.http.get(`/api/v1/employees/${this.employee.id}/documents/${doc.id}/download`, {
+      responseType: 'blob',
+      observe: 'response',
+    })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: response => {
+          const blob = response.body as Blob;
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = doc.file_name || doc.title || 'employee-document';
+          link.click();
+          URL.revokeObjectURL(url);
+        },
+        error: err => {
+          this.uploadError = err?.error?.message || 'Could not download document.';
+        },
+      });
   }
 
   docIcon(type: string): string {

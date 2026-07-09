@@ -170,7 +170,7 @@ export class ReportsComponent implements OnInit {
     const url    = `/api/v1/reports/download/${this.activeReport.id}/${format}?${qs}`;
 
     // Use anchor + token for authenticated file download
-    const token = localStorage.getItem('hrms_token') || sessionStorage.getItem('hrms_token');
+    const token = sessionStorage.getItem('hrms_token') || localStorage.getItem('hrms_token');
     this.http.get(url, { responseType: 'blob', headers: { Authorization: `Bearer ${token}` } }).subscribe({
       next: blob => {
         const ext  = format === 'pdf' ? 'pdf' : 'csv';

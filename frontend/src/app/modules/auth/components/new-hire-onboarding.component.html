@@ -23,7 +23,7 @@
     <form *ngIf="!loading && employee" [formGroup]="form" (ngSubmit)="submit()" class="onboarding-form">
       <div class="notice">
         <mat-icon>info</mat-icon>
-        <span>Complete the required details and upload any available onboarding documents.</span>
+        <span>Complete the required details and upload the mandatory onboarding documents.</span>
       </div>
 
       <div class="section-title">Initial Details</div>
@@ -64,9 +64,9 @@
         </label>
 
         <label class="field wide">
-          <span>Address <b>*</b></span>
+          <span>National Address <b>*</b></span>
           <input formControlName="address" autocomplete="street-address" placeholder="Building, street, district">
-          <small *ngIf="form.get('address')?.touched && form.get('address')?.invalid">Address is required</small>
+          <small *ngIf="form.get('address')?.touched && form.get('address')?.invalid">National address is required</small>
         </label>
 
         <label class="field">
@@ -108,8 +108,9 @@
 
         <label class="field">
           <span>Bank Account / IBAN <b>*</b></span>
-          <input formControlName="bank_account" placeholder="SA...">
-          <small *ngIf="form.get('bank_account')?.touched && form.get('bank_account')?.invalid">Bank account is required</small>
+          <input formControlName="bank_account" placeholder="SA..." maxlength="24" (input)="normalizeBankAccount()">
+          <small *ngIf="form.get('bank_account')?.touched && form.get('bank_account')?.hasError('required')">Bank account is required</small>
+          <small *ngIf="form.get('bank_account')?.touched && (form.get('bank_account')?.hasError('maxlength') || form.get('bank_account')?.hasError('pattern'))">Only S, A, and numbers are allowed, maximum 24 characters</small>
         </label>
 
         <label class="field">
@@ -128,7 +129,7 @@
       <div class="section-title">Document Uploads</div>
       <div class="upload-grid">
         <label class="upload-tile" *ngFor="let doc of documents">
-          <span class="upload-label">{{ doc.title }}</span>
+          <span class="upload-label">{{ doc.title }} <b *ngIf="doc.required">*</b></span>
           <span class="upload-name">{{ fileName(doc.field) }}</span>
           <input type="file" (change)="onFileChange($event, doc.field)" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx">
           <span class="upload-action">

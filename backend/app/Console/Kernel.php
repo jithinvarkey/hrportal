@@ -42,6 +42,12 @@ class Kernel extends ConsoleKernel
                  ->withoutOverlapping()
                  ->appendOutputTo(storage_path('logs/missed-checkouts.log'));
 
+        $schedule->command('biotime:sync --days=0')
+                 ->everyFifteenMinutes()
+                 ->timezone('Asia/Riyadh')
+                 ->withoutOverlapping()
+                 ->appendOutputTo(storage_path('logs/biotime-sync.log'));
+
         $schedule->command('leave:notify-contract-expiry')
                  ->dailyAt('08:30')
                  ->timezone('Asia/Riyadh')

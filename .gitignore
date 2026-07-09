@@ -1,16 +1,33 @@
+# Environment files
+.env
+.env.*
+!.env.example
 backend/.env
-backend/.env.example
-/backend/storage
-/backend/tests
-/backend/vendor
-/frontend/.angular/cache
-/backend/nbproject/private/
-/backend/nbproject
-frontend/codex-ng-serve.out.log
-/backend/bootstrap/cache
-/backend/public/storage
-frontend/ng-serve-profile.out.log
-/frontend/dist
-frontend/ng-serve-current.err.log
+backend/.env.*
+!backend/.env.example
+
+# Dependencies
+vendor/
+backend/vendor/
+node_modules/
+frontend/node_modules/
+
+# Laravel generated files
+storage/
+backend/storage/
+backend/bootstrap/cache/
+backend/public/storage/
 *.log
-*.log
+
+# Frontend generated files
+frontend/.angular/cache/
+frontend/dist/
+
+# IDE / local project files
+nbproject/
+backend/nbproject/
+backend/nbproject/private/
+
+# Test and runtime cache
+.phpunit.result.cache
+backend/.phpunit.result.cache

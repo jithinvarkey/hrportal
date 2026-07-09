@@ -378,7 +378,7 @@ export class LeaveListComponent implements OnInit {
 
   // ── My balance ───────────────────────────────────────────────────────────
   loadMyBalance() {
-    const user = JSON.parse(localStorage.getItem('hrms_user') || '{}');
+    const user = JSON.parse(sessionStorage.getItem('hrms_user') || localStorage.getItem('hrms_user') || '{}');
     const empId = user?.employee?.id || user?.employee_id;
     if (!empId) return;
     this.http.get<any>(`/api/v1/leave/balance/${empId}`).subscribe({
@@ -387,7 +387,7 @@ export class LeaveListComponent implements OnInit {
   }
 
   loadAnnualBalanceToday() {
-    const user = JSON.parse(localStorage.getItem('hrms_user') || '{}');
+    const user = JSON.parse(sessionStorage.getItem('hrms_user') || localStorage.getItem('hrms_user') || '{}');
     const empId = user?.employee?.id || user?.employee_id;
     if (!empId) return;
     this.http.get<any>(`/api/v1/leave/balance/${empId}`, {
@@ -402,7 +402,7 @@ export class LeaveListComponent implements OnInit {
   }
 
   loadFormBalance(asOf?: string) {
-    const user = JSON.parse(localStorage.getItem('hrms_user') || '{}');
+    const user = JSON.parse(sessionStorage.getItem('hrms_user') || localStorage.getItem('hrms_user') || '{}');
     const empId = user?.employee?.id || user?.employee_id;
     if (!empId) return;
     const params: any = {};
@@ -713,7 +713,7 @@ export class LeaveListComponent implements OnInit {
   }
 
   loadExcuseUsage() {
-    const user = JSON.parse(localStorage.getItem('hrms_user') || '{}');
+    const user = JSON.parse(sessionStorage.getItem('hrms_user') || localStorage.getItem('hrms_user') || '{}');
     const empId = user?.employee?.id || user?.employee_id;
     if (!empId) return;
     this.loadingUsage = true;

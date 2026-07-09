@@ -153,7 +153,22 @@ class LeaveController extends Controller {
             $query->where('employee_id', '!=', $user->employee->id);
         }
 
-        return $query->whereDoesntHave('employee', fn($eq) => $eq->where('user_id', $user->id));
+        $query->whereDoesntHave('employee', fn($eq) => $eq->where('user_id', $user->id));
+
+        return $this->activeEmployeeApprovalScope($query, rescue(fn() => $this->userRoles(), [], false));
+    }
+
+    private function shouldLimitApprovalViewsToActiveEmployees(array $userRoles): bool {
+        return !in_array('super_admin', $userRoles, true)
+            && (in_array('department_manager', $userRoles, true) || in_array('hr_manager', $userRoles, true));
+    }
+
+    private function activeEmployeeApprovalScope($query, array $userRoles) {
+        if (!$this->shouldLimitApprovalViewsToActiveEmployees($userRoles)) {
+            return $query;
+        }
+
+        return $query->whereHas('employee', fn($employee) => $employee->where('status', 'active'));
     }
 
     public function types() {
@@ -311,6 +326,7 @@ class LeaveController extends Controller {
                 ->when($request->needs_action && !$ownOnly && $user->employee, fn($q) => $q->where('employee_id', '!=', $user->employee->id))
                 ->when($request->needs_action && !$ownOnly, fn($q) => $q->whereDoesntHave('employee', fn($eq) => $eq->where('user_id', $user->id)))
                 ->when(!$request->needs_action && $request->status, fn($q) => $q->where('status', $request->status))
+                ->when(!$ownOnly && ($request->needs_action || $request->status === 'pending'), fn($q) => $this->activeEmployeeApprovalScope($q, $userRoles))
                 ->when($request->employee_id, fn($q) => $q->where('employee_id', $request->employee_id))
                 ->when($request->leave_type_id, fn($q) => $q->where('leave_type_id', $request->leave_type_id))
                 ->when($request->search, function ($q) use ($request) {
@@ -1341,7 +1357,10 @@ class LeaveController extends Controller {
 
         $baseQ = $this->leaveRequestScope($user, $isAdmin, $isMgr);
         $needsActionCount = $this->actionableLeaveRequestScope($user, $isAdmin, $isMgr)->count();
-        $awaitingManagerCount = (clone $baseQ)->where('status', 'pending')->count();
+        $awaitingManagerCount = $this->activeEmployeeApprovalScope(
+            (clone $baseQ)->where('status', 'pending'),
+            $userRoles
+        )->count();
         $awaitingHrCount = (clone $baseQ)->where('status', 'manager_approved')->count();
         $pendingCount = $awaitingManagerCount + $awaitingHrCount;
         $approvedCount = (clone $baseQ)->where('status', 'approved')->count();

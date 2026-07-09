@@ -43,11 +43,13 @@ describe('AuthService', () => {
     httpMock = TestBed.inject(HttpTestingController);
 
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   afterEach(() => {
     httpMock.verify();
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   // ── Login ──────────────────────────────────────────────────────────────
@@ -55,7 +57,6 @@ describe('AuthService', () => {
   it('should store token and user on successful login', fakeAsync(() => {
     service.login('hr@example.com', 'password').subscribe();
 
-    httpMock.expectOne('/sanctum/csrf-cookie').flush({});
     httpMock.expectOne('/api/v1/auth/login').flush({
       token: 'test-token-123',
       user:  mockUserHR,
@@ -69,7 +70,6 @@ describe('AuthService', () => {
 
   it('should add Bearer token to Authorization header after login', fakeAsync(() => {
     service.login('hr@example.com', 'password').subscribe();
-    httpMock.expectOne('/sanctum/csrf-cookie').flush({});
     httpMock.expectOne('/api/v1/auth/login').flush({ token: 'abc123', user: mockUserHR });
     tick();
 
@@ -79,13 +79,15 @@ describe('AuthService', () => {
   // ── Logout ─────────────────────────────────────────────────────────────
 
   it('should clear storage on logout', fakeAsync(() => {
-    localStorage.setItem('hrms_token', 'tok');
-    localStorage.setItem('hrms_user', JSON.stringify(mockUserHR));
+    sessionStorage.setItem('hrms_token', 'tok');
+    sessionStorage.setItem('hrms_user', JSON.stringify(mockUserHR));
 
     service.logout();
     httpMock.expectOne('/api/v1/auth/logout').flush({});
     tick();
 
+    expect(sessionStorage.getItem('hrms_token')).toBeNull();
+    expect(sessionStorage.getItem('hrms_user')).toBeNull();
     expect(localStorage.getItem('hrms_token')).toBeNull();
     expect(localStorage.getItem('hrms_user')).toBeNull();
     expect(service.isLoggedIn()).toBeFalse();
