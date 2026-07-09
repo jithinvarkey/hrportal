@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 class SyncBioTimeAttendance extends Command
 {
-    protected $signature   = 'biotime:sync {--days=1 : Number of past days to sync} {--device= : Sync specific device ID only}';
+    protected $signature   = 'biotime:sync {--days=1 : Days ago to sync; use 0 for today} {--device= : Sync specific device ID only}';
     protected $description = 'Sync attendance punches from ZKTeco BioTime devices';
 
     public function handle(BioTimeService $biotime): int

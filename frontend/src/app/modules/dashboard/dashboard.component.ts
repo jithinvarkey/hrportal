@@ -37,7 +37,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   })();
 
   readonly userName = (() => {
-    try { return JSON.parse(localStorage.getItem('hrms_user') || '{}')?.name?.split(' ')[0] || 'Admin'; }
+    try { return JSON.parse(sessionStorage.getItem('hrms_user') || localStorage.getItem('hrms_user') || '{}')?.name?.split(' ')[0] || 'Admin'; }
     catch { return 'Admin'; }
   })();
 

@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { switchMap, tap } from 'rxjs/operators';
+import { tap } from 'rxjs/operators';
 
 export const ROLES = {
   SUPER_ADMIN: 'super_admin',
@@ -40,15 +40,12 @@ export class AuthService {
       ? { email: identifier, login: identifier, password }
       : { login: identifier, password };
 
-    return this.http.get('/sanctum/csrf-cookie', { withCredentials: true }).pipe(
-      switchMap(() =>
-        this.http.post<any>(`${this.apiUrl}/auth/login`, payload,
-          { headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' } }
-        )
-      ),
+    return this.http.post<any>(`${this.apiUrl}/auth/login`, payload,
+      { headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' } }
+    ).pipe(
       tap(res => {
-        if (res.token) localStorage.setItem(this.tokenKey, res.token);
-        if (res.user) localStorage.setItem(this.userKey, JSON.stringify(res.user));
+        if (res.token) sessionStorage.setItem(this.tokenKey, res.token);
+        if (res.user) sessionStorage.setItem(this.userKey, JSON.stringify(res.user));
       })
     );
   }
@@ -59,8 +56,8 @@ export class AuthService {
       otp,
     }).pipe(
       tap(res => {
-        if (res.token) localStorage.setItem(this.tokenKey, res.token);
-        if (res.user) localStorage.setItem(this.userKey, JSON.stringify(res.user));
+        if (res.token) sessionStorage.setItem(this.tokenKey, res.token);
+        if (res.user) sessionStorage.setItem(this.userKey, JSON.stringify(res.user));
       })
     );
   }
@@ -88,7 +85,7 @@ export class AuthService {
 
   logout(): void {
 
-  const token = localStorage.getItem(this.tokenKey);
+  const token = this.getToken();
 
   this.http.post(
     `${this.apiUrl}/auth/logout`,
@@ -100,14 +97,12 @@ export class AuthService {
     }
   ).subscribe({
     next: () => {
-      localStorage.removeItem(this.tokenKey);
-      localStorage.removeItem(this.userKey);
+      this.clearStoredSession();
       //this.router.navigate(['/login']);
     },
     error: () => {
       // Even if API fails, clear local session
-      localStorage.removeItem(this.tokenKey);
-      localStorage.removeItem(this.userKey);
+      this.clearStoredSession();
       //this.router.navigate(['/login']);
     }
   });
@@ -116,16 +111,23 @@ export class AuthService {
 
   refreshUser(): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/auth/me`).pipe(
-      tap(res => { if (res.user) localStorage.setItem(this.userKey, JSON.stringify(res.user)); })
+      tap(res => { if (res.user) sessionStorage.setItem(this.userKey, JSON.stringify(res.user)); })
     );
   }
 
   // ── Identity ──────────────────────────────────────────────────────────
-  getToken(): string | null { return localStorage.getItem(this.tokenKey); }
+  getToken(): string | null { return sessionStorage.getItem(this.tokenKey) || localStorage.getItem(this.tokenKey); }
   isLoggedIn(): boolean { return !!this.getToken(); }
   getUser(): any {
-    const u = localStorage.getItem(this.userKey);
+    const u = sessionStorage.getItem(this.userKey) || localStorage.getItem(this.userKey);
     return u ? JSON.parse(u) : null;
+  }
+
+  private clearStoredSession(): void {
+    sessionStorage.removeItem(this.tokenKey);
+    sessionStorage.removeItem(this.userKey);
+    localStorage.removeItem(this.tokenKey);
+    localStorage.removeItem(this.userKey);
   }
 
   getRoles(): string[] {
