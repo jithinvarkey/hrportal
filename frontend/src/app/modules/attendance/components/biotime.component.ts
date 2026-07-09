@@ -226,10 +226,15 @@ syncForm = {
       this.syncing[deviceId] = false;
       this.showSyncModal = false;
 
-      this.toast(
-        r?.message ||
-        `Sync completed successfully`
-      );
+      const skipped = Number(r?.skipped_duplicates ?? 0);
+      const parts = [
+        `Fetched ${Number(r?.fetched ?? 0)}`,
+        `new ${Number(r?.new_raw ?? r?.new ?? 0)}`,
+        `processed ${Number(r?.processed ?? 0)}`,
+      ];
+      if (skipped > 0) parts.push(`skipped duplicates ${skipped}`);
+
+      this.toast(r?.message || `Sync completed: ${parts.join(', ')}.`);
 
       this.loadDevices();
       this.cdr.markForCheck();

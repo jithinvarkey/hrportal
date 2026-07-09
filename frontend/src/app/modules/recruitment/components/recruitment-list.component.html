@@ -6,7 +6,7 @@
       <h1 class="page-title"><mat-icon>work</mat-icon> Recruitment</h1>
       <p class="page-sub">Job postings · Applicant pipeline · Hire management</p>
     </div>
-    <button class="btn-primary" *ngIf="isHR" (click)="openJobForm()">
+    <button class="btn-primary" *ngIf="canManageRecruitment" (click)="openJobForm()">
       <mat-icon>post_add</mat-icon> Post Job
     </button>
   </div>
@@ -106,16 +106,16 @@
               <button class="row-btn" matTooltip="View applicants" (click)="viewApplications(r)">
                 <mat-icon>group</mat-icon>
               </button>
-              <button class="row-btn" matTooltip="Edit" *ngIf="isHR" (click)="openJobForm(r); $event.stopPropagation()">
+              <button class="row-btn" matTooltip="Edit" *ngIf="canManageRecruitment" (click)="openJobForm(r); $event.stopPropagation()">
                 <mat-icon>edit</mat-icon>
               </button>
-              <button class="row-btn success" matTooltip="Set Open" *ngIf="isHR && r.status!=='open'" (click)="changeJobStatus(r,'open',$event)">
+              <button class="row-btn success" matTooltip="Set Open" *ngIf="canManageRecruitment && r.status!=='open'" (click)="changeJobStatus(r,'open',$event)">
                 <mat-icon>lock_open</mat-icon>
               </button>
-              <button class="row-btn warn" matTooltip="Close Job" *ngIf="isHR && r.status==='open'" (click)="changeJobStatus(r,'closed',$event)">
+              <button class="row-btn warn" matTooltip="Close Job" *ngIf="canManageRecruitment && r.status==='open'" (click)="changeJobStatus(r,'closed',$event)">
                 <mat-icon>lock</mat-icon>
               </button>
-              <button class="row-btn danger" matTooltip="Delete" *ngIf="isHR" (click)="deleteJob(r.id, $event)">
+              <button class="row-btn danger" matTooltip="Delete" *ngIf="canManageRecruitment" (click)="deleteJob(r.id, $event)">
                 <mat-icon>delete_outline</mat-icon>
               </button>
             </div>
@@ -157,7 +157,7 @@
         <option *ngFor="let s of stages" [value]="s.value">{{ s.label }}</option>
       </select>
       <span class="pipeline-count">{{ applications.length }} applicants</span>
-      <button class="btn-primary" *ngIf="isHR" (click)="openAddApplicantForm()" style="margin-left:auto">
+      <button class="btn-primary" *ngIf="canManageRecruitment" (click)="openAddApplicantForm()" style="margin-left:auto">
         <mat-icon>person_add</mat-icon> Add Applicant
       </button>
     </div>
@@ -243,12 +243,12 @@
           <option value="">All Positions</option>
           <option *ngFor="let p of jobPositionOptions" [value]="p">{{ p }}</option>
         </select>
-        <select class="cv-filter-select wide" [(ngModel)]="cvBankDepartment" (change)="loadCvBank()">
+        <select class="cv-filter-select wide" *ngIf="!managerDepartmentId" [(ngModel)]="cvBankDepartment" (change)="loadCvBank()">
           <option value="">All Departments</option>
           <option *ngFor="let d of departments" [value]="d.id">{{ d.name }}</option>
         </select>
       </div>
-      <button class="btn-primary" (click)="openCvForm()">
+      <button class="btn-primary" *ngIf="canManageRecruitment" (click)="openCvForm()">
         <mat-icon>person_add</mat-icon> Add CV
       </button>
     </div>
@@ -292,7 +292,7 @@
                  class="cv-action-btn" matTooltip="View CV">
                 <mat-icon>description</mat-icon>
               </a>
-              <button class="cv-action-btn" matTooltip="Link to Job" *ngIf="isHR"
+              <button class="cv-action-btn" matTooltip="Link to Job" *ngIf="canManageRecruitment"
                       (click)="openLinkModal(cv)">
                 <mat-icon>link</mat-icon>
               </button>
@@ -309,7 +309,7 @@
         <mat-icon>folder_open</mat-icon>
         <div>No CVs in the bank yet</div>
         <div class="cv-empty-sub">Add candidates even without an open position</div>
-        <button class="btn-primary" (click)="openCvForm()">
+        <button class="btn-primary" *ngIf="canManageRecruitment" (click)="openCvForm()">
           <mat-icon>person_add</mat-icon> Add First CV
         </button>
       </div>
@@ -450,7 +450,7 @@
     <div class="two-col">
       <div class="field-group">
         <label class="field-label">Department</label>
-        <select class="field-select-full" formControlName="department_id" (change)="onJobDepartmentChange()">
+        <select class="field-select-full" formControlName="department_id" (change)="onJobDepartmentChange()" [disabled]="!!managerDepartmentId">
           <option value="">— Select —</option>
           <option *ngFor="let d of departments" [value]="d.id">{{ d.name }}</option>
         </select>
@@ -575,7 +575,7 @@
                  class="cv-action-btn" matTooltip="View CV">
                 <mat-icon>description</mat-icon>
               </a>
-              <button class="cv-action-btn" matTooltip="Link to Job" *ngIf="isHR"
+              <button class="cv-action-btn" matTooltip="Link to Job" *ngIf="canManageRecruitment"
                       (click)="openLinkModal(cv)">
                 <mat-icon>link</mat-icon>
               </button>
@@ -593,7 +593,7 @@
         <mat-icon>folder_open</mat-icon>
         <div>No CVs in the bank yet</div>
         <div class="cv-empty-sub">Add candidates even without an open position</div>
-        <button class="btn-primary" (click)="openCvForm()">
+        <button class="btn-primary" *ngIf="canManageRecruitment" (click)="openCvForm()">
           <mat-icon>person_add</mat-icon> Add First CV
         </button>
       </div>
@@ -804,7 +804,7 @@
     </div>
     <div class="field-group">
       <label class="field-label">Department</label>
-      <select class="field-select-full" [(ngModel)]="cvForm.department_id">
+      <select class="field-select-full" [(ngModel)]="cvForm.department_id" [disabled]="!!managerDepartmentId">
         <option value="">No department</option>
         <option *ngFor="let d of departments" [value]="d.id">{{ d.name }}</option>
       </select>

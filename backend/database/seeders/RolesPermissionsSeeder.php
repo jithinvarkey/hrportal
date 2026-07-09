@@ -181,6 +181,7 @@ class RolesPermissionsSeeder extends Seeder
                 'separations.view_all','separations.approve_manager',
                 'requests.approve_manager','requests.view_own','requests.submit',
                 'performance.view','performance.manage',
+                'recruitment.view','recruitment.manage',
                 'orgchart.view',
             ],
 

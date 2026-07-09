@@ -157,9 +157,12 @@ class LoanService {
             }
         }
 
-        $pendingManager = (clone $baseQuery)
-                ->where('status', 'pending_manager')
-                ->count();
+        $pendingManagerQuery = (clone $baseQuery)->where('status', 'pending_manager');
+        if ($this->shouldLimitApprovalViewsToActiveEmployees($userRoles)) {
+            $pendingManagerQuery->whereHas('employee', fn($employee) => $employee->where('status', 'active'));
+        }
+
+        $pendingManager = $pendingManagerQuery->count();
 
         $pendingHr = (clone $baseQuery)
                 ->when(
@@ -201,5 +204,10 @@ class LoanService {
         $levels = $stored === null ? $configured : (int) $stored;
 
         return in_array($levels, [2, 3], true) ? $levels : 3;
+    }
+
+    private function shouldLimitApprovalViewsToActiveEmployees(array $userRoles): bool {
+        return !in_array('super_admin', $userRoles, true)
+                && (in_array('department_manager', $userRoles, true) || in_array('hr_manager', $userRoles, true));
     }
 }

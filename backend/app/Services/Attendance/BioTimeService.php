@@ -251,6 +251,7 @@ class BioTimeService {
             'created' => 0,
             'updated' => 0,
             'unmatched' => 0,
+            'skipped_duplicates' => 0,
             'errors' => [],
         ];
 
@@ -270,11 +271,12 @@ class BioTimeService {
         $empMap = $this->buildEmployeeMap();
         $newRaw = 0;
         $unmatched = 0;
+        $skippedDuplicates = 0;
 
         foreach ($punches as $punch) {
             $empNum = (string) ($punch['emp_code'] ?? '');
 
-            $punchTime = Carbon::parse($punch['punch_time']);
+            $punchTime = Carbon::parse($punch['punch_time'])->setMicrosecond(0);
             $empId = $empMap[$empNum] ?? null;
  
             if (!$empId) {
@@ -282,27 +284,35 @@ class BioTimeService {
                 continue;
             }
 
-            $exists = DeviceAttendanceLog::where('device_id', $device->id)->where('employee_id', $empId)
-                    ->where('punch_time', $punchTime)
-                    ->exists();
+            $rawLog = DeviceAttendanceLog::firstOrCreate(
+                [
+                    'device_id' => $device->id,
+                    'device_employee_number' => $empNum,
+                    'punch_time' => $punchTime,
+                ],
+                [
+                    'employee_id' => $empId,
+                    'punch_type' => (int) ($punch['punch_type'] ?? 0),
+                    'verification_mode' => $punch['verification_mode'] ?? null,
+                    'processed' => false,
+                ]
+            );
 
-            if ($exists)
+            if (!$rawLog->wasRecentlyCreated) {
+                $rawLog->forceFill([
+                    'employee_id' => $rawLog->employee_id ?: $empId,
+                    'processed' => false,
+                ])->save();
+                $skippedDuplicates++;
                 continue;
+            }
 
-            DeviceAttendanceLog::create([
-                'device_id' => $device->id,
-                'device_employee_number' => $empNum,
-                'employee_id' => $empId,
-                'punch_time' => $punchTime,
-                'punch_type' => (int) ($punch['punch_type'] ?? 0),
-                'verification_mode' => $punch['verification_mode'] ?? null,
-                'processed' => false,
-            ]);
             $newRaw++;
         }
 
         $result['new_raw'] = $newRaw;
         $result['unmatched'] = $unmatched;
+        $result['skipped_duplicates'] = $skippedDuplicates;
 
         // 3 ─ Process raw → attendance_logs
         $devService = app(AttendanceDeviceService::class);
