@@ -178,8 +178,20 @@ class RecruitmentController extends Controller {
             ], 422);
         }
 
+        $isNewRejection = $request->stage === 'rejected' && $app->stage !== 'rejected';
+
+        if ($isNewRejection) {
+            $this->service->sendApplicantRejection($app);
+        }
+
         $app->update(['stage' => $request->stage, 'hr_notes' => $request->hr_notes]);
-        return response()->json(['application' => $app]);
+        return response()->json([
+            'application' => $app,
+            'email_sent' => $isNewRejection,
+            'message' => $isNewRejection
+                ? 'Applicant rejected and rejection email sent.'
+                : 'Application stage updated.',
+        ]);
     }
 
     public function scheduleInterview(Request $request) {

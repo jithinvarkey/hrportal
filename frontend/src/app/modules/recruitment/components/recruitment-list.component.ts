@@ -127,6 +127,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   ];
 
   private readonly api = '/api/v1/recruitment';
+  private readonly defaultInterviewMapLink = 'https://maps.app.goo.gl/sZWsrahVFX8zsE3XA';
   private readonly destroy$ = new Subject<void>();
 
   constructor(
@@ -246,6 +247,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
 
   moveStage(app: any, stage: string, event: Event): void {
     event.stopPropagation();
+    this.errorMsg = '';
     if (stage === 'hired') {
       this.openHireForm(app, event);
       return;
@@ -261,16 +263,23 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (stage === 'rejected' && !confirm(`Reject ${app.applicant_name}? A rejection email will be sent to ${app.applicant_email}.`)) {
+      return;
+    }
+
     this.http.put(`${this.api}/applications/${app.id}/stage`, { stage }).pipe(takeUntil(this.destroy$)).subscribe({
       next: (r: any) => {
         app.stage = stage;
         if (this.selectedApp?.id === app.id) this.selectedApp.stage = stage;
-        this.successMsg = `Moved to ${stage}`;
+        this.successMsg = r?.message || `Moved to ${stage}`;
         this.loadStats();
         setTimeout(() => { this.successMsg = ''; this.cdr.markForCheck(); }, 3000);
         this.cdr.markForCheck();
       },
-      error: () => {},
+      error: (e: any) => {
+        this.errorMsg = this.firstError(e) || e?.error?.message || 'Failed to update applicant stage.';
+        this.cdr.markForCheck();
+      },
     });
   }
 
@@ -341,8 +350,8 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     const now = new Date();
     now.setHours(10, 0, 0, 0);
     this.interviewForm = {
-      round: 'HR', duration_minutes: 60, format: 'video',
-      location_or_link: '', interviewer_employee_ids: [],
+      round: 'HR', duration_minutes: 60, format: 'in_person',
+      location_or_link: this.defaultInterviewMapLink, interviewer_employee_ids: [],
       scheduled_at: now.toISOString().slice(0, 16),
     };
     this.interviewSubmitting = false;
@@ -352,7 +361,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
 
   onInterviewFormatChange(format: string): void {
     this.interviewForm.format = format;
-    this.interviewForm.location_or_link = '';
+    this.interviewForm.location_or_link = format === 'in_person' ? this.defaultInterviewMapLink : '';
   }
 
   interviewLocationLabel(): string {
@@ -362,7 +371,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   }
 
   interviewLocationPlaceholder(): string {
-    if (this.interviewForm.format === 'in_person') return 'e.g. Diamond office, Conference Room 3, Floor 2';
+    if (this.interviewForm.format === 'in_person') return this.defaultInterviewMapLink;
     if (this.interviewForm.format === 'phone') return 'e.g. HR will call the applicant mobile number';
     return 'e.g. https://meet.google.com/...';
   }

@@ -1,6 +1,7 @@
 <?php
 namespace App\Services;
 
+use App\Mail\ApplicantRejectedMail;
 use App\Mail\InterviewInviteMail;
 use App\Mail\RecruitmentOfferMail;
 use App\Models\JobApplication;
@@ -52,6 +53,36 @@ class RecruitmentService
         }
 
         $mail->send(new InterviewInviteMail($interview, $interviewers));
+    }
+
+    public function sendApplicantRejection(JobApplication $application): void
+    {
+        $application->loadMissing('jobPosting');
+
+        if (!$application->applicant_email) {
+            throw ValidationException::withMessages([
+                'email' => 'Applicant email is missing. The applicant was not rejected.',
+            ]);
+        }
+
+        try {
+            Mail::to($application->applicant_email)->send(new ApplicantRejectedMail($application));
+
+            Log::info('Applicant rejection email sent.', [
+                'application_id' => $application->id,
+                'to' => $application->applicant_email,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Applicant rejection email failed.', [
+                'application_id' => $application->id,
+                'to' => $application->applicant_email,
+                'error' => $e->getMessage(),
+            ]);
+
+            throw ValidationException::withMessages([
+                'email' => 'The rejection email could not be sent. The applicant was not rejected: ' . $e->getMessage(),
+            ]);
+        }
     }
 
     public function generateOfferLetter(JobApplication $app, array $data): array

@@ -131,9 +131,10 @@ class BioTimeService {
         }
     }
 
-    public function fetchTransactions(AttendanceDevice $device, Carbon $startDate, Carbon $endDate, ?string $employeeCode = null): array {
+    public function fetchTransactions(AttendanceDevice $device, Carbon $startDate, ?Carbon $endDate = null, ?string $employeeCode = null): array {
 
         try {
+            $endDate = $endDate ?: now();
 
             $apiPath = $device->api_path ?: '/iclock/api/transactions/';
 
@@ -256,7 +257,9 @@ class BioTimeService {
         ];
 
         // 1 ─ Fetch from BioTime
-        $fetch = $this->fetchTransactions($device, $since, $until,$employeeCode);
+        $until = $until ?: now();
+
+        $fetch = $this->fetchTransactions($device, $since, $until, $employeeCode);
 
         if (!$fetch['ok']) {
             $result['errors'][] = $fetch['message'];
@@ -264,7 +267,7 @@ class BioTimeService {
             return $result;
         }
 
-        $punches = data_get($fetch, 'data.data', []);
+        $punches = $this->extractPunches(data_get($fetch, 'data', []));
         $result['fetched'] = count($punches);
 
         // 2 ─ Store raw punches
@@ -274,10 +277,15 @@ class BioTimeService {
         $skippedDuplicates = 0;
 
         foreach ($punches as $punch) {
-            $empNum = (string) ($punch['emp_code'] ?? '');
+            $empNum = (string) ($punch['emp_code'] ?? $punch['employee'] ?? $punch['emp_id'] ?? '');
+
+            if (empty($punch['punch_time'])) {
+                $unmatched++;
+                continue;
+            }
 
             $punchTime = Carbon::parse($punch['punch_time'])->setMicrosecond(0);
-            $empId = $empMap[$empNum] ?? null;
+            $empId = $this->matchEmployeeId($empMap, $empNum);
  
             if (!$empId) {
                 $unmatched++;
@@ -292,8 +300,8 @@ class BioTimeService {
                 ],
                 [
                     'employee_id' => $empId,
-                    'punch_type' => (int) ($punch['punch_type'] ?? 0),
-                    'verification_mode' => $punch['verification_mode'] ?? null,
+                    'punch_type' => (int) ($punch['punch_type'] ?? $punch['punch_state'] ?? $punch['status'] ?? 0),
+                    'verification_mode' => $punch['verification_mode'] ?? $punch['verify_type'] ?? null,
                     'processed' => false,
                 ]
             );
@@ -347,12 +355,61 @@ class BioTimeService {
     }
 
     private function buildEmployeeMap(): array {
-        return Employee::whereIn('status', ['active', 'probation', 'on_leave'])
-                        ->get(['employee_code', 'id'])
-                        ->mapWithKeys(function ($e) {
-                            $code = ltrim(str_ireplace('EMP', '', $e->employee_code), '0');
-                            return [$code => $e->id];
-                        })
-                        ->toArray();
+        $map = [];
+
+        Employee::whereIn('status', ['active', 'probation', 'on_leave'])
+            ->get(['employee_code', 'id'])
+            ->each(function ($e) use (&$map) {
+                foreach ($this->employeeCodeCandidates((string) $e->employee_code) as $candidate) {
+                    $map[$candidate] = $e->id;
+                }
+            });
+
+        return $map;
+    }
+
+    private function extractPunches(array $data): array
+    {
+        $records = $data['data'] ?? $data['results'] ?? $data['records'] ?? $data;
+
+        if (isset($records['records']) && is_array($records['records'])) {
+            $records = $records['records'];
+        }
+
+        return is_array($records) ? array_values(array_filter($records, fn($record) => is_array($record))) : [];
+    }
+
+    private function matchEmployeeId(array $map, string $deviceCode): ?int
+    {
+        foreach ($this->employeeCodeCandidates($deviceCode) as $candidate) {
+            if (isset($map[$candidate])) {
+                return $map[$candidate];
+            }
+        }
+
+        return null;
+    }
+
+    private function employeeCodeCandidates(string $code): array
+    {
+        $raw = strtoupper(trim($code));
+        if ($raw === '') {
+            return [];
+        }
+
+        $clean = preg_replace('/[^A-Z0-9]/', '', $raw) ?: '';
+        $withoutPrefix = str_starts_with($clean, 'EMP') ? substr($clean, 3) : $clean;
+        $numeric = ltrim($withoutPrefix, '0');
+        $numeric = $numeric === '' ? '0' : $numeric;
+
+        return array_values(array_unique(array_filter([
+            $raw,
+            $clean,
+            $withoutPrefix,
+            $numeric,
+            'EMP' . $withoutPrefix,
+            ctype_digit($numeric) ? 'EMP' . str_pad($numeric, 4, '0', STR_PAD_LEFT) : null,
+            ctype_digit($numeric) ? 'EMP' . $numeric : null,
+        ])));
     }
 }

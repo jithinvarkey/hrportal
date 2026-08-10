@@ -125,13 +125,16 @@ class PayrollController extends Controller {
         if ($payroll->status !== 'approved') {
             return response()->json(['message' => 'Only approved payrolls can be marked as paid.'], 422);
         }
-        $payroll->update([
-            'status'   => 'paid',
-            'paid_at'  => now(),
-            'paid_by'  => auth()->id(),
-            'notes'    => ($payroll->notes ? $payroll->notes . ' | ' : '') .
-                          'Marked paid by ' . auth()->user()->name . ' on ' . now()->toDateTimeString(),
-        ]);
+        DB::transaction(function () use ($payroll) {
+            $payroll->update([
+                'status'   => 'paid',
+                'paid_at'  => now(),
+                'paid_by'  => auth()->id(),
+                'notes'    => ($payroll->notes ? $payroll->notes . ' | ' : '') .
+                              'Marked paid by ' . auth()->user()->name . ' on ' . now()->toDateTimeString(),
+            ]);
+            $this->service->settlePayrollLoanInstallments($payroll, (int) auth()->id());
+        });
         return response()->json(['message' => 'Payroll marked as paid.', 'payroll' => $payroll->fresh()]);
     }
 
@@ -139,6 +142,7 @@ class PayrollController extends Controller {
         $request->validate(['reason' => 'required|string']);
         $payroll = Payroll::findOrFail($id);
         $payroll->update(['status' => 'rejected', 'notes' => $request->reason]);
+        $this->service->releasePayrollLoanInstallments($payroll);
         return response()->json(['message' => 'Payroll rejected']);
     }
 
@@ -219,7 +223,10 @@ class PayrollController extends Controller {
         $otherDed  = $data['other_deductions']    ?? $payslip->other_deductions;
 
         $totalEarnings   = round($basic + $housing + $transport + $otherEarn, 2);
-        $totalDeductions = round($gosiEmp + $otherDed, 2);
+        $totalDeductions = round(
+            $gosiEmp + $otherDed + (float) $payslip->leave_deduction + (float) $payslip->loan_deduction,
+            2
+        );
         $netSalary       = round(max(0, $totalEarnings - $totalDeductions), 2);
 
         $payslip->update(array_merge($data, [
@@ -238,7 +245,8 @@ class PayrollController extends Controller {
 
         return response()->json([
             'message' => 'Payslip updated successfully',
-            'payslip' => $payslip->fresh(),
+            'payslip' => $payslip->fresh()->load('employee.department'),
+            'payroll' => $payroll->fresh()->loadCount('payslips'),
         ]);
     }
 
@@ -253,13 +261,19 @@ class PayrollController extends Controller {
             return response()->json(['message' => 'Only approved or paid payrolls can be reopened'], 422);
         }
 
-        $payroll->update([
-            'status'      => 'pending_approval',
-            'approved_by' => null,
-            'approved_at' => null,
-            'notes'       => ($payroll->notes ? $payroll->notes . ' | ' : '') .
-                             'Reopened by ' . auth()->user()->name . ' on ' . now()->toDateTimeString(),
-        ]);
+        DB::transaction(function () use ($payroll) {
+            if ($payroll->status === 'paid') {
+                $this->service->reversePayrollLoanInstallments($payroll);
+            }
+
+            $payroll->update([
+                'status'      => 'pending_approval',
+                'approved_by' => null,
+                'approved_at' => null,
+                'notes'       => ($payroll->notes ? $payroll->notes . ' | ' : '') .
+                                 'Reopened by ' . auth()->user()->name . ' on ' . now()->toDateTimeString(),
+            ]);
+        });
 
         return response()->json([
             'message' => 'Payroll reopened successfully. You can now edit payslips and re-approve.',
@@ -288,17 +302,16 @@ class PayrollController extends Controller {
                 'period_end'   => $payroll->period_end,
             ];
 
-            $employees   = \App\Models\Employee::where('status', 'active')->get();
+            $employees   = $this->service->eligibleEmployees();
             $totalGross  = 0; $totalDeduct = 0; $totalNet = 0;
 
             $hasNewCols = \Illuminate\Support\Facades\Schema::hasColumn('payslips', 'housing_allowance');
 
             foreach ($employees as $emp) {
-                $slip = $this->service->calculatePayslipPublic($emp, $data, $hasNewCols);
-                $payroll->payslips()->create($slip);
-                $totalGross  += $slip['gross_salary'];
-                $totalDeduct += $slip['total_deductions'];
-                $totalNet    += $slip['net_salary'];
+                $payslip = $this->service->createPayslip($payroll, $emp, $data, $hasNewCols);
+                $totalGross  += $payslip->gross_salary;
+                $totalDeduct += $payslip->total_deductions;
+                $totalNet    += $payslip->net_salary;
             }
 
             $payroll->update([

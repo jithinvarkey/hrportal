@@ -41,6 +41,7 @@
         <div class="bal-meta">
           <span>As of {{ annualBalanceToday.balance_as_of | date:'dd MMM yyyy' }}</span>
           <span>Earned {{ annualBalanceToday.allocated_days | number:'1.1-1' }}</span>
+          <span *ngIf="carryForwardSummary(annualBalanceToday)">{{ carryForwardSummary(annualBalanceToday) }}</span>
           <span>Taken this period {{ (annualBalanceToday.approved_taken_contract_period || annualBalanceToday.used_days) | number:'1.1-1' }}</span>
         </div>
       </div>
@@ -51,7 +52,7 @@
         <div class="bal-name">{{ b.leave_type?.name }}</div>
         <div class="bal-numbers">
           <span class="bal-remain">{{ b.remaining_days | number:'1.1-1' }}</span>
-          <span class="bal-total">/ {{ b.allocated_days | number:'1.1-1' }} days</span>
+          <span class="bal-total">/ {{ balanceTotalDays(b) | number:'1.1-1' }} days</span>
         </div>
         <div class="bal-track">
           <div class="bal-fill"
@@ -60,6 +61,8 @@
           </div>
         </div>
         <div class="bal-meta">
+          <span *ngIf="isAnnualBalance(b)">Base {{ b.allocated_days | number:'1.1-1' }}</span>
+          <span *ngIf="carryForwardSummary(b)">{{ carryForwardSummary(b) }}</span>
           <span>Used {{ b.used_days }}</span>
           <span *ngIf="b.pending_days > 0" style="color:var(--warning)">Pending {{ b.pending_days }}</span>
         </div>

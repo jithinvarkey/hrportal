@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\Employee;
+use App\Models\LeaveRequest;
+use App\Models\LeaveType;
+use App\Models\Loan;
+use App\Models\LoanInstallment;
 use App\Models\Payroll;
 use App\Models\Payslip;
 use App\Models\User;
@@ -70,6 +74,95 @@ class PayrollApiTest extends TestCase
             ->assertJsonPath('message', 'Payroll run successfully');
 
         $this->assertDatabaseHas('payrolls', ['month' => $month]);
+    }
+
+    /** @test */
+    public function payroll_excludes_the_system_admin_employee(): void
+    {
+        $systemAdmin = User::factory()->create(['name' => 'System Admin']);
+        $systemAdmin->assignRole('super_admin');
+        $systemAdminEmployee = Employee::factory()->create([
+            'user_id' => $systemAdmin->id,
+            'status'  => 'active',
+        ]);
+
+        $month = now()->format('Y-m');
+
+        $response = $this->actingAs($this->hrManager, 'sanctum')
+            ->postJson('/api/v1/payroll/run', [
+                'month'        => $month,
+                'period_start' => now()->startOfMonth()->toDateString(),
+                'period_end'   => now()->endOfMonth()->toDateString(),
+            ])
+            ->assertCreated();
+
+        $payrollId = $response->json('payroll.id');
+
+        $this->assertDatabaseMissing('payslips', [
+            'payroll_id'  => $payrollId,
+            'employee_id' => $systemAdminEmployee->id,
+        ]);
+    }
+
+    /** @test */
+    public function payroll_reflects_due_loans_and_approved_unpaid_leave(): void
+    {
+        $employee = Employee::factory()->create([
+            'status' => 'active',
+            'salary' => 10000,
+        ]);
+
+        $unpaidType = LeaveType::create([
+            'name' => 'Unpaid Leave',
+            'code' => 'UL-TEST',
+            'days_allowed' => 30,
+            'is_paid' => false,
+            'carry_forward' => false,
+            'is_active' => true,
+            'is_hourly' => false,
+        ]);
+
+        LeaveRequest::create([
+            'employee_id' => $employee->id,
+            'leave_type_id' => $unpaidType->id,
+            'start_date' => '2026-08-02',
+            'end_date' => '2026-08-03',
+            'total_days' => 2,
+            'status' => 'approved',
+            'reason' => 'Test unpaid leave',
+        ]);
+
+        $loan = Loan::factory()->create([
+            'employee_id' => $employee->id,
+            'status' => 'disbursed',
+            'approved_amount' => 1000,
+            'balance_remaining' => 1000,
+        ]);
+
+        $installment = LoanInstallment::factory()->create([
+            'loan_id' => $loan->id,
+            'due_date' => '2026-08-10',
+            'amount' => 500,
+            'paid_amount' => 0,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($this->hrManager, 'sanctum')
+            ->postJson('/api/v1/payroll/run', [
+                'month' => '2026-08',
+                'period_start' => '2026-08-01',
+                'period_end' => '2026-08-31',
+            ])
+            ->assertCreated();
+
+        $payslip = Payslip::where('payroll_id', $response->json('payroll.id'))
+            ->where('employee_id', $employee->id)
+            ->firstOrFail();
+
+        $this->assertSame(2.0, $payslip->unpaid_leave_days);
+        $this->assertGreaterThan(0, $payslip->leave_deduction);
+        $this->assertSame(500.0, $payslip->loan_deduction);
+        $this->assertSame($payslip->id, $installment->fresh()->payslip_id);
     }
 
     /** @test */

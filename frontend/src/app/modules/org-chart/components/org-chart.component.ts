@@ -177,7 +177,7 @@ export class OrgChartComponent implements OnInit {
 
   headcountPct(dept: any): number {
     if (!dept.headcount_budget) return 0;
-    return Math.min(100, Math.round((dept.employees_count / dept.headcount_budget) * 100));
+    return Math.min(100, Math.round((this.activeCount(dept) / dept.headcount_budget) * 100));
   }
 
   headcountColor(dept: any): string {
@@ -188,6 +188,26 @@ export class OrgChartComponent implements OnInit {
   }
 
   canManage(): boolean { return this.auth.canAny(['employees.create','employees.edit']); }
+
+  activeCount(dept: any): number {
+    return Number(dept?.active_employees_count ?? 0);
+  }
+
+  inactiveCount(dept: any): number {
+    return Number(dept?.inactive_employees_count ?? 0);
+  }
+
+  totalCount(dept: any): number {
+    return Number(dept?.employees_count ?? (this.activeCount(dept) + this.inactiveCount(dept)));
+  }
+
+  activeEmployees(dept: any): any[] {
+    return (dept?.employees || []).filter((employee: any) => employee.status === 'active');
+  }
+
+  inactiveEmployees(dept: any): any[] {
+    return (dept?.employees || []).filter((employee: any) => employee.status !== 'active');
+  }
 
   get totalByDept(): any[] { return this.stats?.departments || []; }
 }

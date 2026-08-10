@@ -397,12 +397,14 @@ class LeaveService {
         try {
             // Notify the employee's manager (if set) and all HR managers
             $recipients = User::whereHas('roles', fn($q) => $q->whereIn('name', ['hr_manager', 'hr_staff']))->get();
-            // Also add direct manager if employee has one
-            if ($leave->employee?->manager_id) {
-                $manager = User::find($leave->employee->manager_id);
-                if ($manager)
-                    $recipients->push($manager);
+
+            // Also add direct manager. employees.manager_id points to employees.id, not users.id.
+            $leave->loadMissing('employee.manager.user');
+            $manager = $leave->employee?->manager?->user;
+            if ($manager) {
+                $recipients->push($manager);
             }
+
             foreach ($recipients->unique('id') as $user) {
                 if ($user->email) {
                     Mail::to($user->email)->queue(new LeaveStatusMail($leave, $status, $user->name, $remarks, $conflicts));

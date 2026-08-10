@@ -96,6 +96,7 @@
           <div class="info-row"><span class="ir-label">Date of Birth</span><span class="ir-val">{{ employee.dob ? (employee.dob | date:'dd MMM yyyy') : '-' }}</span></div>
           <div class="info-row"><span class="ir-label">Gender</span>      <span class="ir-val">{{ displayLabel(employee.gender) | titlecase }}</span></div>
           <div class="info-row"><span class="ir-label">Marital Status</span><span class="ir-val">{{ displayLabel(employee.marital_status) | titlecase }}</span></div>
+          <div class="info-row"><span class="ir-label">Nationality</span> <span class="ir-val">{{ displayText(employee.nationality) }}</span></div>
           <div class="info-row"><span class="ir-label">Address</span>     <span class="ir-val">{{ addressText() }}</span></div>
         </div>
       </div>

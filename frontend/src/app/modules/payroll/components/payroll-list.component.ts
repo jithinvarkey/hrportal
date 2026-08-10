@@ -40,7 +40,7 @@ export class PayrollListComponent implements OnInit {
   slipSearch            = '';
   showMarkPaid          = false;
 
-  displayedColumns = ['employee', 'basic', 'housing', 'transport', 'other_earn', 'gross', 'gosi', 'other_ded', 'net', 'days', 'actions'];
+  displayedColumns = ['employee', 'basic', 'housing', 'transport', 'other_earn', 'gross', 'gosi', 'unpaid_leave', 'loan', 'other_ded', 'net', 'days', 'actions'];
   statItems: { label: string; value: string; icon: string; color: string }[] = [];
 
   runForm = { month: '', period_start: '', period_end: '' };
@@ -168,6 +168,8 @@ export class PayrollListComponent implements OnInit {
             <tr><td>Other Earnings</td><td>${(+s.other_allowances||0).toFixed(2)}</td></tr>
             <tr class="total-row"><td>Gross Salary</td><td>${(+s.gross_salary||0).toFixed(2)}</td></tr>
             <tr><td>GOSI (Employee 9%)</td><td>-${(+s.gosi_employee||0).toFixed(2)}</td></tr>
+            <tr><td>Unpaid Leave (${(+s.unpaid_leave_days||0).toFixed(1)} days)</td><td>-${(+s.leave_deduction||0).toFixed(2)}</td></tr>
+            <tr><td>Loan Installments</td><td>-${(+s.loan_deduction||0).toFixed(2)}</td></tr>
             <tr><td>Other Deductions</td><td>-${(+s.other_deductions||0).toFixed(2)}</td></tr>
             <tr class="total-row"><td>Total Deductions</td><td>-${(+s.total_deductions||0).toFixed(2)}</td></tr>
             <tr class="net-row"><td>NET SALARY</td><td>${(+s.net_salary||0).toFixed(2)}</td></tr>
@@ -204,10 +206,20 @@ export class PayrollListComponent implements OnInit {
       this.editForm
     ).subscribe({
       next: r => {
-        // Update payslip in list
+        // Replace the array reference so MatTable and OnPush detect the edited row.
         const idx = this.payslips.findIndex(p => p.id === this.selectedSlip.id);
-        if (idx > -1) this.payslips[idx] = { ...this.payslips[idx], ...r.payslip };
-        this.selectedSlip  = r.payslip;
+        const updatedSlip = idx > -1
+          ? { ...this.payslips[idx], ...r.payslip }
+          : r.payslip;
+
+        if (idx > -1) {
+          this.payslips = this.payslips.map((p, i) => i === idx ? updatedSlip : p);
+        }
+
+        this.selectedSlip = updatedSlip;
+        if (r.payroll) {
+          this.selectedPayroll = { ...this.selectedPayroll, ...r.payroll };
+        }
         this.editSaving    = false;
         this.showEditSlip  = false;
         this.load();
@@ -301,8 +313,14 @@ export class PayrollListComponent implements OnInit {
   editNetPreview(): number {
     const e = this.editForm;
     const earn = (+e.basic_salary||0) + (+e.housing_allowance||0) + (+e.transport_allowance||0) + (+e.other_allowances||0);
-    const ded  = (+e.gosi_employee||0) + (+e.other_deductions||0);
+    const ded  = (+e.gosi_employee||0) + (+e.other_deductions||0)
+      + (+this.selectedSlip?.leave_deduction||0) + (+this.selectedSlip?.loan_deduction||0);
     return Math.max(0, earn - ded);
+  }
+
+  editDeductionPreview(): number {
+    return (+this.editForm.gosi_employee||0) + (+this.editForm.other_deductions||0)
+      + (+this.selectedSlip?.leave_deduction||0) + (+this.selectedSlip?.loan_deduction||0);
   }
 
   editGrossPreview(): number {

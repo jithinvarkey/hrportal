@@ -220,6 +220,83 @@
   </ng-container>
 
   <!-- ═══════════ ROLES ═══════════ -->
+  <ng-container *ngIf="activeTab==='login-history'">
+    <div class="toolbar">
+      <div class="filter-row login-filter-row">
+        <div class="search-wrap">
+          <mat-icon class="search-ico">search</mat-icon>
+          <input class="search-input" placeholder="Search user / email / IP" [(ngModel)]="loginActivityFilters.search" (keyup.enter)="loadLoginActivities()">
+        </div>
+        <select class="field-select-compact" [(ngModel)]="loginActivityFilters.event" (change)="loadLoginActivities()">
+          <option value="">All Events</option>
+          <option *ngFor="let event of loginActivityEvents" [value]="event">{{ loginEventLabel(event) }}</option>
+        </select>
+        <select class="field-select-compact" [(ngModel)]="loginActivityFilters.status" (change)="loadLoginActivities()">
+          <option value="">All Status</option>
+          <option value="success">Success</option>
+          <option value="failed">Failed</option>
+          <option value="pending">Pending</option>
+        </select>
+        <input class="field-date-compact" type="date" [(ngModel)]="loginActivityFilters.from" (change)="loadLoginActivities()">
+        <input class="field-date-compact" type="date" [(ngModel)]="loginActivityFilters.to" (change)="loadLoginActivities()">
+        <button class="btn-primary" (click)="loadLoginActivities()"><mat-icon>refresh</mat-icon> Fetch</button>
+        <button class="btn-outline" (click)="clearLoginActivityFilters()"><mat-icon>filter_alt_off</mat-icon> Clear</button>
+      </div>
+    </div>
+
+    <div class="data-card">
+      <div class="login-table-wrap">
+        <table class="login-table">
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Event</th>
+              <th>Status</th>
+              <th>Time</th>
+              <th>IP Address</th>
+              <th>Browser / Device</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let activity of loginActivities">
+              <td>
+                <div class="name-main">{{ loginActor(activity) }}</div>
+                <div class="name-sub">{{ activity.user?.email || activity.login_identifier }}</div>
+                <div class="name-sub" *ngIf="loginEmployee(activity)">{{ loginEmployee(activity) }}</div>
+              </td>
+              <td><span class="login-event">{{ loginEventLabel(activity.event) }}</span></td>
+              <td>
+                <span class="login-status" [class.success]="activity.status==='success'" [class.failed]="activity.status==='failed'" [class.pending]="activity.status==='pending'">
+                  {{ activity.status | titlecase }}
+                </span>
+              </td>
+              <td>{{ activity.occurred_at | date:'medium' }}</td>
+              <td><span class="code-chip">{{ activity.ip_address || '-' }}</span></td>
+              <td><div class="login-agent">{{ activity.user_agent || '-' }}</div></td>
+            </tr>
+            <tr *ngIf="!loading && !loginActivities.length">
+              <td class="empty-state" colspan="6">
+                <mat-icon>manage_search</mat-icon><span>No login history found</span>
+              </td>
+            </tr>
+            <tr *ngIf="loading">
+              <td class="empty-state" colspan="6">
+                <mat-spinner diameter="28"></mat-spinner>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pagination" *ngIf="loginActivityPagination?.last_page > 1">
+        <button class="page-btn" [disabled]="loginActivityPage===1" (click)="loadLoginActivities(loginActivityPage-1)"><mat-icon>chevron_left</mat-icon></button>
+        <button *ngFor="let p of loginActivityPages" class="page-btn" [class.active]="p===loginActivityPage" (click)="loadLoginActivities(p)">{{ p }}</button>
+        <button class="page-btn" [disabled]="loginActivityPage===loginActivityPagination?.last_page" (click)="loadLoginActivities(loginActivityPage+1)"><mat-icon>chevron_right</mat-icon></button>
+        <span class="page-info">{{ loginActivityPagination?.from }}-{{ loginActivityPagination?.to }} of {{ loginActivityPagination?.total }}</span>
+      </div>
+    </div>
+  </ng-container>
+
   <ng-container *ngIf="activeTab==='roles'">
     <div class="roles-grid">
       <div class="role-card" *ngFor="let role of roles">

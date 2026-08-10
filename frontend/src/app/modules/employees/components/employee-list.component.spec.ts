@@ -64,6 +64,10 @@ describe('EmployeeListComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('should include nationality in the employee listing columns', () => {
+    expect(component.displayedColumns).toContain('nationality');
+  });
+
   // ── Stats loading ──────────────────────────────────────────────────────
 
   it('should load stats on init', fakeAsync(() => {

@@ -4,7 +4,7 @@
   <div class="page-hdr">
     <div>
       <h1 class="page-title">Organisation Chart</h1>
-      <p class="page-sub">{{ stats.total_employees || '…' }} employees · {{ stats.total_departments || '…' }} departments</p>
+      <p class="page-sub">{{ stats.total_employees || '...' }} active employees · {{ stats.inactive_employees || 0 }} inactive · {{ stats.total_departments || '...' }} departments</p>
     </div>
     <div class="hdr-actions">
       <!-- Search -->
@@ -54,7 +54,8 @@
     <div class="dept-pill" *ngFor="let d of totalByDept">
       <span class="dp-dot" [style.background]="deptColor(d.name)"></span>
       <span class="dp-name">{{ d.name }}</span>
-      <span class="dp-count" [style.color]="deptColor(d.name)">{{ d.employees_count }}</span>
+      <span class="dp-count" [style.color]="deptColor(d.name)">{{ activeCount(d) }}</span>
+      <span class="dp-muted" *ngIf="inactiveCount(d)">+{{ inactiveCount(d) }} inactive</span>
     </div>
   </div>
 
@@ -104,8 +105,12 @@
           <!-- Stats -->
           <div class="dc-stats">
             <div class="dcs-item">
-              <div class="dcs-val" [style.color]="deptColor(d.name)">{{ d.employees_count || 0 }}</div>
-              <div class="dcs-lbl">Employees</div>
+              <div class="dcs-val" [style.color]="deptColor(d.name)">{{ activeCount(d) }}</div>
+              <div class="dcs-lbl">Active</div>
+            </div>
+            <div class="dcs-item">
+              <div class="dcs-val inactive-val">{{ inactiveCount(d) }}</div>
+              <div class="dcs-lbl">Inactive</div>
             </div>
             <div class="dcs-item" *ngIf="d.headcount_budget">
               <div class="dcs-val">{{ d.headcount_budget }}</div>
@@ -174,7 +179,8 @@
           <span *ngIf="!d.manager" class="no-val">—</span>
         </div>
         <div class="lr-count">
-          <span class="count-val" [style.color]="deptColor(d.name)">{{ d.employees_count || 0 }}</span>
+          <span class="count-val" [style.color]="deptColor(d.name)">{{ activeCount(d) }}</span>
+          <span class="count-inactive" *ngIf="inactiveCount(d)">+{{ inactiveCount(d) }} inactive</span>
           <span *ngIf="d.headcount_budget" class="count-budget">/ {{ d.headcount_budget }}</span>
         </div>
         <div class="lr-actions" (click)="$event.stopPropagation()">
@@ -237,7 +243,7 @@
 
           <!-- Count badge -->
           <div class="tc-badge" [style.background]="deptColor(dept.name)+'18'" [style.color]="deptColor(dept.name)">
-            {{ dept.employees_count || 0 }}
+            {{ activeCount(dept) }} active<span *ngIf="inactiveCount(dept)"> · {{ inactiveCount(dept) }} inactive</span>
           </div>
 
           <!-- Edit -->
@@ -297,9 +303,13 @@
     <div class="dw-kpi-row">
       <div class="dw-kpi">
         <div class="kpi-val" [style.color]="deptColor(selectedDept.name)">
-          {{ selectedDept.employees_count }}
+          {{ activeCount(selectedDept) }}
         </div>
-        <div class="kpi-lbl">Employees</div>
+        <div class="kpi-lbl">Active</div>
+      </div>
+      <div class="dw-kpi">
+        <div class="kpi-val inactive-val">{{ inactiveCount(selectedDept) }}</div>
+        <div class="kpi-lbl">Inactive</div>
       </div>
       <div class="dw-kpi" *ngIf="selectedDept.headcount_budget">
         <div class="kpi-val">{{ selectedDept.headcount_budget }}</div>
@@ -357,7 +367,7 @@
           </div>
           <div class="si-info">
             <div class="si-name">{{ c.name }}</div>
-            <div class="si-count">{{ c.employees_count }} employees</div>
+            <div class="si-count">{{ activeCount(c) }} active · {{ inactiveCount(c) }} inactive</div>
           </div>
           <mat-icon style="font-size:16px;color:var(--text3)">chevron_right</mat-icon>
         </div>
@@ -366,9 +376,9 @@
 
     <!-- Employees -->
     <div class="dw-section">
-      <div class="dw-section-title">Team ({{ selectedDept.employees?.length || 0 }})</div>
-      <div class="team-list" *ngIf="selectedDept.employees?.length">
-        <div class="team-item" *ngFor="let e of selectedDept.employees">
+      <div class="dw-section-title">Active Team ({{ activeEmployees(selectedDept).length }})</div>
+      <div class="team-list" *ngIf="activeEmployees(selectedDept).length">
+        <div class="team-item" *ngFor="let e of activeEmployees(selectedDept)">
           <div class="emp-av" [style.background]="avatarColor(e.first_name)">
             {{ initials(e.first_name+' '+e.last_name) }}
           </div>
@@ -379,8 +389,24 @@
           <span class="mgr-tag" *ngIf="e.id===selectedDept.manager_id">Manager</span>
         </div>
       </div>
-      <div class="no-data" *ngIf="!selectedDept.employees?.length">
+      <div class="no-data" *ngIf="!activeEmployees(selectedDept).length">
         No active employees in this department
+      </div>
+    </div>
+
+    <div class="dw-section" *ngIf="inactiveEmployees(selectedDept).length">
+      <div class="dw-section-title">Inactive Team ({{ inactiveEmployees(selectedDept).length }})</div>
+      <div class="team-list">
+        <div class="team-item inactive-employee" *ngFor="let e of inactiveEmployees(selectedDept)">
+          <div class="emp-av" [style.background]="avatarColor(e.first_name)">
+            {{ initials(e.first_name+' '+e.last_name) }}
+          </div>
+          <div class="ti-info">
+            <div class="ti-name">{{ e.first_name }} {{ e.last_name }}</div>
+            <div class="ti-role">{{ e.designation?.title }}</div>
+          </div>
+          <span class="status-tag">{{ e.status || 'inactive' }}</span>
+        </div>
       </div>
     </div>
 

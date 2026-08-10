@@ -47,6 +47,23 @@
     </div>
     <mat-icon class="ha-arrow">arrow_forward</mat-icon>
   </a>
+  <div class="hr-report-action" *ngIf="isHR || isAdmin">
+    <mat-icon>description</mat-icon>
+    <div class="report-fields">
+      <div>
+        <label>From</label>
+        <input type="date" [(ngModel)]="reportFrom">
+      </div>
+      <div>
+        <label>To</label>
+        <input type="date" [(ngModel)]="reportTo">
+      </div>
+    </div>
+    <button type="button" (click)="downloadAttendanceReport()" [disabled]="reportDownloading || !reportFrom || !reportTo">
+      <mat-icon>{{ reportDownloading ? 'hourglass_empty' : 'download' }}</mat-icon>
+      {{ reportDownloading ? 'Fetching...' : 'Fetch Report' }}
+    </button>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════

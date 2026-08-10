@@ -108,7 +108,7 @@
     <button class="row-btn" (click)="showRunForm=false"><mat-icon>close</mat-icon></button>
   </div>
   <div class="modal-body">
-    <div class="info-note"><mat-icon>info_outline</mat-icon> Calculates Basic + Housing (25%) + Transport (10%) + GOSI for all active employees.</div>
+    <div class="info-note"><mat-icon>info_outline</mat-icon> Calculates salary, allowances, GOSI, approved unpaid leave, and unpaid loan installments due within the payroll period.</div>
     <div class="field-group">
       <label class="field-label">Payroll Month <span class="req">*</span></label>
       <input class="field-input" type="month" [(ngModel)]="runForm.month">
@@ -201,6 +201,19 @@
         <td mat-cell *matCellDef="let ps" class="deduct-val">{{ ps.other_deductions > 0 ? fmtSAR(ps.other_deductions) : '—' }}</td>
       </ng-container>
 
+      <ng-container matColumnDef="unpaid_leave">
+        <th mat-header-cell *matHeaderCellDef>Unpaid Leave</th>
+        <td mat-cell *matCellDef="let ps" class="deduct-val">
+          <div>{{ ps.leave_deduction > 0 ? fmtSAR(ps.leave_deduction) : '—' }}</div>
+          <div class="name-sub" *ngIf="ps.unpaid_leave_days > 0">{{ ps.unpaid_leave_days }} day(s)</div>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="loan">
+        <th mat-header-cell *matHeaderCellDef>Loan</th>
+        <td mat-cell *matCellDef="let ps" class="deduct-val">{{ ps.loan_deduction > 0 ? fmtSAR(ps.loan_deduction) : '—' }}</td>
+      </ng-container>
+
       <!-- Net -->
       <ng-container matColumnDef="net">
         <th mat-header-cell *matHeaderCellDef>Net Salary</th>
@@ -233,7 +246,7 @@
       <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky:true"></tr>
       <tr mat-row *matRowDef="let row; columns:displayedColumns;" class="data-row"></tr>
       <tr class="mat-row" *matNoDataRow>
-        <td class="mat-cell empty-td" colspan="11">No payslips found</td>
+        <td class="mat-cell empty-td" colspan="13">No payslips found</td>
       </tr>
     </table>
   </div>
@@ -367,6 +380,17 @@
           <span>Other Deductions</span>
           <span class="deduct-amt">{{ fmtSAR(selectedSlip.other_deductions) }}</span>
         </div>
+        <div class="bs-row" *ngIf="selectedSlip.leave_deduction > 0">
+          <div>
+            <div>Unpaid Leave</div>
+            <div class="bs-hint">{{ selectedSlip.unpaid_leave_days }} day(s)</div>
+          </div>
+          <span class="deduct-amt">{{ fmtSAR(selectedSlip.leave_deduction) }}</span>
+        </div>
+        <div class="bs-row" *ngIf="selectedSlip.loan_deduction > 0">
+          <span>Current-Period Loan Installments</span>
+          <span class="deduct-amt">{{ fmtSAR(selectedSlip.loan_deduction) }}</span>
+        </div>
         <div class="bs-total deduct-total">
           <span>Total Deductions</span>
           <span class="deduct-amt">{{ fmtSAR(selectedSlip.total_deductions) }}</span>
@@ -455,7 +479,9 @@
     <!-- Live preview -->
     <div class="live-preview">
       <div class="lp-row"><span>Gross</span><span class="earn-amt">{{ fmtSAR(editGrossPreview()) }}</span></div>
-      <div class="lp-row"><span>Deductions</span><span class="deduct-amt">{{ fmtSAR((+editForm.gosi_employee||0) + (+editForm.other_deductions||0)) }}</span></div>
+      <div class="lp-row" *ngIf="selectedSlip.leave_deduction > 0"><span>Unpaid Leave</span><span class="deduct-amt">{{ fmtSAR(selectedSlip.leave_deduction) }}</span></div>
+      <div class="lp-row" *ngIf="selectedSlip.loan_deduction > 0"><span>Loan Installments</span><span class="deduct-amt">{{ fmtSAR(selectedSlip.loan_deduction) }}</span></div>
+      <div class="lp-row"><span>Deductions</span><span class="deduct-amt">{{ fmtSAR(editDeductionPreview()) }}</span></div>
       <div class="lp-row lp-net"><span>Net Salary</span><span class="net-val">{{ fmtSAR(editNetPreview()) }}</span></div>
     </div>
 

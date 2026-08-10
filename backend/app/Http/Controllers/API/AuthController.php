@@ -7,6 +7,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\LoginOtp;
 use App\Models\User;
+use App\Services\LoginActivityService;
 use App\Services\OtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,10 +19,12 @@ use Illuminate\Validation\ValidationException;
 class AuthController extends Controller
 {
     private $otpService;
+    private $loginActivityService;
 
-    public function __construct(OtpService $otpService)
+    public function __construct(OtpService $otpService, LoginActivityService $loginActivityService)
     {
         $this->otpService = $otpService;
+        $this->loginActivityService = $loginActivityService;
     }
 
     public function login(Request $request): JsonResponse
@@ -32,10 +35,15 @@ class AuthController extends Controller
             'password' => 'required|string|min:6',
         ]);
 
-        $user = $this->userForLogin((string) ($request->input('login') ?: $request->input('email')));
+        $identifier = (string) ($request->input('login') ?: $request->input('email'));
+        $user = $this->userForLogin($identifier);
 
         if (!$user || !$this->passwordIsValid($user, (string) $request->password)) {
             if (!$user || !$this->attemptLegacyMd5Login($user, $request->password)) {
+                $this->loginActivityService->record($request, $user, 'login_failed', 'failed', $identifier, [
+                    'reason' => 'invalid_credentials',
+                ]);
+
                 throw ValidationException::withMessages([
                     'email' => ['The provided credentials are incorrect.'],
                 ]);
@@ -43,7 +51,13 @@ class AuthController extends Controller
         }
 
         if ($this->isOtpExempt($user)) {
-            $token = $user->createToken('hrms-token')->plainTextToken;
+            $tokenResult = $user->createToken('hrms-token');
+            $token = $tokenResult->plainTextToken;
+
+            $this->loginActivityService->record($request, $user, 'login_success', 'success', $identifier, [
+                'otp_exempt' => true,
+                'token_id' => $tokenResult->accessToken->id ?? null,
+            ]);
 
             return response()->json([
                 'token' => $token,
@@ -52,6 +66,9 @@ class AuthController extends Controller
         }
 
         $challenge = $this->otpService->createChallenge($user->load('employee'), LoginOtp::PURPOSE_LOGIN);
+        $this->loginActivityService->record($request, $user, 'otp_challenge', 'pending', $identifier, [
+            'challenge_id' => $challenge->id,
+        ]);
 
         return response()->json([
             'otp_required' => true,
@@ -68,14 +85,35 @@ class AuthController extends Controller
             'otp' => 'required|string|size:6',
         ]);
 
-        $challenge = $this->otpService->verify(
-            (string) $request->input('challenge_token'),
-            (string) $request->input('otp'),
-            LoginOtp::PURPOSE_LOGIN
-        );
+        $challengeToken = (string) $request->input('challenge_token');
+        $challenge = $this->otpService->findChallenge($challengeToken, LoginOtp::PURPOSE_LOGIN);
+        $user = $challenge?->user;
+
+        try {
+            $challenge = $this->otpService->verify(
+                $challengeToken,
+                (string) $request->input('otp'),
+                LoginOtp::PURPOSE_LOGIN
+            );
+        } catch (ValidationException $exception) {
+            $this->loginActivityService->record($request, $user, 'otp_failed', 'failed', $user?->email, [
+                'challenge_token' => $challengeToken,
+            ]);
+
+            throw $exception;
+        }
 
         $user = $challenge->user;
-        $token = $user->createToken('hrms-token')->plainTextToken;
+        $tokenResult = $user->createToken('hrms-token');
+        $token = $tokenResult->plainTextToken;
+
+        $this->loginActivityService->record($request, $user, 'otp_success', 'success', $user->email, [
+            'challenge_id' => $challenge->id,
+        ]);
+        $this->loginActivityService->record($request, $user, 'login_success', 'success', $user->email, [
+            'otp_verified' => true,
+            'token_id' => $tokenResult->accessToken->id ?? null,
+        ]);
 
         return response()->json([
             'token' => $token,
@@ -109,18 +147,22 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        if ($request->user()) {
+        $user = $request->user();
 
-        $token = $request->user()->currentAccessToken();
+        if ($user) {
+            $token = $user->currentAccessToken();
+            $this->loginActivityService->record($request, $user, 'logout', 'success', $user->email, [
+                'token_id' => $token->id ?? null,
+            ]);
 
-        if ($token && method_exists($token, 'delete')) {
-            $token->delete();
+            if ($token && method_exists($token, 'delete')) {
+                $token->delete();
+            }
         }
-    }
 
-    return response()->json([
-        'message' => 'Logged out successfully.'
-    ]);
+        return response()->json([
+            'message' => 'Logged out successfully.'
+        ]);
     }
 
     public function me(Request $request): JsonResponse

@@ -93,8 +93,8 @@ export class ReportsComponent implements OnInit {
       label:       'Attendance Report',
       icon:        'fingerprint',
       color:       '#0ea5e9',
-      description: 'Daily attendance log for the selected month — check-in/out times, hours worked and status.',
-      filters:     ['month', 'department', 'status'],
+      description: 'Daily attendance log for the selected month or date range - check-in/out times, hours worked and status.',
+      filters:     ['month', 'from', 'to', 'department', 'status'],
       columns:     ['code','name','department','date','check_in','check_out','hours','status'],
       headers:     ['Code','Name','Dept','Date','In','Out','Hours','Status'],
     },
@@ -162,18 +162,21 @@ export class ReportsComponent implements OnInit {
 
   // ── Downloads ──────────────────────────────────────────────────────────
 
-  download(format: 'csv' | 'pdf') {
+  download(format: 'csv' | 'pdf' | 'xlsx') {
     if (!this.activeReport) return;
     this.downloading = true;
     const params = this.buildParams();
     const qs     = Object.entries(params).filter(([,v]) => v !== '' && v !== null).map(([k,v]) => `${k}=${encodeURIComponent(v as string)}`).join('&');
-    const url    = `/api/v1/reports/download/${this.activeReport.id}/${format}?${qs}`;
+    const isMonthlyAttendanceXlsx = format === 'xlsx' && this.activeReport.id === 'attendance';
+    const url = isMonthlyAttendanceXlsx
+      ? `/api/v1/attendance/monthly-report.xlsx?${qs}`
+      : `/api/v1/reports/download/${this.activeReport.id}/${format}?${qs}`;
 
     // Use anchor + token for authenticated file download
     const token = sessionStorage.getItem('hrms_token') || localStorage.getItem('hrms_token');
     this.http.get(url, { responseType: 'blob', headers: { Authorization: `Bearer ${token}` } }).subscribe({
       next: blob => {
-        const ext  = format === 'pdf' ? 'pdf' : 'csv';
+        const ext  = format === 'pdf' ? 'pdf' : (format === 'xlsx' ? 'xlsx' : 'csv');
         const name = `${this.activeReport!.id}_${this.yyyymmdd()}.${ext}`;
         const a    = document.createElement('a');
         a.href     = URL.createObjectURL(blob);
@@ -190,7 +193,8 @@ export class ReportsComponent implements OnInit {
 
   private buildParams(): any {
     const p: any = {};
-    if (this.hasFilter('month')      && this.filters.month)         p.month          = this.filters.month;
+    const hasRange = !!(this.filters.from && this.filters.to);
+    if (this.hasFilter('month')      && this.filters.month && !(this.activeReport?.id === 'attendance' && hasRange)) p.month = this.filters.month;
     if (this.hasFilter('year')       && this.filters.year)          p.year           = this.filters.year;
     if (this.hasFilter('from')       && this.filters.from)          p.from           = this.filters.from;
     if (this.hasFilter('to')         && this.filters.to)            p.to             = this.filters.to;
