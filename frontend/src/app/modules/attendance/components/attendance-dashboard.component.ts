@@ -32,6 +32,9 @@ export class AttendanceDashboardComponent implements OnInit, AfterViewInit, OnDe
   checkingOut = false;
   actionMsg   = '';
   actionError = '';
+  reportFrom = this.defaultReportFrom();
+  reportTo = this.today();
+  reportDownloading = false;
 
   private readonly api      = '/api/v1/attendance';
   private readonly destroy$ = new Subject<void>();
@@ -122,6 +125,37 @@ export class AttendanceDashboardComponent implements OnInit, AfterViewInit, OnDe
       });
   }
 
+  downloadAttendanceReport(): void {
+    if (!(this.isHR || this.isAdmin) || !this.reportFrom || !this.reportTo) return;
+
+    this.reportDownloading = true;
+    this.actionError = '';
+
+    const params = new URLSearchParams({
+      from: this.reportFrom,
+      to: this.reportTo,
+    });
+
+    this.http.get(`${this.api}/monthly-report.xlsx?${params.toString()}`, { responseType: 'blob' })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (blob) => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = `AttendanceReport-${this.reportFrom}-to-${this.reportTo}.xlsx`;
+          a.click();
+          URL.revokeObjectURL(a.href);
+          this.reportDownloading = false;
+          this.cdr.markForCheck();
+        },
+        error: (err) => {
+          this.actionError = err?.error?.message ?? 'Attendance report download failed.';
+          this.reportDownloading = false;
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
   get canCheckIn():  boolean { return !this.data?.today_log?.check_in; }
   get canCheckOut(): boolean { return !!this.data?.today_log?.check_in && !this.data?.today_log?.check_out; }
 
@@ -153,6 +187,16 @@ export class AttendanceDashboardComponent implements OnInit, AfterViewInit, OnDe
 
   get isOverviewDashboard(): boolean {
     return ['admin', 'department'].includes(this.data?.type);
+  }
+
+  private today(): string {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  private defaultReportFrom(): string {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().slice(0, 10);
   }
 
   // ── Charts ───────────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ use App\Models\JobApplication;
 use App\Models\JobPosting;
 use App\Models\LeaveRequest;
 use App\Models\Loan;
+use App\Models\LoginActivity;
 use App\Models\Payroll;
 use App\Models\PerformanceReview;
 use App\Models\Separation;
@@ -20,6 +21,7 @@ use App\Services\LoanApprovalService;
 use App\Services\AnnualTicketService;
 use App\Services\MonthlyLeaveReminderService;
 use App\Services\UnifonicSettingsService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
@@ -375,6 +377,50 @@ class AdminController extends Controller
         ]);
     }
 
+    public function loginActivities(Request $request): JsonResponse
+    {
+        if (!$this->canViewLoginActivities()) {
+            return response()->json(['message' => 'Only Super Admin or HR Manager can view login history.'], 403);
+        }
+
+        $data = $request->validate([
+            'search' => 'nullable|string|max:120',
+            'event' => 'nullable|string|max:40',
+            'status' => 'nullable|string|max:20',
+            'user_id' => 'nullable|integer|exists:users,id',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date|after_or_equal:from',
+            'per_page' => 'nullable|integer|min:1|max:100',
+        ]);
+
+        $query = LoginActivity::query()
+            ->with(['user.employee.department'])
+            ->when($data['event'] ?? null, fn ($q, $event) => $q->where('event', $event))
+            ->when($data['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
+            ->when($data['user_id'] ?? null, fn ($q, $userId) => $q->where('user_id', $userId))
+            ->when($data['from'] ?? null, fn ($q, $from) => $q->where('occurred_at', '>=', Carbon::parse($from)->startOfDay()))
+            ->when($data['to'] ?? null, fn ($q, $to) => $q->where('occurred_at', '<=', Carbon::parse($to)->endOfDay()))
+            ->when($data['search'] ?? null, function ($q, $search) {
+                $like = '%' . $search . '%';
+                $q->where(function ($sub) use ($like) {
+                    $sub->where('login_identifier', 'like', $like)
+                        ->orWhere('ip_address', 'like', $like)
+                        ->orWhereHas('user', function ($userQuery) use ($like) {
+                            $userQuery->where('name', 'like', $like)
+                                ->orWhere('email', 'like', $like);
+                        })
+                        ->orWhereHas('user.employee', function ($employeeQuery) use ($like) {
+                            $employeeQuery->where('first_name', 'like', $like)
+                                ->orWhere('last_name', 'like', $like)
+                                ->orWhere('employee_code', 'like', $like);
+                        });
+                });
+            })
+            ->latest('occurred_at');
+
+        return response()->json($query->paginate((int) ($data['per_page'] ?? 20)));
+    }
+
     // ── Roles ─────────────────────────────────────────────────────────────
 
     public function roles(): JsonResponse
@@ -471,6 +517,16 @@ class AdminController extends Controller
     }
 
     private function canManageLeaveReminderSettings(): bool
+    {
+        return DB::table('model_has_roles')
+            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('model_has_roles.model_id', auth()->id())
+            ->where('model_has_roles.model_type', get_class(auth()->user()))
+            ->whereIn('roles.name', ['super_admin', 'hr_manager'])
+            ->exists();
+    }
+
+    private function canViewLoginActivities(): bool
     {
         return DB::table('model_has_roles')
             ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')

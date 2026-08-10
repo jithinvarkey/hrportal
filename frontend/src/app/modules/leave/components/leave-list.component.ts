@@ -316,7 +316,9 @@ export class LeaveListComponent implements OnInit {
   openNewRequest() {
     this.form = { leave_type_id: '', start_date: '', end_date: '', start_time: '08:00', end_time: '09:00', reason: '', employee_id: '', is_half_day: false, half_day_period: 'morning', requires_exit_reentry: false, requires_ticket: false, ticket_dependent_ids: [], destination_country: '' };
     this.ticketOptions = null;
-    this.formBalances = [...this.myBalances];
+    this.formBalances = this.myBalances.map(balance =>
+      this.annualBalanceToday && this.isAnnualBalance(balance) ? this.annualBalanceToday : balance
+    );
     this.formError = '';
     this.selectedFile = null;
     this.fileError = '';
@@ -700,6 +702,7 @@ export class LeaveListComponent implements OnInit {
       if (this.form.start_date) this.form.end_date = this.form.start_date;
       if (!this.form.half_day_period) this.form.half_day_period = 'morning';
     }
+    this.loadMyBalanceForFormDate();
     this.loadFormHolidays();
   }
 
@@ -749,8 +752,9 @@ export class LeaveListComponent implements OnInit {
   }
 
   balancePct(b: any): number {
-    if (!b?.allocated_days) return 0;
-    return Math.min(100, Math.round(((b.allocated_days - b.remaining_days) / b.allocated_days) * 100));
+    const total = this.balanceTotalDays(b);
+    if (!total) return 0;
+    return Math.min(100, Math.round(((total - Number(b?.remaining_days || 0)) / total) * 100));
   }
 
   balanceColor(pct: number): string {
@@ -771,6 +775,25 @@ export class LeaveListComponent implements OnInit {
     return value === null || value === undefined || value === '' ? null : Number(value);
   }
 
+  activeCarryForwardTotal(b: any): number {
+    if (!this.isAnnualBalance(b)) return 0;
+    return Number(b?.active_carried_forward_days || 0) + Number(b?.carry_forward_used_days || 0);
+  }
+
+  balanceTotalDays(b: any): number {
+    const allocated = Number(b?.allocated_days || 0);
+    return this.isAnnualBalance(b) ? allocated + this.activeCarryForwardTotal(b) : allocated;
+  }
+
+  carryForwardSummary(b: any): string {
+    const included = this.activeCarryForwardTotal(b);
+    if (!included) return '';
+
+    const active = Number(b?.active_carried_forward_days || 0);
+    const used = Number(b?.carry_forward_used_days || 0);
+    return `Carry forward included ${included}d: active ${active}d, used ${used}d`;
+  }
+
   selectedTypeBalance(): any {
     if (!this.form.leave_type_id) return null;
     const balances = this.showNewRequest ? this.formBalances : this.myBalances;
@@ -787,7 +810,9 @@ export class LeaveListComponent implements OnInit {
 
   private balanceAsOfDate(): string {
     if (!this.isAnnualLeave || this.isHourlyExcuse) return '';
-    return this.form.is_half_day ? this.form.start_date : (this.form.end_date || this.form.start_date || '');
+    if (this.form.is_half_day && this.form.start_date) return this.form.start_date;
+    if (this.form.end_date) return this.form.end_date;
+    return this.dateInputValue(new Date());
   }
 
   private loadMyBalanceForFormDate(): void {

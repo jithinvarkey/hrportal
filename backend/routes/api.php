@@ -235,6 +235,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/today',              [AttendanceController::class, 'today']);
             Route::get('/dashboard',          [AttendanceController::class, 'dashboard']);
             Route::get('/report',             [AttendanceController::class, 'report']);
+            Route::get('/monthly-report.xlsx', [AttendanceController::class, 'monthlyReport']);
             Route::post('/manual',            [AttendanceController::class, 'manualEntry']);
             Route::get('/employee/{empId}',   [AttendanceController::class, 'employeeLog']);
             Route::put('/{id}',              [AttendanceController::class, 'update'])->whereNumber('id');
@@ -445,6 +446,7 @@ Route::prefix('v1')->group(function () {
         Route::prefix('admin')->group(function () {
             Route::get('/overview',                         [AdminController::class, 'overview']);
             Route::get('/permissions',                      [AdminController::class, 'permissions']);
+            Route::get('/login-activities',                 [AdminController::class, 'loginActivities']);
             Route::get('/settings/loans',                   [AdminController::class, 'loanSettings']);
               Route::put('/settings/loans',                   [AdminController::class, 'updateLoanSettings']);
               Route::get('/settings/annual-tickets',          [AdminController::class, 'annualTicketSettings']);

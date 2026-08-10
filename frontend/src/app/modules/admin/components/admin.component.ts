@@ -28,6 +28,12 @@ export class AdminComponent implements OnInit {
   filterRole   = '';
   filterSearch = '';
 
+  loginActivities: any[] = [];
+  loginActivityPagination: any = null;
+  loginActivityPage = 1;
+  loginActivityFilters: any = { search:'', event:'', status:'', from:'', to:'' };
+  loginActivityEvents = ['login_success','login_failed','otp_challenge','otp_success','otp_failed','logout'];
+
   // ── Panels ───────────────────────────────────────────────────────────
   showUserForm   = false;
   showRoleEditor = false;
@@ -50,6 +56,7 @@ export class AdminComponent implements OnInit {
   tabs = [
     { id:'overview',     label:'Overview',     icon:'dashboard'          },
     { id:'users',        label:'Users',        icon:'people'             },
+    { id:'login-history', label:'Login History', icon:'manage_search'     },
     { id:'roles',        label:'Roles',        icon:'security'           },
     { id:'permissions',  label:'Permissions',  icon:'lock'               },
     { id:'units',        label:'Units',        icon:'business'           },
@@ -184,6 +191,28 @@ export class AdminComponent implements OnInit {
     });
   }
 
+  loadLoginActivities(page = 1) {
+    this.loading = true;
+    this.loginActivityPage = page;
+    const params: any = { page, per_page: 20 };
+    Object.entries(this.loginActivityFilters).forEach(([key, value]) => {
+      if (value) params[key] = value;
+    });
+
+    this.http.get<any>('/api/v1/admin/login-activities', { params }).subscribe({
+      next: r => {
+        this.adminError = '';
+        this.loginActivities = r?.data || [];
+        this.loginActivityPagination = r;
+        this.loading = false;
+      },
+      error: err => {
+        this.adminError = this.adminErrorMessage(err, 'login history');
+        this.loading = false;
+      }
+    });
+  }
+
   loadRoles() {
     this.http.get<any>('/api/v1/admin/roles').subscribe({
       next: r => {
@@ -220,6 +249,7 @@ export class AdminComponent implements OnInit {
     this.activeTab = id;
     if (id === 'overview')     { this.loadOverview(); this.loadRoles(); }
     if (id === 'users')        { this.loadUsers(); this.loadRoles(); }
+    if (id === 'login-history') this.loadLoginActivities();
     if (id === 'roles')        { this.loadRoles(); this.loadPermissions(); }
     if (id === 'permissions')  { this.loadPermissions(); this.loadRoles(); this.loadOverview(); }
     if (id === 'units')        this.loadUnits();
@@ -473,6 +503,30 @@ export class AdminComponent implements OnInit {
   get pages(): number[] {
     if (!this.pagination?.last_page) return [];
     return Array.from({ length: Math.min(this.pagination.last_page, 8) }, (_, i) => i + 1);
+  }
+
+  get loginActivityPages(): number[] {
+    if (!this.loginActivityPagination?.last_page) return [];
+    return Array.from({ length: Math.min(this.loginActivityPagination.last_page, 8) }, (_, i) => i + 1);
+  }
+
+  clearLoginActivityFilters() {
+    this.loginActivityFilters = { search:'', event:'', status:'', from:'', to:'' };
+    this.loadLoginActivities();
+  }
+
+  loginEventLabel(event: string): string {
+    return (event || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  loginActor(activity: any): string {
+    return activity?.user?.name || activity?.login_identifier || 'Unknown user';
+  }
+
+  loginEmployee(activity: any): string {
+    const employee = activity?.user?.employee;
+    if (!employee) return '';
+    return `${employee.first_name || ''} ${employee.last_name || ''}`.trim() || employee.employee_code || '';
   }
 
   roleData(roleName: string): any {

@@ -11,6 +11,10 @@
         <mat-icon>table_chart</mat-icon>
         {{ downloading ? 'Exporting…' : 'Export CSV / Excel' }}
       </button>
+      <button class="btn-export csv" *ngIf="activeReport.id === 'attendance'" (click)="download('xlsx')" [disabled]="downloading">
+        <mat-icon>grid_on</mat-icon>
+        {{ downloading ? 'Exportingâ€¦' : 'Monthly XLSX' }}
+      </button>
       <button class="btn-export pdf" (click)="download('pdf')" [disabled]="downloading">
         <mat-icon>picture_as_pdf</mat-icon>
         {{ downloading ? 'Exporting…' : 'Export PDF' }}
@@ -128,6 +132,10 @@
           <mat-icon>{{ loading ? 'hourglass_empty' : 'play_arrow' }}</mat-icon>
           {{ loading ? 'Loading…' : 'Run Report' }}
         </button>
+        <button class="btn-run" *ngIf="activeReport.id === 'attendance'" (click)="download('xlsx')" [disabled]="downloading">
+          <mat-icon>table_view</mat-icon>
+          Fetch XLSX Report
+        </button>
 
       </div>
 
@@ -148,6 +156,9 @@
           <div class="sb-export">
             <button class="btn-dl csv" (click)="download('csv')" [disabled]="downloading">
               <mat-icon>grid_on</mat-icon> CSV / Excel
+            </button>
+            <button class="btn-dl csv" *ngIf="activeReport.id === 'attendance'" (click)="download('xlsx')" [disabled]="downloading">
+              <mat-icon>table_view</mat-icon> Fetch XLSX Report
             </button>
             <button class="btn-dl pdf" (click)="download('pdf')" [disabled]="downloading">
               <mat-icon>picture_as_pdf</mat-icon> PDF

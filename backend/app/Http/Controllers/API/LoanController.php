@@ -665,6 +665,12 @@ class LoanController extends Controller {
             return response()->json(['message' => 'Installment is not payable.'], 422);
         }
 
+        if ($inst->payslip_id) {
+            return response()->json([
+                'message' => 'This installment is already scheduled for deduction through payroll.',
+            ], 422);
+        }
+
         $this->service->payInstallment($inst, $request->paid_date, $request->notes);
         $this->logLoanActivity($inst->loan()->first(), 'installment_paid', "Installment #{$inst->installment_no} marked as paid.", [
             'installment_id' => $inst->id,
@@ -689,6 +695,12 @@ class LoanController extends Controller {
 
         if (!in_array($inst->status, ['pending', 'overdue'])) {
             return response()->json(['message' => 'Installment cannot be skipped.'], 422);
+        }
+
+        if ($inst->payslip_id) {
+            return response()->json([
+                'message' => 'This installment is already scheduled for deduction through payroll.',
+            ], 422);
         }
 
         $this->service->skipInstallment($inst, $request->notes);

@@ -18,11 +18,11 @@ class OrgChartController extends Controller
             'manager.designation',
             'manager.user',
         ])
-        ->withCount('employees')
+        ->withCount($this->employeeStatusCountColumns())
         ->whereNull('parent_id')
         ->where('is_active', true)
         ->get()
-        ->map(fn($d) => $this->formatDept($d));
+        ->map(fn($d) => $this->formatDept($this->ensureEmployeeCounts($d)));
 
         return response()->json(['chart' => $roots]);
     }
@@ -33,10 +33,10 @@ class OrgChartController extends Controller
         $dept = Department::with([
             'manager.designation','manager.user','manager.directReports.designation',
             'parent',
-            'children' => fn($q) => $q->withCount('employees'),
-            'employees' => fn($q) => $q->with('designation','manager')->where('status','active')->orderBy('first_name'),
+            'children' => fn($q) => $q->withCount($this->employeeStatusCountColumns()),
+            'employees' => fn($q) => $q->with('designation','manager')->orderByRaw("status = 'active' desc")->orderBy('first_name'),
         ])
-        ->withCount('employees')
+        ->withCount($this->employeeStatusCountColumns())
         ->findOrFail($id);
 
         return response()->json(['department' => $dept]);
@@ -47,16 +47,19 @@ class OrgChartController extends Controller
     {
         return response()->json([
             'total_employees'   => Employee::where('status','active')->count(),
+            'inactive_employees'=> Employee::where(fn($q) => $q->where('status', '!=', 'active')->orWhereNull('status'))->count(),
             'total_departments' => Department::where('is_active',true)->count(),
-            'departments'       => Department::withCount('employees')
+            'departments'       => Department::withCount($this->employeeStatusCountColumns())
                 ->where('is_active',true)
-                ->orderByDesc('employees_count')
+                ->orderByDesc('active_employees_count')
                 ->get()
                 ->map(fn($d) => [
                     'id'             => $d->id,
                     'name'           => $d->name,
                     'code'           => $d->code,
                     'employees_count'=> $d->employees_count,
+                    'active_employees_count'=> $d->active_employees_count,
+                    'inactive_employees_count'=> $d->inactive_employees_count,
                     'headcount_budget'=> $d->headcount_budget,
                 ]),
         ]);
@@ -119,6 +122,8 @@ class OrgChartController extends Controller
             'code'            => $dept->code,
             'description'     => $dept->description,
             'employees_count' => $dept->employees_count,
+            'active_employees_count' => $dept->active_employees_count,
+            'inactive_employees_count' => $dept->inactive_employees_count,
             'headcount_budget'=> $dept->headcount_budget,
             'manager'         => $dept->manager ? [
                 'id'         => $dept->manager->id,
@@ -126,7 +131,25 @@ class OrgChartController extends Controller
                 'avatar_url' => $dept->manager->avatar_url,
                 'designation'=> $dept->manager->designation?->title,
             ] : null,
-            'children' => ($dept->allChildren ?? collect())->map(fn($c) => $this->formatDept($c))->values(),
+            'children' => ($dept->allChildren ?? collect())->map(fn($c) => $this->formatDept($this->ensureEmployeeCounts($c)))->values(),
         ];
+    }
+
+    private function employeeStatusCountColumns(): array
+    {
+        return [
+            'employees',
+            'employees as active_employees_count' => fn($q) => $q->where('status', 'active'),
+            'employees as inactive_employees_count' => fn($q) => $q->where(fn($sub) => $sub->where('status', '!=', 'active')->orWhereNull('status')),
+        ];
+    }
+
+    private function ensureEmployeeCounts(Department $dept): Department
+    {
+        if (!array_key_exists('active_employees_count', $dept->getAttributes())) {
+            $dept->loadCount($this->employeeStatusCountColumns());
+        }
+
+        return $dept;
     }
 }

@@ -53,6 +53,12 @@
         <td style="padding:10px 16px;font-size:13px;color:#1a1a2e;border-top:1px solid #e5e7eb">
           @if(str_starts_with((string) $interview->location_or_link, 'http'))
             <a href="{{ $interview->location_or_link }}" style="color:#3b82f6">{{ $interview->location_or_link }}</a>
+            @if($interview->format === 'in_person')
+              <br>
+              <a href="{{ $interview->location_or_link }}" style="display:inline-block;margin-top:8px;padding:8px 12px;background:#3b82f6;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold">
+                Open in Google Maps
+              </a>
+            @endif
           @else
             {{ $interview->location_or_link }}
           @endif

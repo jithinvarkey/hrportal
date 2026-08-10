@@ -6,6 +6,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceLog;
+use App\Services\Attendance\MonthlyAttendanceReportService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,6 +16,10 @@ use Illuminate\Http\Request;
  */
 class AttendanceController extends Controller
 {
+    public function __construct(private MonthlyAttendanceReportService $monthlyReportService)
+    {
+    }
+
     // ── Check-in ──────────────────────────────────────────────────────────
 
     public function checkIn(Request $request): JsonResponse
@@ -141,6 +146,15 @@ class AttendanceController extends Controller
             ->paginate($perPage);
 
         return response()->json($data);
+    }
+
+    public function monthlyReport(Request $request)
+    {
+        if (!$this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff'])) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        return $this->monthlyReportService->download($request);
     }
 
     // ── Manual entry ──────────────────────────────────────────────────────
@@ -486,5 +500,18 @@ class AttendanceController extends Controller
         );
 
         return response()->json(['message' => 'Settings saved.', 'settings' => $settings]);
+    }
+
+    private function hasAnyRoleDB(array $roles): bool
+    {
+        $user = auth()->user();
+        $userRoles = rescue(fn() => \DB::table('model_has_roles')
+            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('model_has_roles.model_id', $user->id)
+            ->where('model_has_roles.model_type', get_class($user))
+            ->pluck('roles.name')
+            ->toArray(), [], false);
+
+        return (bool) array_intersect($roles, $userRoles);
     }
 }

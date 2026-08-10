@@ -139,11 +139,17 @@ class ReportController extends Controller
 
     public function attendance(Request $request)
     {
-        $request->validate(['month' => 'required|date_format:Y-m']);
-        [$year, $month] = explode('-', $request->month);
+        $request->validate([
+            'month' => 'nullable|required_without_all:from,to|date_format:Y-m',
+            'from' => 'nullable|required_with:to|date',
+            'to' => 'nullable|required_with:from|date|after_or_equal:from',
+        ]);
+        [$year, $month] = $request->month ? explode('-', $request->month) : [null, null];
 
         $rows = AttendanceLog::with(['employee.department'])
-            ->whereYear('date', $year)->whereMonth('date', $month)
+            ->when($request->month, fn($q) => $q->whereYear('date', $year)->whereMonth('date', $month))
+            ->when($request->from, fn($q) => $q->whereDate('date', '>=', $request->from))
+            ->when($request->to, fn($q) => $q->whereDate('date', '<=', $request->to))
             ->when($request->department_id, fn($q) =>
                 $q->whereHas('employee', fn($eq) => $eq->where('department_id',$request->department_id))
             )

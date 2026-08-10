@@ -198,10 +198,11 @@ canvas { width: 100% !important; height: 200px !important; }
 /* ── HR Quick Actions bar ────────────────────────────────────────── */
 .hr-actions-bar {
   display:grid;
-  grid-template-columns:repeat(3,1fr);
+  grid-template-columns:repeat(4,1fr);
   gap:12px;
   margin-bottom:20px;
 
+  @media(max-width:1200px) { grid-template-columns:repeat(2,1fr); }
   @media(max-width:768px) { grid-template-columns:1fr; }
 }
 .hr-action-btn {
@@ -228,4 +229,93 @@ canvas { width: 100% !important; height: 200px !important; }
     color:var(--text3); flex-shrink:0; transition:color .15s;
   }
   &:hover .ha-arrow { color:var(--accent); }
+}
+
+.hr-report-action {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:12px 14px;
+  border-radius:12px;
+  background:var(--surface);
+  border:1px solid var(--border);
+
+  > mat-icon:first-child {
+    font-size:22px!important;
+    width:22px!important;
+    height:22px!important;
+    color:var(--accent);
+    flex-shrink:0;
+  }
+
+  .report-fields {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    flex:1;
+    min-width:0;
+  }
+
+  label {
+    display:block;
+    font-size:10px;
+    font-weight:700;
+    color:var(--text3);
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    margin-bottom:3px;
+  }
+
+  input {
+    width:100%;
+    min-width:0;
+    height:30px;
+    border:1px solid var(--border);
+    border-radius:8px;
+    background:var(--surface2);
+    color:var(--text);
+    padding:0 8px;
+    font-size:12px;
+  }
+
+  button {
+    height:34px;
+    border:0;
+    border-radius:9px;
+    background:var(--accent);
+    color:#fff;
+    font-size:12px;
+    font-weight:700;
+    padding:0 12px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    cursor:pointer;
+    white-space:nowrap;
+
+    mat-icon {
+      font-size:16px!important;
+      width:16px!important;
+      height:16px!important;
+    }
+
+    &:disabled {
+      opacity:.55;
+      cursor:not-allowed;
+    }
+  }
+
+  @media(max-width:520px) {
+    align-items:flex-start;
+    flex-direction:column;
+
+    .report-fields {
+      width:100%;
+    }
+
+    button {
+      width:100%;
+      justify-content:center;
+    }
+  }
 }

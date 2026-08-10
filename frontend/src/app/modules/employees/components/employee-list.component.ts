@@ -110,7 +110,7 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
   /** Columns shown in the Material table. */
   readonly displayedColumns: string[] = [
     'avatar', 'employee_code', 'full_name', 'department',
-    'unit',
+    'unit', 'nationality',
     'employment_type', 'status', 'actions',
   ];
   isHR = false;

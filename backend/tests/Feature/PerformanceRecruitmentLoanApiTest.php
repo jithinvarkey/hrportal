@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Mail\ApplicantRejectedMail;
 use App\Models\Employee;
 use App\Models\JobApplication;
 use App\Models\JobPosting;
@@ -15,6 +16,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\WithFaker;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 /**
@@ -225,6 +227,35 @@ class PerformanceRecruitmentLoanApiTest extends TestCase
             ->putJson("/api/v1/recruitment/applications/{$app->id}/stage", ['stage' => 'interview'])
             ->assertOk()
             ->assertJsonPath('application.stage', 'interview');
+    }
+
+    /** @test */
+    public function rejecting_an_applicant_sends_a_rejection_email(): void
+    {
+        Mail::fake();
+
+        $job = JobPosting::factory()->create([
+            'status' => 'open',
+            'title' => 'Operations Officer',
+        ]);
+        $app = JobApplication::factory()->create([
+            'job_posting_id' => $job->id,
+            'applicant_name' => 'Amjad Almutairi',
+            'applicant_email' => 'amjad@example.com',
+            'stage' => 'applied',
+        ]);
+
+        $this->actingAs($this->hrManager, 'sanctum')
+            ->putJson("/api/v1/recruitment/applications/{$app->id}/stage", ['stage' => 'rejected'])
+            ->assertOk()
+            ->assertJsonPath('application.stage', 'rejected')
+            ->assertJsonPath('email_sent', true);
+
+        Mail::assertSent(
+            ApplicantRejectedMail::class,
+            fn (ApplicantRejectedMail $mail) => $mail->hasTo('amjad@example.com')
+                && $mail->application->is($app)
+        );
     }
 
     /** @test */
