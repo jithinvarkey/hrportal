@@ -9,6 +9,13 @@ class Kernel extends ConsoleKernel
 {
     protected function schedule(Schedule $schedule): void
     {
+        $backupHours = config('database_backup.schedule_hours', [1, 13]);
+        $schedule->command('database:backup')
+                 ->cron(sprintf('0 %d,%d * * *', (int) $backupHours[0], (int) $backupHours[1]))
+                 ->timezone('Asia/Riyadh')
+                 ->withoutOverlapping()
+                 ->appendOutputTo(storage_path('logs/database-backup.log'));
+
         // Run every day at 00:05 AM Riyadh time
         $schedule->command('leave:accrue')
                  ->dailyAt('00:05')
