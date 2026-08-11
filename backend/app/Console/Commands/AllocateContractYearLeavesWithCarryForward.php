@@ -6,11 +6,17 @@ use App\Models\Employee;
 use App\Models\LeaveAllocation;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
+use App\Services\AnnualLeaveCarryForwardPolicy;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 
 class AllocateContractYearLeavesWithCarryForward extends Command
 {
+    public function __construct(private AnnualLeaveCarryForwardPolicy $carryForwardPolicy)
+    {
+        parent::__construct();
+    }
+
     protected $signature = 'leave:allocate-contract-years-carryforward
         {--dry-run : Preview changes without saving}
         {--as-of= : Evaluation date in YYYY-MM-DD format, defaults to today}
@@ -23,7 +29,7 @@ class AllocateContractYearLeavesWithCarryForward extends Command
         $dryRun = (bool) $this->option('dry-run');
         $asOf = $this->parseAsOfDate();
 
-        if (!$asOf) {
+        if (! $asOf) {
             return self::FAILURE;
         }
 
@@ -34,8 +40,9 @@ class AllocateContractYearLeavesWithCarryForward extends Command
             ->orderByDesc('is_annual')
             ->first();
 
-        if (!$annualType) {
+        if (! $annualType) {
             $this->error('Annual Leave type not found.');
+
             return self::FAILURE;
         }
 
@@ -71,6 +78,7 @@ class AllocateContractYearLeavesWithCarryForward extends Command
 
             if ($hireDate->gt($asOf)) {
                 $summary['skipped']++;
+
                 continue;
             }
 
@@ -81,10 +89,14 @@ class AllocateContractYearLeavesWithCarryForward extends Command
                 $entitlement = $index >= 5 ? 30.0 : 22.0;
                 $usedDays = $this->usedDays($employee->id, $annualType, $startDate, $endDate);
                 $pendingDays = $this->pendingDays($employee->id, $annualType, $startDate, $endDate);
+                $allocation = $this->existingAllocation($employee->id, $annualType->id, $startDate);
+                $existingCarryForward = (float) ($allocation?->carried_forward_days ?? 0);
+                $carryForward = $this->carryForwardPolicy->preserveExisting(
+                    $existingCarryForward,
+                    $carryForward
+                );
                 $remaining = max(0, round($entitlement + $carryForward - $usedDays - $pendingDays, 2));
                 $nextCarryForward = $this->eligibleCarryForward($annualType, $remaining);
-
-                $allocation = $this->existingAllocation($employee->id, $annualType->id, $startDate);
 
                 $values = [
                     'employee_id' => $employee->id,
@@ -94,13 +106,16 @@ class AllocateContractYearLeavesWithCarryForward extends Command
                     'used_days' => $usedDays,
                     'pending_days' => $pendingDays,
                     'remaining_days' => $remaining,
-                    'carried_forward_days' => $carryForward,
                     'annual_entitlement' => $entitlement,
                     'accrual_year_start' => $startDate->toDateString(),
                     'last_accrual_date' => $asOf->toDateString(),
                 ];
 
-                $changed = !$allocation || collect($values)->contains(function ($value, $key) use ($allocation) {
+                if ($existingCarryForward <= 0) {
+                    $values['carried_forward_days'] = $carryForward;
+                }
+
+                $changed = ! $allocation || collect($values)->contains(function ($value, $key) use ($allocation) {
                     if (in_array($key, ['accrual_year_start', 'last_accrual_date'], true)) {
                         return optional($allocation->{$key})->toDateString() !== $value;
                     }
@@ -108,7 +123,7 @@ class AllocateContractYearLeavesWithCarryForward extends Command
                     return round((float) $allocation->{$key}, 2) !== round((float) $value, 2);
                 });
 
-                if (!$allocation) {
+                if (! $allocation) {
                     $summary['created']++;
                 } elseif ($changed) {
                     $summary['updated']++;
@@ -116,7 +131,7 @@ class AllocateContractYearLeavesWithCarryForward extends Command
                     $summary['unchanged']++;
                 }
 
-                if (!$dryRun && (!$allocation || $changed)) {
+                if (! $dryRun && (! $allocation || $changed)) {
                     if ($allocation) {
                         $allocation->update($values);
                     } else {
@@ -174,6 +189,7 @@ class AllocateContractYearLeavesWithCarryForward extends Command
                 : Carbon::today('Asia/Riyadh');
         } catch (\Throwable) {
             $this->error('Invalid --as-of date. Use YYYY-MM-DD.');
+
             return null;
         }
     }
@@ -230,12 +246,10 @@ class AllocateContractYearLeavesWithCarryForward extends Command
 
     private function eligibleCarryForward(LeaveType $annualType, float $remaining): float
     {
-        if (!$annualType->carry_forward) {
-            return 0.0;
-        }
-
-        $limit = (float) ($annualType->max_carry_forward ?? 0);
-
-        return $limit > 0 ? min($remaining, $limit) : $remaining;
+        return $this->carryForwardPolicy->calculate(
+            (bool) $annualType->carry_forward,
+            $remaining,
+            $annualType->max_carry_forward
+        );
     }
 }
