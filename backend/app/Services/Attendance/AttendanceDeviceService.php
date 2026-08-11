@@ -11,6 +11,10 @@ use Illuminate\Support\Facades\Http;
 
 class AttendanceDeviceService
 {
+    public function __construct(private AttendancePolicyService $attendancePolicy)
+    {
+    }
+
     // ── Public API ──────────────────────────────────────────────────────
 
     /**
@@ -141,11 +145,8 @@ class AttendanceDeviceService
             $checkIn  = $first->punch_time->format('H:i:s');
             $checkOut = ($last->id !== $first->id) ? $last->punch_time->format('H:i:s') : null;
 
-            // Determine status
-            $checkInHour = (int)$first->punch_time->format('H') * 60 + (int)$first->punch_time->format('i');
-            $workStart   = 8 * 60; // 08:00
-            $lateThresh  = 8 * 60 + 15; // 08:15 grace period
-            $status = $checkInHour > $lateThresh ? 'late' : 'present';
+            // Use the same saved policy shown in Attendance Settings.
+            $status = $this->attendancePolicy->statusForCheckIn($checkIn);
 
             // Duration in minutes
             $duration = $checkOut ? $first->punch_time->diffInMinutes($last->punch_time) : null;
