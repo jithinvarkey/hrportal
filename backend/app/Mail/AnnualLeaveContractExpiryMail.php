@@ -10,12 +10,15 @@ class AnnualLeaveContractExpiryMail extends Mailable
 {
     use Queueable, SerializesModels;
 
+    public string $leaveUrl;
+
     public function __construct(
         public string $employeeName,
         public string $contractExpiryDate,
         public float $remainingDays,
         public float $carryForwardLimit,
     ) {
+        $this->leaveUrl = rtrim((string) config('app.frontend_url', config('app.url')), '/') . '/leave/my';
     }
 
     public function build(): self

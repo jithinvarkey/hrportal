@@ -5,9 +5,13 @@ declare(strict_types=1);
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Mail\LoanApprovedMail;
+use App\Mail\LoanRejectedMail;
+use App\Mail\LoanRequestSubmittedMail;
 use App\Models\Loan;
 use App\Models\LoanInstallment;
 use App\Models\LoanType;
+use App\Models\User;
 use App\Services\LoanService;
 use App\Services\LoanApprovalService;
 use App\Services\RequestActivityService;
@@ -15,6 +19,8 @@ use App\Services\XlsxReportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 
 /**
@@ -43,6 +49,60 @@ class LoanController extends Controller {
 
     private function logLoanActivity(Loan $loan, string $event, string $description, array $properties = []): void {
         $this->activityService->record($loan, 'loan_request', $event, $description, $properties);
+    }
+
+    private function notifyLoanApprovers(Loan $loan): void
+    {
+        try {
+            $loan->loadMissing(['employee.manager.user', 'loanType']);
+            $recipients = collect();
+
+            if ($loan->status === 'pending_manager' && $loan->employee?->manager?->user) {
+                $recipients->push($loan->employee->manager->user);
+            }
+
+            $roles = match ($loan->status) {
+                'pending_manager' => ['super_admin'],
+                'pending_hr' => ['super_admin', 'hr_manager'],
+                'pending_finance' => ['super_admin', 'finance_manager'],
+                default => [],
+            };
+
+            if ($roles) {
+                $recipients = $recipients->merge(
+                    User::whereHas('roles', fn ($query) => $query->whereIn('name', $roles))->get()
+                );
+            }
+
+            foreach ($recipients->filter(fn ($user) => $user->email)->unique('id') as $recipient) {
+                Mail::to($recipient->email)->queue(new LoanRequestSubmittedMail(
+                    $loan,
+                    $recipient->name
+                ));
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Loan approver email failed: '.$e->getMessage());
+        }
+    }
+
+    private function notifyLoanEmployee(Loan $loan, string $action): void
+    {
+        try {
+            $loan->loadMissing(['employee', 'loanType']);
+            $employee = $loan->employee;
+
+            if (! $employee?->email) {
+                return;
+            }
+
+            $mail = $action === 'approved'
+                ? new LoanApprovedMail($loan, $employee->first_name ?: $employee->full_name)
+                : new LoanRejectedMail($loan, $employee->first_name ?: $employee->full_name);
+
+            Mail::to($employee->email)->queue($mail);
+        } catch (\Throwable $e) {
+            Log::warning("Loan {$action} email failed: ".$e->getMessage());
+        }
     }
 
     // ── Role helper ───────────────────────────────────────────────────────
@@ -397,6 +457,7 @@ class LoanController extends Controller {
             'installments' => $loan->installments,
             'notes' => $request->purpose,
         ]);
+        $this->notifyLoanApprovers($loan);
 
         return response()->json(['message' => 'Loan request submitted.', 'loan' => $loan->load('loanType')], 201);
     }
@@ -529,6 +590,13 @@ class LoanController extends Controller {
                 return response()->json(['message' => 'Loan is not in an approvable state.'], 422);
         }
 
+        $loan->refresh();
+        if ($loan->status === 'approved') {
+            $this->notifyLoanEmployee($loan, 'approved');
+        } else {
+            $this->notifyLoanApprovers($loan);
+        }
+
         return response()->json(['message' => 'Loan approved.', 'loan' => $loan->fresh('loanType')]);
     }
 
@@ -579,6 +647,7 @@ class LoanController extends Controller {
             'reason' => $request->reason,
             'stage' => $stage,
         ]);
+        $this->notifyLoanEmployee($loan, 'rejected');
 
         return response()->json(['message' => 'Loan rejected.']);
     }

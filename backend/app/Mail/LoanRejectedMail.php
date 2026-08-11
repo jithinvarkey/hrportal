@@ -1,53 +1,31 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Mail;
 
+use App\Models\Loan;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
-use Illuminate\Mail\Mailables\Content;
-use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
 class LoanRejectedMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    /**
-     * Create a new message instance.
-     */
-    public function __construct()
+    public string $action = 'rejected';
+
+    public string $requestUrl;
+
+    public function __construct(public Loan $loan, public string $recipientName)
     {
-        //
+        $this->requestUrl = rtrim((string) config('app.frontend_url', config('app.url')), '/')
+            . '/loans?loan_id=' . $loan->id;
     }
 
-    /**
-     * Get the message envelope.
-     */
-    public function envelope(): Envelope
+    public function build(): self
     {
-        return new Envelope(
-            subject: 'Loan Rejected Mail',
-        );
-    }
-
-    /**
-     * Get the message content definition.
-     */
-    public function content(): Content
-    {
-        return new Content(
-            view: 'view.name',
-        );
-    }
-
-    /**
-     * Get the attachments for the message.
-     *
-     * @return array<int, \Illuminate\Mail\Mailables\Attachment>
-     */
-    public function attachments(): array
-    {
-        return [];
+        return $this->subject("Loan Request Rejected - {$this->loan->reference}")
+            ->view('emails.loan.status');
     }
 }

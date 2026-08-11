@@ -1,53 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Mail;
 
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Mail\Mailable;
-use Illuminate\Mail\Mailables\Content;
-use Illuminate\Mail\Mailables\Envelope;
-use Illuminate\Queue\SerializesModels;
-
-class LeaveCancelledMail extends Mailable
+class LeaveCancelledMail extends LeaveStatusMail
 {
-    use Queueable, SerializesModels;
-
-    /**
-     * Create a new message instance.
-     */
-    public function __construct()
+    public function __construct($leave, string $recipientName, ?string $remarks = null)
     {
-        //
-    }
-
-    /**
-     * Get the message envelope.
-     */
-    public function envelope(): Envelope
-    {
-        return new Envelope(
-            subject: 'Leave Cancelled Mail',
-        );
-    }
-
-    /**
-     * Get the message content definition.
-     */
-    public function content(): Content
-    {
-        return new Content(
-            view: 'view.name',
-        );
-    }
-
-    /**
-     * Get the attachments for the message.
-     *
-     * @return array<int, \Illuminate\Mail\Mailables\Attachment>
-     */
-    public function attachments(): array
-    {
-        return [];
+        parent::__construct($leave, 'cancelled', $recipientName, $remarks);
     }
 }

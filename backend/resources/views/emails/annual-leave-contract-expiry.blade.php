@@ -14,6 +14,7 @@
         </td></tr>
       </table>
       <p style="margin:0">Please plan any leave above the carry-forward limit before your current contract expires and coordinate with your direct manager and Human Resources.</p>
+      <p style="margin:24px 0 0;text-align:center"><a href="{{ $leaveUrl }}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:7px">View Leave Balance</a></p>
     </td></tr>
     <tr><td style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:11px;text-align:center">This is an automated annual leave reminder sent 90 days before contract expiry.</td></tr>
   </table>

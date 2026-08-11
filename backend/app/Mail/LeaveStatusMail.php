@@ -16,6 +16,7 @@ class LeaveStatusMail extends Mailable {
     public $recipientName;
     public $remarks;
     public $conflicts;
+    public string $requestUrl;
 
     public function __construct(
             $leave,
@@ -29,6 +30,8 @@ class LeaveStatusMail extends Mailable {
         $this->recipientName = $recipientName;
         $this->remarks = $remarks;
         $this->conflicts = $conflicts;
+        $this->requestUrl = rtrim((string) config('app.frontend_url', config('app.url')), '/')
+            . '/leave?request_id=' . $leave->id;
     }
 
     public function build() {

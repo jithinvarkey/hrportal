@@ -61,6 +61,10 @@
       </tr>
     </table>
 
+    <p style="margin:24px 0;text-align:center">
+      <a href="{{ rtrim((string) config('app.frontend_url', config('app.url')), '/') }}/leave?request_id={{ $leave->id }}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:7px">View Leave Request</a>
+    </p>
+
     <p style="color:#6b7280;font-size:13px;margin:0">
       If you have questions, please contact HR at <a href="mailto:hr@diamond-insurance.com.sa" style="color:#1e3a5f">hr@diamond-insurance.com.sa</a>.
     </p>
