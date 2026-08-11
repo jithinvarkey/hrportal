@@ -2,24 +2,27 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
 use App\Models\Employee;
-use App\Models\LeaveType;
 use App\Models\LeaveAllocation;
+use App\Models\LeaveType;
+use App\Services\AnnualLeaveCarryForwardPolicy;
 use Carbon\Carbon;
+use Illuminate\Console\Command;
 
 class AccrueAnnualLeave extends Command
 {
-    protected $signature   = 'leave:accrue {--dry-run : Preview without saving}';
+    protected $signature = 'leave:accrue {--dry-run : Preview without saving}';
+
     protected $description = 'Daily accrual of annual leave — Saudi working days (Sun–Thu), 22 days <5yrs / 30 days >=5yrs';
 
     // Saudi working days (Carbon: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 3=Thu, 5=Fri, 6=Sat)
-    private const WORKING_DAYS     = [0, 1, 2, 3, 4]; // Sun–Thu
+    private const WORKING_DAYS = [0, 1, 2, 3, 4]; // Sun–Thu
+
     private const WORKING_PER_YEAR = 260;               // 52 weeks × 5 days
 
-    public function handle(): int
+    public function handle(AnnualLeaveCarryForwardPolicy $carryForwardPolicy): int
     {
-        $today  = Carbon::today('Asia/Riyadh');
+        $today = Carbon::today('Asia/Riyadh');
         $dryRun = $this->option('dry-run');
 
         // Get Annual Leave type
@@ -27,8 +30,9 @@ class AccrueAnnualLeave extends Command
             ->orWhere('name', 'like', '%Annual%')
             ->first();
 
-        if (!$annualType) {
+        if (! $annualType) {
             $this->error('Annual Leave type not found. Run: php artisan db:seed');
+
             return 1;
         }
 
@@ -39,16 +43,18 @@ class AccrueAnnualLeave extends Command
         $this->info("Running leave accrual — {$today->toDateString()} — {$employees->count()} employees");
 
         $updated = 0;
-        $rows    = [];
+        $rows = [];
 
         foreach ($employees as $emp) {
             $hireDate = Carbon::parse($emp->hire_date, 'Asia/Riyadh');
 
-            if ($hireDate->gt($today)) continue; // not started yet
+            if ($hireDate->gt($today)) {
+                continue;
+            } // not started yet
 
             // ── Entitlement: 22 days until 5 full years, then 30 days ─────
-            $yearsCompleted  = (int) $hireDate->diffInYears($today);
-            $entitlement     = $yearsCompleted >= 5 ? 30 : 22;
+            $yearsCompleted = (int) $hireDate->diffInYears($today);
+            $entitlement = $yearsCompleted >= 5 ? 30 : 22;
 
             // ── Accrual year: from last hire-date anniversary to today ─────
             // e.g. hired 15 Mar 2022 → accrual year starts 15 Mar each year
@@ -68,31 +74,84 @@ class AccrueAnnualLeave extends Command
             );
 
             // ── Get or create allocation record ───────────────────────────
-            $alloc = LeaveAllocation::firstOrCreate(
-                ['employee_id' => $emp->id, 'leave_type_id' => $annualType->id, 'year' => $today->year],
-                ['allocated_days' => 0, 'used_days' => 0, 'pending_days' => 0, 'remaining_days' => 0]
+            $alloc = LeaveAllocation::query()
+                ->where('employee_id', $emp->id)
+                ->where('leave_type_id', $annualType->id)
+                ->whereDate('accrual_year_start', $accrualStart->toDateString())
+                ->first();
+
+            $alloc ??= LeaveAllocation::firstOrNew(
+                [
+                    'employee_id' => $emp->id,
+                    'leave_type_id' => $annualType->id,
+                    'year' => $accrualStart->year,
+                ],
+                [
+                    'allocated_days' => 0,
+                    'used_days' => 0,
+                    'pending_days' => 0,
+                    'remaining_days' => 0,
+                    'carried_forward_days' => 0,
+                ]
             );
 
-            $remaining = max(0, round($accrued - $alloc->used_days - $alloc->pending_days, 2));
+            $previousAllocation = LeaveAllocation::query()
+                ->where('employee_id', $emp->id)
+                ->where('leave_type_id', $annualType->id)
+                ->when($alloc->exists, fn ($query) => $query->whereKeyNot($alloc->getKey()))
+                ->where(function ($query) use ($accrualStart) {
+                    $query->whereDate('accrual_year_start', '<', $accrualStart->toDateString())
+                        ->orWhere(function ($legacy) use ($accrualStart) {
+                            $legacy->whereNull('accrual_year_start')
+                                ->where('year', '<', $accrualStart->year);
+                        });
+                })
+                ->orderByDesc('accrual_year_start')
+                ->orderByDesc('year')
+                ->first();
+
+            $existingCarryForward = (float) ($alloc->carried_forward_days ?? 0);
+            $calculatedCarryForward = $carryForwardPolicy->calculate(
+                (bool) $annualType->carry_forward,
+                (float) ($previousAllocation?->remaining_days ?? 0),
+                $annualType->max_carry_forward
+            );
+            $carryForward = $carryForwardPolicy->preserveExisting(
+                $existingCarryForward,
+                $calculatedCarryForward
+            );
+
+            $remaining = max(0, round(
+                $accrued + $carryForward - $alloc->used_days - $alloc->pending_days,
+                2
+            ));
 
             $rows[] = [
-                'name'        => $emp->full_name ?? ($emp->first_name . ' ' . $emp->last_name),
-                'years'       => $yearsCompleted,
+                'name' => $emp->full_name ?? ($emp->first_name.' '.$emp->last_name),
+                'years' => $yearsCompleted,
                 'entitlement' => $entitlement,
-                'worked'      => $workedDays,
-                'old'         => (float) $alloc->allocated_days,
-                'new'         => $accrued,
-                'remaining'   => $remaining,
+                'worked' => $workedDays,
+                'old' => (float) $alloc->allocated_days,
+                'new' => $accrued,
+                'carry' => $carryForward,
+                'remaining' => $remaining,
             ];
 
-            if (!$dryRun) {
-                $alloc->update([
-                    'allocated_days'    => $accrued,
-                    'remaining_days'    => $remaining,
+            if (! $dryRun) {
+                $values = [
+                    'allocated_days' => $accrued,
+                    'remaining_days' => $remaining,
                     'last_accrual_date' => $today->toDateString(),
-                    'annual_entitlement'=> $entitlement,
-                    'accrual_year_start'=> $accrualStart->toDateString(),
-                ]);
+                    'annual_entitlement' => $entitlement,
+                    'accrual_year_start' => $accrualStart->toDateString(),
+                ];
+
+                if ($existingCarryForward <= 0) {
+                    $values['carried_forward_days'] = $carryForward;
+                }
+
+                $alloc->fill($values);
+                $alloc->save();
             }
 
             $updated++;
@@ -100,10 +159,10 @@ class AccrueAnnualLeave extends Command
 
         // Display results table
         $this->table(
-            ['Employee', 'Years', 'Entitlement', 'Worked Days', 'Was', 'Accrued', 'Remaining'],
-            collect($rows)->map(fn($r) => [
-                $r['name'], $r['years'], $r['entitlement'] . ' days',
-                $r['worked'], $r['old'], $r['new'], $r['remaining'],
+            ['Employee', 'Years', 'Entitlement', 'Worked Days', 'Was', 'Accrued', 'Carry Forward', 'Remaining'],
+            collect($rows)->map(fn ($r) => [
+                $r['name'], $r['years'], $r['entitlement'].' days',
+                $r['worked'], $r['old'], $r['new'], $r['carry'], $r['remaining'],
             ])->toArray()
         );
 
@@ -118,20 +177,22 @@ class AccrueAnnualLeave extends Command
      */
     private function countWorkingDays(Carbon $from, Carbon $to): int
     {
-        if ($from->gt($to)) return 0;
+        if ($from->gt($to)) {
+            return 0;
+        }
 
         $fromTs = $from->copy()->startOfDay();
-        $toTs   = $to->copy()->startOfDay();
-        $count  = 0;
+        $toTs = $to->copy()->startOfDay();
+        $count = 0;
 
         // Fast calculation using week math instead of looping every day
         $totalDays = $fromTs->diffInDays($toTs) + 1;
         $fullWeeks = (int) ($totalDays / 7);
-        $count     = $fullWeeks * 5;
+        $count = $fullWeeks * 5;
 
         // Handle remaining days
         $remainder = $totalDays % 7;
-        $current   = $fromTs->copy()->addDays($fullWeeks * 7);
+        $current = $fromTs->copy()->addDays($fullWeeks * 7);
 
         for ($i = 0; $i < $remainder; $i++) {
             if (in_array($current->dayOfWeek, self::WORKING_DAYS)) {

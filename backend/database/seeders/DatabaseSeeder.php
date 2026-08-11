@@ -184,7 +184,7 @@ class DatabaseSeeder extends Seeder {
 
         // ── Leave Types ───────────────────────────────────────────────────
         $leaveTypes = [
-            ['name' => 'Annual Leave',    'code' => 'AL',  'days_allowed' => 22, 'is_paid' => true,  'carry_forward' => true,  'max_carry_forward' => 5],
+            ['name' => 'Annual Leave',    'code' => 'AL',  'days_allowed' => 22, 'is_paid' => true,  'carry_forward' => true,  'max_carry_forward' => 10],
             ['name' => 'Sick Leave',      'code' => 'SL',  'days_allowed' => 10, 'is_paid' => true,  'carry_forward' => false, 'max_carry_forward' => 0],
             [
                 'name' => 'Business Excuse', 'code' => 'BE', 'days_allowed' => 0,
