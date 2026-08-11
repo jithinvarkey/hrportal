@@ -6,6 +6,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceLog;
+use App\Services\Attendance\AttendancePolicyService;
 use App\Services\Attendance\MonthlyAttendanceReportService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -16,8 +17,10 @@ use Illuminate\Http\Request;
  */
 class AttendanceController extends Controller
 {
-    public function __construct(private MonthlyAttendanceReportService $monthlyReportService)
-    {
+    public function __construct(
+        private MonthlyAttendanceReportService $monthlyReportService,
+        private AttendancePolicyService $attendancePolicy
+    ) {
     }
 
     // ── Check-in ──────────────────────────────────────────────────────────
@@ -38,13 +41,14 @@ class AttendanceController extends Controller
             ], 422);
         }
 
+        $checkIn = now()->format('H:i:s');
         $log = AttendanceLog::updateOrCreate(
             ['employee_id' => $employee->id, 'date' => $today],
             [
-                'check_in'   => now()->format('H:i:s'),
+                'check_in'   => $checkIn,
                 'source'     => 'api',
                 'ip_address' => $request->ip(),
-                'status'     => 'present',
+                'status'     => $this->attendancePolicy->statusForCheckIn($checkIn),
             ]
         );
 
@@ -457,20 +461,7 @@ class AttendanceController extends Controller
      */
     public function getSettings(): JsonResponse
     {
-        $defaults = [
-            'work_start'         => '08:00',   // expected start time HH:MM
-            'late_after_minutes' => 15,         // minutes after work_start before late
-            'half_day_hours'     => 4,          // minimum hours for a half-day
-            'full_day_hours'     => 8,          // expected full-day hours
-            'grace_minutes'      => 5,          // grace period before late kicks in
-            'weekend_days'       => [5, 6],     // 5=Friday, 6=Saturday (Saudi weekend)
-        ];
-
-        $stored = rescue(fn () => json_decode(
-            file_get_contents(storage_path('app/attendance_settings.json')), true
-        ) ?? [], [], false);
-
-        return response()->json(array_merge($defaults, $stored ?: []));
+        return response()->json($this->attendancePolicy->settings());
     }
 
     /**
@@ -494,12 +485,14 @@ class AttendanceController extends Controller
             'full_day_hours', 'grace_minutes', 'weekend_days',
         ]);
 
-        file_put_contents(
-            storage_path('app/attendance_settings.json'),
-            json_encode($settings, JSON_PRETTY_PRINT)
-        );
+        $this->attendancePolicy->save($settings);
+        $reclassified = $this->attendancePolicy->reclassifyAutomaticLogsForDate(now(), $settings);
 
-        return response()->json(['message' => 'Settings saved.', 'settings' => $settings]);
+        return response()->json([
+            'message' => 'Settings saved.',
+            'settings' => $settings,
+            'reclassified_today' => $reclassified,
+        ]);
     }
 
     private function hasAnyRoleDB(array $roles): bool

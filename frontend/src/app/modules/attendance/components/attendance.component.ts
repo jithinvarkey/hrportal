@@ -384,6 +384,7 @@ this.isAdmin = this.auth.isAdminRole();
           this.settings    = r.settings;
           this.settingsSaving = false;
           this.settingsSaved  = true;
+          this.loadReport();
           setTimeout(() => { this.settingsSaved = false; this.cdr.markForCheck(); }, 3000);
           this.cdr.markForCheck();
         },
