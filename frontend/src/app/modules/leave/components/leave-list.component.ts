@@ -166,6 +166,11 @@ export class LeaveListComponent implements OnInit {
     this.loadMyBalance();
     this.loadAnnualBalanceToday();
     this.load();
+
+    const requestId = Number(this.route.snapshot.queryParamMap.get('request_id'));
+    if (Number.isInteger(requestId) && requestId > 0) {
+      this.viewRequest({ id: requestId });
+    }
   }
 
   // ── Stats ─────────────────────────────────────────────────────────────────

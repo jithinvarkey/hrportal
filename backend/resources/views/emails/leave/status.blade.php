@@ -192,6 +192,16 @@
 
                                 </table>
 
+                                <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0">
+                                    <tr>
+                                        <td align="center">
+                                            <a href="{{ $requestUrl }}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-size:14px;font-weight:bold;padding:12px 22px;border-radius:7px">
+                                                View Leave Request
+                                            </a>
+                                        </td>
+                                    </tr>
+                                </table>
+
                                 <!-- REMARKS --> @if(!empty($remarks)) 
                                 <div style=" margin-top:20px; padding:15px; background:#f9fafb; border-left:4px solid #3b82f6; "> <strong>Remarks</strong><br> {{ $remarks }} </div> @endif
                                 <!-- CONFLICT WARNING --> @if( $action == 'submitted' && isset($conflicts) && $conflicts->count() > 0 ) <div style=" margin-top:25px; padding:15px; background:#fff7ed; border-left:4px solid #f97316; "> <strong> ⚠ Department Leave Conflict Warning </strong> <p style="margin-top:10px;"> This employee has applied for more than 5 days of Annual Leave. The following employees from the same department have overlapping leave requests: </p> 

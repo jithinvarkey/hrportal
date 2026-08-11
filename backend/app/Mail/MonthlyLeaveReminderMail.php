@@ -10,10 +10,13 @@ class MonthlyLeaveReminderMail extends Mailable
 {
     use Queueable, SerializesModels;
 
+    public string $leaveUrl;
+
     public function __construct(
         public string $mailSubject,
         public string $mailBody,
     ) {
+        $this->leaveUrl = rtrim((string) config('app.frontend_url', config('app.url')), '/') . '/leave/my';
     }
 
     public function build(): self

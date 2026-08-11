@@ -114,6 +114,11 @@ export class LoanListComponent implements OnInit {
     this.loadLoanTypes();
     this.load();
     this.loadMyLoans();
+
+    const loanId = Number(this.route.snapshot.queryParamMap.get('loan_id'));
+    if (Number.isInteger(loanId) && loanId > 0) {
+      this.viewLoan({ id: loanId });
+    }
   }
 
   // ── Stats ─────────────────────────────────────────────────────────────
