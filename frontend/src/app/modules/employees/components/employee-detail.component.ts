@@ -170,6 +170,28 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
     return ['saudi', 'saudi arabian', 'saudi arabia'].includes(String(this.employee?.nationality || '').trim().toLowerCase());
   }
 
+  get totalMonthlySalary(): number {
+    const basic = this.amount(this.employee?.salary);
+    const housing = this.allowanceOrDefault(this.employee?.housing_allowance, basic * 0.25);
+    const transport = this.allowanceOrDefault(this.employee?.transport_allowance, basic * 0.10);
+    const mobile = this.amount(this.employee?.mobile_allowance);
+    const food = this.amount(this.employee?.food_allowance);
+    const other = this.amount(this.employee?.other_allowances);
+
+    return Math.round((basic + housing + transport + mobile + food + other) * 100) / 100;
+  }
+
+  private allowanceOrDefault(value: unknown, defaultValue: number): number {
+    return value === null || value === undefined || value === ''
+      ? Math.round(defaultValue * 100) / 100
+      : this.amount(value);
+  }
+
+  private amount(value: unknown): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
   private blankDependent(): any {
     return { full_name: '', relationship: 'spouse', date_of_birth: '', nationality: '', id_number: '', id_expiry: '', passport_number: '', passport_expiry: '', is_active: true };
   }
