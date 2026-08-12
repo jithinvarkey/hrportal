@@ -19,7 +19,7 @@
         The form asks for phone number, date of birth, address, bank details, ID/Iqama details, and optional passport details.
       </p>
       <p style="margin:0 0 18px">
-        Your prefilled NDA is attached as a PDF document for review and signature. A joining date form, prefilled with your name and job title, is also attached as a Word document. Please upload the signed offer letter, signed NDA, Iqama/ID copy, and national address copy in the form. Passport copy, experience letter, and educational documents are optional.
+        Your prefilled NDA is attached as a PDF document for review and signature. A joining date form, prefilled with your name and job title, is also attached as a Word document.@if(collect($attachmentsMeta)->contains(fn ($attachment) => str_starts_with(strtoupper($attachment['name'] ?? ''), 'HDF.'))) The HDF template is attached for you to complete and upload with your onboarding details.@endif Please upload the signed offer letter, signed NDA, Iqama/ID copy, and national address copy in the form. Passport copy, experience letter, and educational documents are optional.
       </p>
       @if($loginEmail)
         <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border:1px solid #e5e7eb;border-radius:6px">

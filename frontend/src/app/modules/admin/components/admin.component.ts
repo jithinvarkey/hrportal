@@ -104,6 +104,11 @@ export class AdminComponent implements OnInit {
   settingsSaving = false;
   settingsMessage = '';
   settingsError = '';
+  hdfTemplate: any = { exists: false, name: null, size: null };
+  hdfFile: File | null = null;
+  hdfUploading = false;
+  hdfMessage = '';
+  hdfError = '';
 
   // ── Departments ───────────────────────────────────────────────────────
   units: any[] = [];
@@ -255,7 +260,7 @@ export class AdminComponent implements OnInit {
     if (id === 'units')        this.loadUnits();
     if (id === 'departments')  this.loadDepartments();
     if (id === 'designations') { this.loadDesignations(); this.loadDepartments(); }
-    if (id === 'settings')     { this.loadLoanSettings(); this.loadAnnualTicketSettings(); this.loadMonthlyLeaveReminderSettings(); this.loadUnifonicSettings(); }
+    if (id === 'settings')     { this.loadLoanSettings(); this.loadAnnualTicketSettings(); this.loadMonthlyLeaveReminderSettings(); this.loadUnifonicSettings(); this.loadHdfTemplate(); }
   }
 
   onMigrationFile(event: Event) {
@@ -331,6 +336,45 @@ export class AdminComponent implements OnInit {
       error: err => {
         this.settingsError = this.firstError(err) || 'Failed to save loan settings.';
         this.settingsSaving = false;
+      }
+    });
+  }
+
+  loadHdfTemplate() {
+    this.http.get<any>('/api/v1/admin/settings/hdf-template').subscribe({
+      next: r => this.hdfTemplate = r?.template || { exists: false, name: null, size: null },
+      error: err => this.settingsError = this.firstError(err) || 'Failed to load HDF template settings.'
+    });
+  }
+
+  onHdfFile(event: Event) {
+    const input = event.target as HTMLInputElement;
+    this.hdfFile = input.files?.[0] || null;
+    this.hdfMessage = '';
+    this.hdfError = '';
+  }
+
+  uploadHdfTemplate() {
+    if (!this.hdfFile) {
+      this.hdfError = 'Please choose an HDF file.';
+      return;
+    }
+
+    const payload = new FormData();
+    payload.append('file', this.hdfFile);
+    this.hdfUploading = true;
+    this.hdfMessage = '';
+    this.hdfError = '';
+    this.http.post<any>('/api/v1/admin/settings/hdf-template', payload).subscribe({
+      next: r => {
+        this.hdfTemplate = r.template;
+        this.hdfFile = null;
+        this.hdfUploading = false;
+        this.hdfMessage = r.message;
+      },
+      error: err => {
+        this.hdfError = this.firstError(err) || 'Failed to upload the HDF template.';
+        this.hdfUploading = false;
       }
     });
   }

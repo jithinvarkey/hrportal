@@ -11,8 +11,10 @@ use Illuminate\Support\Str;
 
 class NewHireOnboardingService
 {
-    public function __construct(private RecruitmentDocumentService $documents)
-    {
+    public function __construct(
+        private RecruitmentDocumentService $documents,
+        private HdfTemplateService $hdfTemplates
+    ) {
     }
 
     public function createAndEmailLink(Employee $employee, ?string $loginEmail = null, ?string $tempPassword = null): array
@@ -37,6 +39,10 @@ class NewHireOnboardingService
         try {
             try {
                 $attachments = $this->documents->onboardingAttachments($employee);
+                $hdf = $this->hdfTemplates->attachment();
+                if ($hdf) {
+                    $attachments[] = $hdf;
+                }
             } catch (\Throwable $e) {
                 $attachmentError = $e->getMessage();
                 Log::warning('New hire onboarding attachment generation failed.', [
