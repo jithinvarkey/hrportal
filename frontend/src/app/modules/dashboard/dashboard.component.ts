@@ -1,6 +1,7 @@
 import { Component, OnInit, AfterViewInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
+import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   standalone: false,
@@ -28,7 +29,9 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   private chartRetries = 0;
   private readonly MAX_RETRIES = 10;
 
-  constructor(private http: HttpClient, private router: Router, private cdr: ChangeDetectorRef) {}
+  constructor(private http: HttpClient, private router: Router, private cdr: ChangeDetectorRef, public auth: AuthService) {}
+
+  get canViewPayroll(): boolean { return this.auth.isHRManager(); }
 
   // ── Greeting / Date ───────────────────────────────────────────────────────
   readonly greeting = (() => {
@@ -118,7 +121,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
       { label: 'Total Employees',   value: d.employees?.total          ?? 0,    color: '#3b82f6', icon: 'group' },
       { label: 'On Leave Today',    value: d.leave?.on_leave_today     ?? 0,    color: '#f59e0b', icon: 'event_busy' },
       { label: 'Pending Leaves',    value: d.leave?.pending            ?? 0,    color: d.leave?.pending > 5 ? '#ef4444' : '#f59e0b', icon: 'pending_actions' },
-      { label: 'Payroll Processed', value: d.payroll?.processed        ?? 0,    color: '#10b981', icon: 'payments' },
+      ...(this.canViewPayroll ? [{ label: 'Payroll Processed', value: d.payroll?.processed ?? 0, color: '#10b981', icon: 'payments' }] : []),
       ...(showRecruitment ? [{ label: 'Open Positions', value: d.recruitment?.open_positions ?? 0, color: '#6366f1', icon: 'work_outline' }] : []),
       { label: 'Pending Reviews',   value: d.performance?.pending      ?? 0,    color: '#0ea5e9', icon: 'rate_review' },
       { label: 'Attendance Rate',   value: (d.attendance?.rate ?? 0) + '%',     color: d.attendance?.rate >= 90 ? '#10b981' : '#f59e0b', icon: 'fingerprint' },
@@ -189,7 +192,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
         progress: this.pct(d.performance?.completed, d.performance?.total),
         progressColor: '#0ea5e9', progressLabel: '% Completion',
       },
-      {
+      ...(this.canViewPayroll ? [{
         title: 'Payroll', icon: 'account_balance_wallet', color: '#10b981',
         main: d.payroll?.due_this_month ?? 0, mainLabel: 'Due This Month',
         items: [
@@ -203,7 +206,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
         alertColor: '#ef4444',
         progress: this.pct(d.payroll?.processed, d.payroll?.total),
         progressColor: '#10b981', progressLabel: '% Processed',
-      },
+      }] : []),
       {
         title: 'Requests', icon: 'inbox', color: '#f97316',
         main: d.requests?.pending ?? 0, mainLabel: 'Pending Requests',
@@ -257,7 +260,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     this.mkDept(d, C);
     this.mkLeave(d, C);
     this.mkPerf(d, C);
-    this.mkPayroll(d, C);
+    if (this.canViewPayroll) this.mkPayroll(d, C);
   }
 
   private chartOpts(extra = {}) {

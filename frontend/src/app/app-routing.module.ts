@@ -29,7 +29,9 @@ const routes: Routes = [
       },
       {
         path: 'payroll',
-        loadChildren: () => import('./modules/payroll/payroll.module').then(m => m.PayrollModule)
+        loadChildren: () => import('./modules/payroll/payroll.module').then(m => m.PayrollModule),
+        canActivate: [RoleGuard],
+        data: { roles: ['hr_manager'] }
       },
       {
         path: 'leave',

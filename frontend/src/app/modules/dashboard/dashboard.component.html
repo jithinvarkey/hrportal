@@ -91,7 +91,7 @@
   <mat-icon>bar_chart</mat-icon> Analytics
 </div>
 <div class="charts-row">
-  <div class="chart-card chart-wide">
+  <div class="chart-card chart-wide" *ngIf="canViewPayroll">
     <div class="chart-header">
       <div class="chart-title">Headcount Trend — Hires &amp; Exits</div>
       <span class="chart-badge">Last 6 Months</span>
@@ -312,7 +312,7 @@
         </div>
         <span>Request Leave</span>
       </button>
-      <button class="qa-btn" routerLink="/payroll">
+      <button class="qa-btn" routerLink="/payroll" *ngIf="canViewPayroll">
         <div class="qa-icon" style="background:rgba(16,185,129,.15)">
           <mat-icon style="color:#10b981">account_balance_wallet</mat-icon>
         </div>

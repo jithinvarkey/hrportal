@@ -246,7 +246,7 @@ export class AuthService {
       {
         group: 'Finance',
         path: '/payroll', label: 'Payroll', icon: 'payments',
-        perms: ['payroll.view', 'payroll.view_own']
+        roles: [ROLES.HR_MANAGER]
       },
       {
         path: '/loans', label: 'Loans', icon: 'account_balance',

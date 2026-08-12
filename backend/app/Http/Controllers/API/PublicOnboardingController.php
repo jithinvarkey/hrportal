@@ -8,6 +8,7 @@ use App\Models\EmployeeDocument;
 use App\Models\EmployeeOnboardingLink;
 use App\Models\User;
 use App\Services\NewHireNotificationService;
+use App\Services\HdfTemplateService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +17,10 @@ use Illuminate\Support\Facades\Mail;
 
 class PublicOnboardingController extends Controller
 {
-    public function __construct(private NewHireNotificationService $newHireNotifications)
+    public function __construct(
+        private NewHireNotificationService $newHireNotifications,
+        private HdfTemplateService $hdfTemplates
+    )
     {
     }
 
@@ -61,7 +65,7 @@ class PublicOnboardingController extends Controller
                 'department' => $employee->department?->name,
                 'designation' => $employee->designation?->title,
             ],
-            'documents' => array_map(fn ($item, $field) => ['field' => $field] + $item, $this->documentFields, array_keys($this->documentFields)),
+            'documents' => array_map(fn ($item, $field) => ['field' => $field] + $item, $this->documentFields(), array_keys($this->documentFields())),
             'expires_at' => optional($link->expires_at)->toIso8601String(),
         ]);
     }
@@ -91,8 +95,11 @@ class PublicOnboardingController extends Controller
             'emergency_contact_phone' => 'required|string|max:30',
         ];
 
-        foreach ($this->documentFields as $field => $meta) {
-            $rules[$field] = ($meta['required'] ? 'required' : 'nullable') . '|file|mimes:pdf,doc,docx,jpg,jpeg,png,xls,xlsx|max:10240';
+        foreach ($this->documentFields() as $field => $meta) {
+            $mimes = $field === 'filled_hdf'
+                ? 'pdf,doc,docx'
+                : 'pdf,doc,docx,jpg,jpeg,png,xls,xlsx';
+            $rules[$field] = ($meta['required'] ? 'required' : 'nullable') . "|file|mimes:{$mimes}|max:10240";
         }
 
         $data = $request->validate($rules);
@@ -119,14 +126,14 @@ class PublicOnboardingController extends Controller
             ])->toArray());
 
             $uploaded = [];
-            foreach ($this->documentFields as $field => $meta) {
+            foreach ($this->documentFields() as $field => $meta) {
                 if (!$request->hasFile($field)) {
                     continue;
                 }
 
                 $file = $request->file($field);
                 $path = $file->store("employees/{$employee->id}/documents");
-                $uploaded[] = EmployeeDocument::create([
+                $documentData = [
                     'employee_id' => $employee->id,
                     'title' => $meta['title'],
                     'type' => $meta['type'],
@@ -136,7 +143,22 @@ class PublicOnboardingController extends Controller
                     'file_size' => $file->getSize(),
                     'is_verified' => false,
                     'uploaded_by' => null,
-                ]);
+                ];
+
+                if ($field === 'filled_hdf') {
+                    $previous = EmployeeDocument::where('employee_id', $employee->id)
+                        ->where('title', 'Filled HDF')
+                        ->first();
+                    if ($previous?->file_path && $previous->file_path !== $path) {
+                        \Illuminate\Support\Facades\Storage::delete($previous->file_path);
+                    }
+                    $uploaded[] = EmployeeDocument::updateOrCreate(
+                        ['employee_id' => $employee->id, 'title' => 'Filled HDF'],
+                        $documentData
+                    );
+                } else {
+                    $uploaded[] = EmployeeDocument::create($documentData);
+                }
             }
 
             $link->update(['submitted_at' => now()]);
@@ -156,6 +178,20 @@ class PublicOnboardingController extends Controller
         }
 
         return $response;
+    }
+
+    private function documentFields(): array
+    {
+        $fields = $this->documentFields;
+        if ($this->hdfTemplates->exists()) {
+            $fields['filled_hdf'] = [
+                'title' => 'Filled HDF',
+                'type' => 'medical',
+                'required' => false,
+            ];
+        }
+
+        return $fields;
     }
 
     private function findValidLink(string $token): ?EmployeeOnboardingLink

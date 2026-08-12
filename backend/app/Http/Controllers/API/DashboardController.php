@@ -20,6 +20,18 @@ use Illuminate\Support\Facades\DB;
  */
 class DashboardController extends Controller
 {
+    private function canViewPayroll(): bool
+    {
+        $user = auth()->user();
+
+        return $user && DB::table('model_has_roles')
+            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('model_has_roles.model_id', $user->id)
+            ->where('model_has_roles.model_type', get_class($user))
+            ->where('roles.name', 'hr_manager')
+            ->exists();
+    }
+
     private function dashboardScope(): array
     {
         $user = auth()->user();
@@ -80,6 +92,7 @@ class DashboardController extends Controller
         $month = now()->month;
         $year  = now()->year;
         $scope = $this->dashboardScope();
+        $canViewPayroll = $this->canViewPayroll();
 
         // ── Helpers ────────────────────────────────────────────────────
         $safe = fn (callable $fn, $default = 0) => rescue($fn, $default, false);
@@ -248,14 +261,14 @@ class DashboardController extends Controller
                 'total_active'  => $activeEmp,
                 'rate'          => $attRate,
             ],
-            'payroll' => [
+            'payroll' => $canViewPayroll ? [
                 'processed'         => $payProcessed,
                 'pending_approvals' => $payPending,
                 'errors'            => $payErrors,
                 'on_hold'           => $payOnHold,
                 'due_this_month'    => $payDue,
                 'total'             => $payTotal,
-            ],
+            ] : null,
             'recruitment' => [
                 'open_positions'  => $openJobs,
                 'applicants'      => $totalApplicants,
@@ -328,14 +341,14 @@ class DashboardController extends Controller
                 ->whereMonth('termination_date', $m->month)->count(),
         ]));
 
-        $payrollTrend = $safe(fn () => $months->map(fn ($m) => [
+        $payrollTrend = $this->canViewPayroll() ? $safe(fn () => $months->map(fn ($m) => [
             'month' => $m->format('M'),
             'total' => (int) ($this->applyEmployeeScope(DB::table('payrolls'), $scope)
                 ->whereYear('created_at', $m->year)
                 ->whereMonth('created_at', $m->month)
                 ->where('status', 'approved')
                 ->sum('total_net') ?? 0),
-        ]));
+        ])) : null;
 
         $deptDist = $safe(fn () => $this->applyEmployeeScope(DB::table('departments')
             ->whereNull('deleted_at')

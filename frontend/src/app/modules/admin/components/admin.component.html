@@ -638,6 +638,37 @@
 
     <div class="settings-panel">
       <div class="settings-heading">
+        <div class="settings-icon"><mat-icon>description</mat-icon></div>
+        <div>
+          <div class="settings-title">HDF Template</div>
+          <div class="settings-sub">The active HDF is attached when HR confirms a hire and must be uploaded completed during onboarding.</div>
+        </div>
+      </div>
+
+      <div class="hdf-template-row">
+        <div class="hdf-current" [class.available]="hdfTemplate.exists">
+          <mat-icon>{{ hdfTemplate.exists ? 'check_circle' : 'info' }}</mat-icon>
+          <span>
+            <strong>{{ hdfTemplate.exists ? hdfTemplate.name : 'No HDF uploaded' }}</strong>
+            <small>{{ hdfTemplate.exists ? 'Uploading another file will permanently replace this template.' : 'Confirm-hire onboarding emails will not include an HDF until one is uploaded.' }}</small>
+          </span>
+        </div>
+        <label class="file-picker hdf-picker">
+          <input type="file" accept=".pdf,.doc,.docx" (change)="onHdfFile($event)">
+          <mat-icon>attach_file</mat-icon>
+          <span>{{ hdfFile?.name || 'Choose PDF or Word file' }}</span>
+        </label>
+        <button class="btn-primary" (click)="uploadHdfTemplate()" [disabled]="hdfUploading || !hdfFile">
+          <mat-icon>{{ hdfUploading ? 'hourglass_empty' : 'cloud_upload' }}</mat-icon>
+          {{ hdfUploading ? 'Uploading...' : (hdfTemplate.exists ? 'Replace HDF' : 'Upload HDF') }}
+        </button>
+      </div>
+      <div class="settings-feedback success" *ngIf="hdfMessage"><mat-icon>check_circle</mat-icon>{{ hdfMessage }}</div>
+      <div class="settings-feedback error" *ngIf="hdfError"><mat-icon>error_outline</mat-icon>{{ hdfError }}</div>
+    </div>
+
+    <div class="settings-panel">
+      <div class="settings-heading">
         <div class="settings-icon"><mat-icon>account_balance</mat-icon></div>
         <div>
           <div class="settings-title">Loan Approval Levels</div>

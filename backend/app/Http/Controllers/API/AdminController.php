@@ -21,6 +21,7 @@ use App\Services\LoanApprovalService;
 use App\Services\AnnualTicketService;
 use App\Services\MonthlyLeaveReminderService;
 use App\Services\UnifonicSettingsService;
+use App\Services\HdfTemplateService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -40,13 +41,39 @@ class AdminController extends Controller
         LoanApprovalService $loanApprovalService,
         AnnualTicketService $annualTicketService,
         MonthlyLeaveReminderService $monthlyLeaveReminderService,
-        UnifonicSettingsService $unifonicSettingsService
+        UnifonicSettingsService $unifonicSettingsService,
+        protected HdfTemplateService $hdfTemplates
     )
     {
         $this->loanApprovalService = $loanApprovalService;
         $this->annualTicketService = $annualTicketService;
         $this->monthlyLeaveReminderService = $monthlyLeaveReminderService;
         $this->unifonicSettingsService = $unifonicSettingsService;
+    }
+
+    public function hdfTemplate(): JsonResponse
+    {
+        if (!$this->isSuperAdmin()) {
+            return response()->json(['message' => 'Only a super admin can manage the HDF template.'], 403);
+        }
+
+        return response()->json(['template' => $this->hdfTemplates->info()]);
+    }
+
+    public function uploadHdfTemplate(Request $request): JsonResponse
+    {
+        if (!$this->isSuperAdmin()) {
+            return response()->json(['message' => 'Only a super admin can manage the HDF template.'], 403);
+        }
+
+        $request->validate([
+            'file' => 'required|file|mimes:pdf,doc,docx|max:10240',
+        ]);
+
+        return response()->json([
+            'message' => 'HDF template uploaded successfully. The previous HDF file was replaced.',
+            'template' => $this->hdfTemplates->replace($request->file('file')),
+        ]);
     }
 
     public function unifonicSettings(): JsonResponse
