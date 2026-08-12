@@ -173,7 +173,9 @@ Route::prefix('v1')->group(function () {
             Route::get('/stats',                               [PayrollController::class, 'stats']);
             Route::get('/components',                          [PayrollController::class, 'components']);
             Route::post('/components',                         [PayrollController::class, 'storeComponent']);
+            Route::get('/employee-options',                    [PayrollController::class, 'employeeOptions']);
             Route::get('/employee/{empId}',                    [PayrollController::class, 'employeeHistory'])->whereNumber('empId');
+            Route::get('/payslip/generate',                    [PayrollController::class, 'generateEmployeePayslip']);
             Route::get('/payslip/{payslipId}/download',        [PayrollController::class, 'downloadPayslip'])->whereNumber('payslipId');
             Route::post('/run',                                [PayrollController::class, 'run']);
 

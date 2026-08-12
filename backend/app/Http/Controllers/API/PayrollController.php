@@ -20,7 +20,8 @@ class PayrollController extends Controller {
 
     public function index(Request $request) {
         $payrolls = Payroll::with(['creator', 'approver'])
-            ->withCount('payslips')
+            ->withCount(['payslips' => fn ($query) => $query
+                ->whereDoesntHave('employee.user.roles', fn ($roleQuery) => $roleQuery->where('name', 'super_admin'))])
             ->when($request->status, fn($q) => $q->where('status', $request->status))
             ->when($request->year,   fn($q) => $q->where('month', 'like', $request->year . '%'))
             ->orderBy('created_at', 'desc')
@@ -79,7 +80,13 @@ class PayrollController extends Controller {
     }
 
     public function show($id) {
-        $payroll = Payroll::with(['payslips.employee.department', 'creator', 'approver'])->findOrFail($id);
+        $payroll = Payroll::with([
+            'payslips' => fn ($query) => $query
+                ->whereDoesntHave('employee.user.roles', fn ($roleQuery) => $roleQuery->where('name', 'super_admin'))
+                ->with('employee.department'),
+            'creator',
+            'approver',
+        ])->findOrFail($id);
         return response()->json(['payroll' => $payroll]);
     }
 
@@ -149,13 +156,25 @@ class PayrollController extends Controller {
     public function payslips($id) {
         $payslips = Payslip::with(['employee.department'])
             ->where('payroll_id', $id)
+            ->whereDoesntHave('employee.user.roles', fn ($query) => $query->where('name', 'super_admin'))
             ->paginate(20);
         return response()->json($payslips);
+    }
+
+    public function employeeOptions()
+    {
+        return response()->json([
+            'employees' => $this->service->eligibleEmployees()
+                ->sortBy(fn ($employee) => strtolower($employee->first_name . ' ' . $employee->last_name))
+                ->values()
+                ->map->only(['id', 'employee_code', 'first_name', 'last_name']),
+        ]);
     }
 
     public function employeeHistory($empId) {
         $payslips = Payslip::with('payroll')
             ->where('employee_id', $empId)
+            ->whereDoesntHave('employee.user.roles', fn ($query) => $query->where('name', 'super_admin'))
             ->orderBy('created_at', 'desc')
             ->paginate(12);
         return response()->json($payslips);
@@ -164,8 +183,62 @@ class PayrollController extends Controller {
     public function downloadPayslip($payslipId)
     {
         // Return full payslip data — frontend handles print/PDF via browser print API
-        $payslip = Payslip::with(['employee.department', 'payroll'])->findOrFail($payslipId);
-        return response()->json(['payslip' => $payslip]);
+        $payslip = Payslip::with(['employee.department', 'employee.designation', 'payroll'])->findOrFail($payslipId);
+        if ($payslip->employee?->user?->hasRole('super_admin')) {
+            return response()->json([
+                'message' => 'The System Admin account is not eligible for payroll or payslip generation.',
+            ], 422);
+        }
+        if ($payslip->payroll?->status !== 'paid') {
+            return response()->json([
+                'message' => 'This payslip cannot be generated because the payroll has not been marked as paid.',
+            ], 422);
+        }
+        return response()->json(['payslip' => $payslip, 'company_name' => config('app.name', 'HRMS')]);
+    }
+
+    public function generateEmployeePayslip(Request $request)
+    {
+        $data = $request->validate([
+            'employee_id' => 'required|integer|exists:employees,id',
+            'month'       => 'required|date_format:Y-m',
+        ]);
+
+        if (!$this->service->eligibleEmployees()->contains('id', (int) $data['employee_id'])) {
+            return response()->json([
+                'message' => 'The System Admin account is not eligible for payroll or payslip generation.',
+            ], 422);
+        }
+
+        $payroll = Payroll::where('month', $data['month'])
+            ->where('status', '!=', 'rejected')
+            ->latest('id')
+            ->first();
+
+        if (!$payroll) {
+            return response()->json(['message' => 'Payroll has not been generated for the selected month.'], 422);
+        }
+        if ($payroll->status !== 'paid') {
+            return response()->json([
+                'message' => 'Payroll for the selected month is not paid yet. Mark the payroll as paid before generating the payslip.',
+            ], 422);
+        }
+
+        $payslip = Payslip::with(['employee.department', 'employee.designation', 'payroll'])
+            ->where('payroll_id', $payroll->id)
+            ->where('employee_id', $data['employee_id'])
+            ->first();
+
+        if (!$payslip) {
+            return response()->json([
+                'message' => 'No payslip was generated for the selected employee in this payroll month.',
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => 'Paid payslip is ready.', 'payslip' => $payslip,
+            'company_name' => config('app.name', 'HRMS'),
+        ]);
     }
 
     public function export($id) {
@@ -289,7 +362,7 @@ class PayrollController extends Controller {
         $payroll = Payroll::with('payslips.employee')->findOrFail($id);
 
         if (!in_array($payroll->status, ['draft', 'pending_approval'])) {
-            return response()->json(['message' => 'Reopen the payroll before recalculating'], 422);
+            return response()->json(['message' => 'Only payrolls awaiting approval can be regenerated.'], 422);
         }
 
         try {
@@ -321,11 +394,11 @@ class PayrollController extends Controller {
             ]);
 
             return response()->json([
-                'message' => 'Payroll recalculated for ' . $employees->count() . ' employees.',
+                'message' => 'Payroll regenerated for ' . $employees->count() . ' employees and is ready for approval.',
                 'payroll' => $payroll->fresh()->loadCount('payslips'),
             ]);
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Recalculation failed: ' . $e->getMessage()], 500);
+            return response()->json(['message' => 'Payroll regeneration failed: ' . $e->getMessage()], 500);
         }
     }
 }
