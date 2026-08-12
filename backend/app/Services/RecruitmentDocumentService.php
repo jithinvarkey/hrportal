@@ -9,6 +9,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use setasign\Fpdi\Fpdi;
+use ZipArchive;
 
 class RecruitmentDocumentService
 {
@@ -52,6 +53,56 @@ class RecruitmentDocumentService
         return $this->documentMeta($path, 'Joining Date Form.pdf');
     }
 
+    public function generateJoiningDateFormDocx(Employee $employee): array
+    {
+        $employee->loadMissing('designation');
+
+        $template = resource_path('hr-templates/joining_date_form.docx');
+        if (!is_file($template)) {
+            throw new \RuntimeException('Joining date form DOCX template is missing.');
+        }
+
+        $path = "recruitment/joining-date-forms/employee-{$employee->id}-joining-date-form.docx";
+        Storage::put($path, (string) file_get_contents($template));
+
+        $archive = new ZipArchive();
+        if ($archive->open(Storage::path($path)) !== true) {
+            throw new \RuntimeException('Unable to open the joining date form DOCX.');
+        }
+
+        try {
+            $documentXml = $archive->getFromName('word/document.xml');
+            if ($documentXml === false) {
+                throw new \RuntimeException('The joining date form has no document content.');
+            }
+
+            $document = new \DOMDocument();
+            $document->preserveWhiteSpace = true;
+            if (!$document->loadXML($documentXml)) {
+                throw new \RuntimeException('Unable to read the joining date form content.');
+            }
+
+            $xpath = new \DOMXPath($document);
+            $xpath->registerNamespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main');
+            $rows = $xpath->query('(//w:tbl)[1]/w:tr');
+
+            $this->setDocxTableCellText($document, $xpath, $rows?->item(1), 2, $employee->full_name);
+            $this->setDocxTableCellText($document, $xpath, $rows?->item(2), 2, $employee->designation?->title ?? '');
+
+            if (!$archive->addFromString('word/document.xml', $document->saveXML())) {
+                throw new \RuntimeException('Unable to save the joining date form content.');
+            }
+        } finally {
+            $archive->close();
+        }
+
+        return $this->documentMeta(
+            $path,
+            'joining_date_form.docx',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        );
+    }
+
     public function storeJoiningDateFormDocument(Employee $employee, array $data = []): EmployeeDocument
     {
         $meta = $this->generateJoiningDateForm($employee, $data);
@@ -76,7 +127,51 @@ class RecruitmentDocumentService
     {
         return [
             $this->generateNdaPdf($employee, $data),
+            $this->generateJoiningDateFormDocx($employee),
         ];
+    }
+
+    private function setDocxTableCellText(
+        \DOMDocument $document,
+        \DOMXPath $xpath,
+        ?\DOMNode $row,
+        int $cellIndex,
+        string $value
+    ): void {
+        if (!$row) {
+            throw new \RuntimeException('The joining date form structure is invalid.');
+        }
+
+        $cells = $xpath->query('./w:tc', $row);
+        $cell = $cells?->item($cellIndex);
+        if (!$cell) {
+            throw new \RuntimeException('The joining date form field is missing.');
+        }
+
+        $paragraph = $xpath->query('./w:p', $cell)?->item(0);
+        if (!$paragraph) {
+            $paragraph = $document->createElementNS(
+                'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+                'w:p'
+            );
+            $cell->appendChild($paragraph);
+        }
+
+        foreach (iterator_to_array($xpath->query('.//w:r', $paragraph) ?: []) as $run) {
+            $paragraph->removeChild($run);
+        }
+
+        $run = $document->createElementNS(
+            'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+            'w:r'
+        );
+        $text = $document->createElementNS(
+            'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+            'w:t'
+        );
+        $text->appendChild($document->createTextNode($value));
+        $run->appendChild($text);
+        $paragraph->appendChild($run);
     }
 
     private function putPdf(string $path, string $view, array $payload): void
@@ -131,12 +226,12 @@ class RecruitmentDocumentService
         return $converted !== false ? $converted : preg_replace('/[^\x20-\x7E]/', '', $value);
     }
 
-    private function documentMeta(string $path, string $name): array
+    private function documentMeta(string $path, string $name, string $mime = 'application/pdf'): array
     {
         return [
             'path' => $path,
             'name' => $name,
-            'mime' => 'application/pdf',
+            'mime' => $mime,
         ];
     }
 

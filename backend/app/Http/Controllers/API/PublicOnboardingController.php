@@ -7,6 +7,7 @@ use App\Mail\EmployeeDocumentUploadedMail;
 use App\Models\EmployeeDocument;
 use App\Models\EmployeeOnboardingLink;
 use App\Models\User;
+use App\Services\NewHireNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +16,10 @@ use Illuminate\Support\Facades\Mail;
 
 class PublicOnboardingController extends Controller
 {
+    public function __construct(private NewHireNotificationService $newHireNotifications)
+    {
+    }
+
     private array $documentFields = [
         'signed_offer_letter' => ['title' => 'Signed Offer Letter', 'type' => 'contract', 'required' => true],
         'signed_nda' => ['title' => 'Signed NDA', 'type' => 'contract', 'required' => true],
@@ -92,8 +97,9 @@ class PublicOnboardingController extends Controller
 
         $data = $request->validate($rules);
         $employee = $link->employee;
+        $shouldNotifyIt = $link->submitted_at === null;
 
-        return DB::transaction(function () use ($request, $data, $employee, $link): JsonResponse {
+        $response = DB::transaction(function () use ($request, $data, $employee, $link): JsonResponse {
             $employee->update(collect($data)->only([
                 'phone',
                 'dob',
@@ -144,6 +150,12 @@ class PublicOnboardingController extends Controller
                 'uploaded_documents' => count($uploaded),
             ]);
         });
+
+        if ($shouldNotifyIt) {
+            $this->newHireNotifications->notifyItManagers($employee);
+        }
+
+        return $response;
     }
 
     private function findValidLink(string $token): ?EmployeeOnboardingLink
