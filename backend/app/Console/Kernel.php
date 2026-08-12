@@ -66,6 +66,13 @@ class Kernel extends ConsoleKernel
                  ->timezone('Asia/Riyadh')
                  ->withoutOverlapping()
                  ->appendOutputTo(storage_path('logs/monthly-leave-reminder.log'));
+
+        // On the last calendar day, remind HR managers if this month's payroll is missing or unpaid.
+        $schedule->command('payroll:send-month-end-reminder')
+                 ->dailyAt('09:00')
+                 ->timezone('Asia/Riyadh')
+                 ->withoutOverlapping()
+                 ->appendOutputTo(storage_path('logs/payroll-month-end-reminder.log'));
     }
 
     protected function commands(): void

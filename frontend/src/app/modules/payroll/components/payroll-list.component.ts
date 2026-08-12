@@ -21,6 +21,7 @@ export class PayrollListComponent implements OnInit {
   showReject     = false;
   showEditSlip   = false;
   showSlipDetail = false;
+  showGenerateSlip = false;
 
   selectedPayroll: any  = null;
   selectedSlip: any     = null;
@@ -39,6 +40,12 @@ export class PayrollListComponent implements OnInit {
   filterStatus          = '';
   slipSearch            = '';
   showMarkPaid          = false;
+  employees: any[]      = [];
+  generateForm          = { employee_id: '', month: '' };
+  employeeSearch        = '';
+  employeeDropdownOpen  = false;
+  generateError         = '';
+  generatingSlip        = false;
 
   displayedColumns = ['employee', 'basic', 'housing', 'transport', 'other_earn', 'gross', 'gosi', 'unpaid_leave', 'loan', 'other_ded', 'net', 'days', 'actions'];
   statItems: { label: string; value: string; icon: string; color: string }[] = [];
@@ -111,6 +118,131 @@ export class PayrollListComponent implements OnInit {
     });
   }
 
+  openGeneratePayslip() {
+    this.generateError = '';
+    this.employeeSearch = '';
+    this.employeeDropdownOpen = false;
+    this.generateForm = { employee_id: '', month: this.runForm.month };
+    this.showGenerateSlip = true;
+    if (!this.employees.length) {
+      this.http.get<any>('/api/v1/payroll/employee-options').subscribe({
+        next: r => { this.employees = r?.employees || []; this.cdr.markForCheck(); },
+        error: () => { this.generateError = 'Unable to load employees.'; this.cdr.markForCheck(); }
+      });
+    }
+  }
+
+  generatePayslip() {
+    if (!this.generateForm.employee_id || !this.generateForm.month) {
+      this.generateError = 'Please select an employee and payroll month.';
+      return;
+    }
+    this.generatingSlip = true;
+    this.generateError = '';
+    this.http.get<any>('/api/v1/payroll/payslip/generate', { params: this.generateForm }).subscribe({
+      next: r => {
+        this.generatingSlip = false;
+        this.showGenerateSlip = false;
+        this.downloadPayslip(r.payslip);
+        this.cdr.markForCheck();
+      },
+      error: err => {
+        this.generatingSlip = false;
+        this.generateError = err?.error?.message || 'Payslip could not be generated.';
+        this.cdr.markForCheck();
+      }
+    });
+  }
+
+  get filteredEmployeeOptions(): any[] {
+    if (this.generateForm.employee_id) {
+      return this.employees.filter(employee => String(employee.id) === String(this.generateForm.employee_id));
+    }
+    const query = this.employeeSearch.trim().toLowerCase();
+    if (!query) return this.employees;
+
+    return this.employees.filter(employee =>
+      employee.employee_code?.toLowerCase().includes(query) ||
+      employee.first_name?.toLowerCase().includes(query) ||
+      employee.last_name?.toLowerCase().includes(query) ||
+      `${employee.first_name || ''} ${employee.last_name || ''}`.toLowerCase().includes(query)
+    );
+  }
+
+  selectEmployee(employee: any) {
+    this.generateForm.employee_id = String(employee.id);
+    this.employeeSearch = `${employee.employee_code} - ${employee.first_name} ${employee.last_name}`;
+    this.employeeDropdownOpen = false;
+    this.generateError = '';
+  }
+
+  onEmployeeSearchChange() {
+    this.generateForm.employee_id = '';
+    this.employeeDropdownOpen = true;
+  }
+
+  clearEmployeeSelection() {
+    this.employeeSearch = '';
+    this.generateForm.employee_id = '';
+    this.employeeDropdownOpen = true;
+  }
+
+  closeEmployeeDropdown() {
+    setTimeout(() => { this.employeeDropdownOpen = false; this.cdr.markForCheck(); }, 150);
+  }
+
+  private escapeHtml(value: any): string {
+    return String(value ?? '').replace(/[&<>'"]/g, character => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    } as any)[character]);
+  }
+
+  private formatPayPeriod(month: string): string {
+    if (!month) return '';
+    const [year, monthNumber] = month.split('-').map(Number);
+    return new Date(year, monthNumber - 1, 1).toLocaleDateString('en', { month: 'long', year: 'numeric' });
+  }
+
+  private amountInWords(value: number): string {
+    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    const underThousand = (number: number): string => {
+      const parts: string[] = [];
+      if (number >= 100) { parts.push(`${ones[Math.floor(number / 100)]} Hundred`); number %= 100; }
+      if (number >= 20) { parts.push(tens[Math.floor(number / 10)]); number %= 10; }
+      if (number > 0) parts.push(ones[number]);
+      return parts.join(' ');
+    };
+    let remaining = Math.floor(Math.max(0, value));
+    if (!remaining) return 'Zero Saudi Riyals Only';
+    const words: string[] = [];
+    for (const group of [{ size: 1_000_000_000, name: 'Billion' }, { size: 1_000_000, name: 'Million' }, { size: 1_000, name: 'Thousand' }, { size: 1, name: '' }]) {
+      const amount = Math.floor(remaining / group.size);
+      if (amount) { words.push(underThousand(amount), group.name); remaining %= group.size; }
+    }
+    return `${words.filter(Boolean).join(' ')} Saudi Riyals Only`;
+  }
+
+  private buildPayslipHtml(response: any): string {
+    const s = response.payslip;
+    const emp = s.employee;
+    const money = (value: any) => `SAR ${Number(value || 0).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const net = Number(s.net_salary || 0);
+    return `<!doctype html><html><head><title>Payslip ${this.escapeHtml(s.payroll?.month)}</title><style>
+      @page{size:A4 portrait;margin:13mm 12mm 8mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#111;font-size:14px}.sheet{width:100%;min-height:270mm;position:relative;padding-bottom:24mm}
+      .header{text-align:center;margin:12mm 0 17mm}.header h1{margin:0 0 7px;font-size:25px;font-weight:500}.company{font-size:20px}.employee-grid{display:grid;grid-template-columns:1fr 1fr;column-gap:36mm;margin-bottom:17mm}.detail-row{display:grid;grid-template-columns:43mm 1fr;line-height:1.65}.detail-value:before{content:': '}
+      table{width:100%;border-collapse:collapse;table-layout:fixed}.pay-grid{border:1px solid #111}.pay-grid th{background:#d2d2d2;border:1px solid #111;padding:7px 8px;font-size:17px;font-weight:500;text-align:center}.pay-grid td{padding:6px 8px;vertical-align:top}.pay-grid td:nth-child(1),.pay-grid th:nth-child(1){width:32%;border-right:1px solid #111}.pay-grid td:nth-child(2),.pay-grid th:nth-child(2){width:18%;border-right:1px solid #111;text-align:right}.pay-grid td:nth-child(3),.pay-grid th:nth-child(3){width:32%;border-right:1px solid #111}.pay-grid td:nth-child(4),.pay-grid th:nth-child(4){width:18%;text-align:right}.totals td{padding-top:16px;font-weight:600}.net td{padding-top:2px;padding-bottom:8px;font-weight:700}
+      .amount-words{text-align:center;margin-top:18mm;line-height:1.5}.amount-words strong{display:block;font-size:17px}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:70mm;margin:18mm 23mm 0;text-align:center}.signature-line{border-bottom:1px solid #111;height:25mm;margin-bottom:7px}.footer-note{position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:13px}.print-action{position:fixed;right:18px;top:18px;border:0;border-radius:7px;padding:9px 14px;background:#2563eb;color:#fff;cursor:pointer}@media print{.print-action{display:none}}
+    </style></head><body><button class="print-action" onclick="window.print()">Print / Save PDF</button><main class="sheet">
+      <header class="header"><h1>Payslip</h1><div class="company">${this.escapeHtml(response.company_name || 'HRMS')}</div></header>
+      <section class="employee-grid"><div><div class="detail-row"><span>Date of Joining</span><span class="detail-value">${this.escapeHtml(emp?.hire_date || '—')}</span></div><div class="detail-row"><span>Pay Period</span><span class="detail-value">${this.escapeHtml(this.formatPayPeriod(s.payroll?.month))}</span></div><div class="detail-row"><span>Worked Days</span><span class="detail-value">${this.escapeHtml(s.working_days)}</span></div></div>
+      <div><div class="detail-row"><span>Employee Name</span><span class="detail-value">${this.escapeHtml(`${emp?.first_name || ''} ${emp?.last_name || ''}`.trim())}</span></div><div class="detail-row"><span>Designation</span><span class="detail-value">${this.escapeHtml(emp?.designation?.title || '—')}</span></div><div class="detail-row"><span>Department</span><span class="detail-value">${this.escapeHtml(emp?.department?.name || '—')}</span></div></div></section>
+      <table class="pay-grid"><thead><tr><th>Earnings</th><th>Amount</th><th>Deductions</th><th>Amount</th></tr></thead><tbody>
+      <tr><td>Basic Pay</td><td>${money(s.basic_salary)}</td><td>GOSI (Employee)</td><td>${money(s.gosi_employee)}</td></tr><tr><td>Housing Allowance</td><td>${money(s.housing_allowance)}</td><td>Unpaid Leave (${Number(s.unpaid_leave_days || 0).toFixed(1)} days)</td><td>${money(s.leave_deduction)}</td></tr><tr><td>Transport Allowance</td><td>${money(s.transport_allowance)}</td><td>Loan Installments</td><td>${money(s.loan_deduction)}</td></tr><tr><td>Other Earnings</td><td>${money(s.other_allowances)}</td><td>Other Deductions</td><td>${money(s.other_deductions)}</td></tr><tr class="totals"><td>Total Earnings</td><td>${money(s.gross_salary)}</td><td>Total Deductions</td><td>${money(s.total_deductions)}</td></tr><tr class="net"><td></td><td></td><td>Net Pay</td><td>${money(net)}</td></tr></tbody></table>
+      <div class="amount-words"><strong>${money(net)}</strong>${this.escapeHtml(this.amountInWords(net))}</div><section class="signatures"><div><div class="signature-line"></div>Employer Signature</div><div><div class="signature-line"></div>Employee Signature</div></section><div class="footer-note">This is a system-generated payslip</div>
+    </main></body></html>`;
+  }
+
   // ── View Payslips ──────────────────────────────────────────────────────────
   viewDetail(p: any) {
     this.selectedPayroll = p;
@@ -143,42 +275,15 @@ export class PayrollListComponent implements OnInit {
       next: r => {
         this.downloading = false;
         this.cdr.markForCheck();
-        const s = r.payslip;
-        const emp = s.employee;
         const w = window.open('', '_blank')!;
-        w.document.write(`
-          <html><head><title>Payslip ${s.payroll?.month}</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 32px; color: #111; }
-            h2 { margin: 0 0 4px; } .sub { color: #555; font-size: 13px; margin-bottom: 24px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-            th { background: #f3f4f6; text-align: left; padding: 8px 12px; font-size: 12px; }
-            td { padding: 8px 12px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
-            .total-row td { font-weight: 700; background: #f9fafb; }
-            .net-row td { font-weight: 800; font-size: 15px; color: #10b981; background: #f0fdf4; }
-            @media print { button { display: none; } }
-          </style></head><body>
-          <h2>${emp?.first_name || ''} ${emp?.last_name || ''}</h2>
-          <div class="sub">${emp?.employee_code || ''} | ${emp?.department?.name || ''} | ${s.payroll?.month}</div>
-          <table>
-            <tr><th>Component</th><th>Amount (SAR)</th></tr>
-            <tr><td>Basic Salary</td><td>${(+s.basic_salary||0).toFixed(2)}</td></tr>
-            <tr><td>Housing Allowance</td><td>${(+s.housing_allowance||0).toFixed(2)}</td></tr>
-            <tr><td>Transport Allowance</td><td>${(+s.transport_allowance||0).toFixed(2)}</td></tr>
-            <tr><td>Other Earnings</td><td>${(+s.other_allowances||0).toFixed(2)}</td></tr>
-            <tr class="total-row"><td>Gross Salary</td><td>${(+s.gross_salary||0).toFixed(2)}</td></tr>
-            <tr><td>GOSI (Employee 9%)</td><td>-${(+s.gosi_employee||0).toFixed(2)}</td></tr>
-            <tr><td>Unpaid Leave (${(+s.unpaid_leave_days||0).toFixed(1)} days)</td><td>-${(+s.leave_deduction||0).toFixed(2)}</td></tr>
-            <tr><td>Loan Installments</td><td>-${(+s.loan_deduction||0).toFixed(2)}</td></tr>
-            <tr><td>Other Deductions</td><td>-${(+s.other_deductions||0).toFixed(2)}</td></tr>
-            <tr class="total-row"><td>Total Deductions</td><td>-${(+s.total_deductions||0).toFixed(2)}</td></tr>
-            <tr class="net-row"><td>NET SALARY</td><td>${(+s.net_salary||0).toFixed(2)}</td></tr>
-          </table>
-          <br><button onclick="window.print()">🖨 Print / Save PDF</button>
-          </body></html>`);
+        w.document.write(this.buildPayslipHtml(r));
         w.document.close();
       },
-      error: () => { this.downloading = false; }
+      error: err => {
+        this.downloading = false;
+        alert(err?.error?.message || 'Payslip could not be generated.');
+        this.cdr.markForCheck();
+      }
     });
   }
 
@@ -263,7 +368,7 @@ export class PayrollListComponent implements OnInit {
   }
 
   recalculate(p: any) {
-    if (!confirm(`Recalculate all payslips for ${p.month}? This will delete existing payslips and recompute from current employee data.`)) return;
+    if (!confirm(`Regenerate payroll for ${p.month}? All current payslips will be replaced using the latest employee, attendance, leave, and deduction data.`)) return;
     this.recalculating = true;
     this.http.post<any>(`/api/v1/payroll/${p.id}/recalculate`, {}).subscribe({
       next: r => {
@@ -274,7 +379,7 @@ export class PayrollListComponent implements OnInit {
       },
       error: err => {
         this.recalculating = false;
-        alert(err?.error?.message || 'Recalculation failed.');
+        alert(err?.error?.message || 'Payroll regeneration failed.');
       }
     });
   }
