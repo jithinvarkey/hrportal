@@ -161,7 +161,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
       benefits:        [''],
     });
     this.hireForm = this.fb.group({
-      hire_date:        [new Date().toISOString().slice(0, 10), Validators.required],
+      joining_date:     [new Date().toISOString().slice(0, 10), Validators.required],
       salary:           [null, Validators.required],
       company_email:    ['', [Validators.required, Validators.email]],
       department_id:    [''],
@@ -442,7 +442,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
       : (parts[0] || '') + '@dbroker.com.sa';
 
     this.hireForm.reset({
-      hire_date:        new Date().toISOString().slice(0, 10),
+      joining_date:     new Date().toISOString().slice(0, 10),
       salary:           app.expected_salary ?? null,
       company_email:    suggested,
       department_id:    app.job_posting?.department_id ?? '',

@@ -269,7 +269,7 @@ class RecruitmentController extends Controller {
 
     public function hire(Request $request, $applicationId) {
         $request->validate([
-            'hire_date'       => 'required|date',
+            'joining_date'    => 'required|date',
             'salary'          => 'required|numeric|min:0',
             'department_id'   => 'nullable|exists:departments,id',
             'designation_id'  => 'nullable|exists:designations,id',

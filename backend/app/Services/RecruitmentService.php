@@ -212,7 +212,7 @@ class RecruitmentService
             'last_name'        => $lastName,
             'email'            => $app->applicant_email,
             'phone'            => $app->applicant_phone,
-            'hire_date'        => $data['hire_date']        ?? now()->toDateString(),
+            'hire_date'        => $data['joining_date']     ?? $data['hire_date'] ?? now()->toDateString(),
             'employment_type'  => $data['employment_type']  ?? $app->jobPosting?->employment_type ?? 'full_time',
             'salary'           => $basicSalary,
             'housing_allowance'=> round($basicSalary * 0.25, 2),
@@ -247,7 +247,7 @@ class RecruitmentService
      */
     private function createOnboardingTasks(Employee $employee, array $data): array
     {
-        $hireDate = \Carbon\Carbon::parse($data['hire_date'] ?? now());
+        $hireDate = \Carbon\Carbon::parse($data['joining_date'] ?? $data['hire_date'] ?? now());
         $tasks = [];
 
         $defaultTasks = [
