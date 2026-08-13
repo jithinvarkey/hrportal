@@ -43,6 +43,12 @@ class Kernel extends ConsoleKernel
                  ->withoutOverlapping()
                  ->appendOutputTo(storage_path('logs/birthday-wishes.log'));
 
+        $schedule->command('employees:announce-new-joiners')
+                 ->everyFifteenMinutes()
+                 ->timezone('Asia/Riyadh')
+                 ->withoutOverlapping()
+                 ->appendOutputTo(storage_path('logs/new-employee-joining-announcements.log'));
+
         $schedule->command('attendance:notify-missed-checkouts')
                  ->dailyAt('12:01')
                  ->timezone('Asia/Riyadh')

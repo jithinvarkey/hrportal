@@ -21,6 +21,7 @@ class Employee extends Model
         'employee_code','prefix','first_name','last_name','arabic_name','email',
         'phone','work_phone','extension',
         'dob','gender','marital_status','nationality','hire_date','confirmation_date',
+        'joining_announcement_sent_at',
         'termination_date','employment_type','mode_of_employment','role',
         'status','probation_period','years_of_experience',
         'salary','housing_allowance','transport_allowance','other_allowances','mobile_allowance','food_allowance',
@@ -35,6 +36,7 @@ class Employee extends Model
     protected $casts = [
         'dob'               => 'date:Y-m-d',
         'hire_date'         => 'date:Y-m-d',
+        'joining_announcement_sent_at' => 'datetime',
         'confirmation_date' => 'date:Y-m-d',
         'termination_date'  => 'date:Y-m-d',
         'id_expiry_date'    => 'date:Y-m-d',
