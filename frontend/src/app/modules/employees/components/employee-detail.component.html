@@ -316,12 +316,18 @@
       <mat-icon>hourglass_empty</mat-icon><p>Loading leave balances...</p>
     </div>
 
-    <div class="leave-today-card" *ngIf="!leaveBalanceLoading && annualBalanceToday">
+    <div class="leave-today-card" *ngIf="!leaveBalanceLoading && selectedLeavePeriodIsCurrent && annualBalanceToday">
       <div class="lt-icon">
         <mat-icon>today</mat-icon>
       </div>
       <div class="lt-main">
-        <div class="lt-name">Annual Leave Today</div>
+        <div class="lt-header">
+          <div class="lt-name">Annual Leave Today</div>
+          <div class="lt-period" *ngIf="selectedLeavePeriodLabel">
+            <mat-icon>date_range</mat-icon>
+            <span>Contract period: {{ selectedLeavePeriodLabel }}</span>
+          </div>
+        </div>
         <div class="lt-value">
           <span>{{ annualBalanceToday.remaining_days | number:'1.1-1' }}</span>
           <small>days remaining</small>
@@ -339,7 +345,12 @@
 
     <div class="leave-grid" *ngIf="!leaveBalanceLoading">
       <div class="leave-card" *ngFor="let lb of leaveBalance">
-        <div class="lc-name">{{ lb.leave_type?.name || 'Leave' }}</div>
+        <div class="lc-header">
+          <div class="lc-name">{{ lb.leave_type?.name || 'Leave' }}</div>
+          <div class="lc-period" *ngIf="isAnnualLeaveBalance(lb)">
+            {{ lb.year || '—' }}
+          </div>
+        </div>
         <div class="lc-numbers" [class.has-carry-forward]="isAnnualLeaveBalance(lb)">
           <div class="lc-stat"><span class="lc-big" style="color:var(--accent)">{{ lb.allocated_days }}</span><span class="lc-lbl">Allocated</span></div>
           <div class="lc-stat" *ngIf="isAnnualLeaveBalance(lb)"><span class="lc-big" style="color:var(--info, #0ea5e9)">{{ lb.carried_forward_days || 0 }}</span><span class="lc-lbl">Carry Forward</span></div>
