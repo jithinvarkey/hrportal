@@ -23,6 +23,7 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
   leaveBalancePeriods: any[] = [];
   selectedLeavePeriod = '';
   selectedLeavePeriodLabel = '';
+  selectedLeavePeriodIsCurrent = false;
   onboarding:    any[] = [];
   showTaskForm   = false;
   taskForm:  any = { title:'', category:'hr_documents', description:'', due_date:'', sort_order:0 };
@@ -389,6 +390,7 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
         next: r => {
           const balances = r?.balances || [];
           this.annualBalanceToday = balances.find((b: any) => this.isAnnualLeaveBalance(b)) || null;
+          this.syncCurrentAnnualBalance();
         },
         error: () => {
           this.annualBalanceToday = null;
@@ -412,6 +414,8 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
           const fallbackPeriod = this.leaveBalancePeriods[0] || null;
           this.selectedLeavePeriod = r?.selected_period?.start_date || selected || fallbackPeriod?.start_date || '';
           this.selectedLeavePeriodLabel = r?.selected_period?.label || fallbackPeriod?.label || '';
+          this.selectedLeavePeriodIsCurrent = Boolean(r?.selected_period?.is_current ?? fallbackPeriod?.is_current);
+          this.syncCurrentAnnualBalance();
           this.leaveBalanceLoading = false;
         },
         error: () => {
@@ -419,9 +423,20 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
           this.leaveBalancePeriods = [];
           this.selectedLeavePeriod = '';
           this.selectedLeavePeriodLabel = '';
+          this.selectedLeavePeriodIsCurrent = false;
           this.leaveBalanceLoading = false;
         },
       });
+  }
+
+  private syncCurrentAnnualBalance(): void {
+    if (!this.selectedLeavePeriodIsCurrent || !this.annualBalanceToday) return;
+
+    this.leaveBalance = this.leaveBalance.map(balance =>
+      this.isAnnualLeaveBalance(balance)
+        ? { ...balance, ...this.annualBalanceToday, leave_type: balance.leave_type || this.annualBalanceToday.leave_type }
+        : balance
+    );
   }
 
   private dateInputValue(date: Date): string {
