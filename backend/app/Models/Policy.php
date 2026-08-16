@@ -17,10 +17,11 @@ class Policy extends Model
     protected $hidden = ['attachment_path'];
 
     protected $fillable = [
-        'category_id', 'audience_type', 'target_department_ids', 'title', 'content', 'version', 'effective_date', 'review_date',
+        'category_id', 'legacy_document_id', 'legacy_category_id', 'legacy_subcategory_id',
+        'audience_type', 'target_department_ids', 'title', 'content', 'version', 'document_type', 'effective_date', 'review_date',
         'requires_acknowledgement', 'mandatory', 'is_published', 'status',
         'attachment_path', 'attachment_name', 'attachment_mime', 'attachment_size',
-        'created_by', 'approved_by', 'approved_at',
+        'created_by', 'legacy_created_by', 'legacy_modified_by', 'approved_by', 'approved_at',
     ];
 
     protected $casts = [

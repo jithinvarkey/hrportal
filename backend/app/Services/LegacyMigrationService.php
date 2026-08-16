@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\Department;
 use App\Models\Designation;
 use App\Models\Employee;
+use App\Models\Policy;
+use App\Models\PolicyCategory;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\Loan;
@@ -16,20 +18,23 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use ZipArchive;
 
 class LegacyMigrationService
 {
-    private const MODULE_ORDER = ['departments', 'job_positions', 'employees', 'employee_managers', 'leave_records', 'loan_records'];
+    private const MODULE_ORDER = ['departments', 'job_positions', 'employees', 'employee_managers', 'leave_records', 'loan_records', 'documents'];
     private array $departmentAliases = [];
     private array $unitAliases = [];
     private ?string $skipReason = null;
+    private ?string $documentSourceFolder = null;
 
-    public function migrate(UploadedFile $file, string $scope = 'all', bool $dryRun = false): array
+    public function migrate(UploadedFile $file, string $scope = 'all', bool $dryRun = false, ?string $sourceFolder = null, ?int $legacyCategoryId = null): array
     {
         $this->departmentAliases = [];
         $this->unitAliases = [];
+        $this->documentSourceFolder = $this->resolveSourceFolder($sourceFolder, $scope);
         $rowsByModule = $this->readFile($file, $scope);
         $summary = [];
 
@@ -39,6 +44,12 @@ class LegacyMigrationService
             }
 
             $rows = $rowsByModule[$module] ?? [];
+            if ($module === 'documents' && $legacyCategoryId !== null) {
+                $rows = array_values(array_filter(
+                    $rows,
+                    fn (array $row) => (int) ($row['category_id'] ?? 0) === $legacyCategoryId
+                ));
+            }
             $moduleSummary = [
                 'module' => $module,
                 'label' => $this->moduleLabel($module),
@@ -117,6 +128,7 @@ class LegacyMigrationService
             'dry_run' => $dryRun,
             'file' => $file->getClientOriginalName(),
             'scope' => $scope,
+            'legacy_category_id' => $legacyCategoryId,
             'modules' => $summary,
             'totals' => [
                 'processed' => array_sum(array_column($summary, 'processed')),
@@ -330,6 +342,7 @@ class LegacyMigrationService
             'employee_managers' => $this->employeeManager($row),
             'leave_records' => $this->leaveRecord($row),
             'loan_records' => $this->loanRecord($row),
+            'documents' => $this->document($row),
             default => throw new \InvalidArgumentException('Unknown migration module.'),
         };
     }
@@ -344,12 +357,18 @@ class LegacyMigrationService
             'employee_managers' => [],
             'leave_records' => ['employee_code', 'leave_type', 'start_date'],
             'loan_records' => ['employee_code', 'loan_type', 'amount'],
+            'documents' => ['document_name', 'file_name'],
             default => [],
         };
         foreach ($required as $field) {
             if (($row[$field] ?? '') === '') {
                 throw new \InvalidArgumentException("Missing required field: {$field}");
             }
+        }
+
+        if ($module === 'documents') {
+            $file = $this->legacyDocumentFile((string) ($row['file_name'] ?? ''));
+            $this->documentSourcePath($file['new_name']);
         }
     }
 
@@ -701,6 +720,122 @@ class LegacyMigrationService
         }
 
         return 'success';
+    }
+
+    private function document(array $row): string
+    {
+        $row = $this->normalizeLegacyAliases($row);
+        $legacyId = $this->nullableInt($row['id'] ?? null);
+        $file = $this->legacyDocumentFile((string) $row['file_name']);
+        $source = $this->documentSourcePath($file['new_name']);
+        $originalName = $file['original_name'];
+        $title = trim((string) $row['document_name']);
+
+        if ($legacyId && Policy::where('legacy_document_id', $legacyId)->exists()) {
+            $this->skipReason = "Legacy document {$legacyId} has already been migrated.";
+            return 'skipped';
+        }
+
+        $extension = pathinfo($originalName, PATHINFO_EXTENSION);
+        $storedName = Str::random(40) . ($extension ? '.' . strtolower($extension) : '');
+        $destination = "policies/{$storedName}";
+        $stream = fopen($source, 'rb');
+        if (!$stream || !Storage::disk('local')->put($destination, $stream)) {
+            if (is_resource($stream)) fclose($stream);
+            throw new \RuntimeException("Unable to copy source file [{$originalName}] into document storage.");
+        }
+        fclose($stream);
+
+        try {
+            $legacyCategoryId = $this->nullableInt($row['category_id'] ?? null);
+            $policy = new Policy([
+                'legacy_document_id' => $legacyId,
+                'category_id' => $legacyCategoryId
+                    ? PolicyCategory::where('legacy_category_id', $legacyCategoryId)->value('id')
+                    : null,
+                'legacy_category_id' => $legacyCategoryId,
+                'legacy_subcategory_id' => $this->nullableInt($row['subcategory_id'] ?? null),
+                'title' => $title,
+                'content' => $this->cleanLegacyValue($row['description'] ?? null),
+                'version' => $this->cleanLegacyValue($row['document_version'] ?? null) ?: '1.0',
+                'document_type' => $this->cleanLegacyValue($row['document_type'] ?? null),
+                'requires_acknowledgement' => false,
+                'mandatory' => false,
+                'is_published' => $this->bool($row['isactive'] ?? false),
+                'status' => $this->bool($row['isactive'] ?? false) ? 'approved' : 'draft',
+                'attachment_path' => $destination,
+                'attachment_name' => $originalName,
+                'attachment_mime' => function_exists('mime_content_type') ? (mime_content_type($source) ?: null) : null,
+                'attachment_size' => filesize($source) ?: null,
+                'created_by' => auth()->id(),
+                'legacy_created_by' => $this->nullableInt($row['createdby'] ?? null),
+                'legacy_modified_by' => $this->nullableInt($row['modifiedby'] ?? null),
+            ]);
+            $policy->created_at = $this->legacyDateTime($row['createddate'] ?? null) ?: now();
+            $policy->updated_at = $this->legacyDateTime($row['modifieddate'] ?? null) ?: $policy->created_at;
+            $policy->save();
+        } catch (\Throwable $e) {
+            Storage::disk('local')->delete($destination);
+            throw $e;
+        }
+
+        if (!unlink($source)) {
+            Storage::disk('local')->delete($destination);
+            throw new \RuntimeException("Document was copied but the source file could not be removed: {$originalName}");
+        }
+
+        return 'success';
+    }
+
+    private function resolveSourceFolder(?string $folder, string $scope): ?string
+    {
+        $folder = trim((string) $folder);
+        if ($folder === '') {
+            if ($scope === 'documents') {
+                throw new \InvalidArgumentException('Source document folder is required for document migration.');
+            }
+            return null;
+        }
+
+        $resolved = realpath($folder);
+        if (!$resolved || !is_dir($resolved) || !is_readable($resolved) || !is_writable($resolved)) {
+            throw new \InvalidArgumentException('Source document folder does not exist or is not readable and writable by the server.');
+        }
+        return rtrim($resolved, DIRECTORY_SEPARATOR);
+    }
+
+    private function documentSourcePath(string $relativeName): string
+    {
+        if (!$this->documentSourceFolder) {
+            throw new \InvalidArgumentException('Source document folder is required when the migration file contains Documents.');
+        }
+        $relativeName = trim(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $relativeName));
+        if ($relativeName === '' || preg_match('/^(?:[A-Za-z]:|[\\\\\/])/', $relativeName)) {
+            throw new \InvalidArgumentException('file_name must be a relative path inside the source document folder.');
+        }
+        $resolved = realpath($this->documentSourceFolder . DIRECTORY_SEPARATOR . $relativeName);
+        $root = strtolower($this->documentSourceFolder . DIRECTORY_SEPARATOR);
+        if (!$resolved || !is_file($resolved) || !str_starts_with(strtolower($resolved), $root)) {
+            throw new \InvalidArgumentException("Source document not found inside the selected folder: {$relativeName}");
+        }
+        return $resolved;
+    }
+
+    private function legacyDocumentFile(string $json): array
+    {
+        $files = json_decode(trim($json), true);
+        if (!is_array($files) || count($files) !== 1 || !is_array($files[0])) {
+            throw new \InvalidArgumentException('file_name must contain one valid legacy file JSON object.');
+        }
+        $newName = trim((string) ($files[0]['new_name'] ?? ''));
+        $originalName = trim((string) ($files[0]['original_name'] ?? ''));
+        if ($newName === '') {
+            throw new \InvalidArgumentException('The file_name JSON is missing new_name.');
+        }
+        return [
+            'new_name' => $newName,
+            'original_name' => $originalName !== '' ? basename($originalName) : basename($newName),
+        ];
     }
 
     private function legacyLoanReference(array $row): string
@@ -1181,6 +1316,11 @@ class LegacyMigrationService
             'leave_records' => 'leave_records',
             'loan_record' => 'loan_records',
             'loan_records' => 'loan_records',
+            'document' => 'documents',
+            'documents' => 'documents',
+            'employee_document' => 'documents',
+            'employee_documents' => 'documents',
+            'documents_new' => 'documents',
         ][$key] ?? null;
     }
 
@@ -1235,6 +1375,12 @@ class LegacyMigrationService
             'loanid' => 'loan_id',
             'installmentnumber' => 'installments',
             'reason' => 'purpose',
+            'document_title' => 'title',
+            'document_type' => 'type',
+            'filename' => 'file_name',
+            'file' => 'file_name',
+            'file_path' => 'file_name',
+            'expirydate' => 'expiry_date',
         ];
 
         foreach ($aliases as $legacy => $canonical) {
@@ -1329,6 +1475,10 @@ class LegacyMigrationService
     {
         if ($this->isBlankLegacyValue($value)) {
             return null;
+        }
+
+        if (is_numeric($value)) {
+            return gmdate('Y-m-d H:i:s', (int) round(((float) $value - 25569) * 86400));
         }
 
         $timestamp = strtotime((string) $value);

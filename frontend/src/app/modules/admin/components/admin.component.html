@@ -541,7 +541,7 @@
           <div class="settings-icon"><mat-icon>upload_file</mat-icon></div>
           <div>
             <div class="settings-title">Upload migration file</div>
-            <div class="settings-sub">Excel .xlsx sheets can be named Departments, Job Positions, Employees, Leave Records, and Loan Records. CSV files can use a selected module or a module column.</div>
+            <div class="settings-sub">Excel sheets can contain Departments, Job Positions, Employees, Leave Records, Loan Records, Documents, and other supported migration modules.</div>
           </div>
         </div>
 
@@ -568,6 +568,20 @@
           </div>
         </div>
 
+        <div class="field-group" *ngIf="migrationScope === 'documents' || migrationScope === 'all'">
+          <label class="field-label">Document Category</label>
+          <select class="field-select-full" [(ngModel)]="migrationCategoryId">
+            <option *ngFor="let category of migrationCategories" [ngValue]="category.id">{{ category.label }}</option>
+          </select>
+          <div class="settings-sub">Applies only to the Documents sheet. Choose All Categories to migrate every document row.</div>
+        </div>
+
+        <div class="field-group" *ngIf="migrationScope === 'documents' || migrationScope === 'all'">
+          <label class="field-label">Source Document Folder</label>
+          <input class="field-input" type="text" [(ngModel)]="migrationSourceFolder" placeholder="Example: E:\LegacyHR\Documents">
+          <div class="settings-sub">Server folder containing the files listed in the Documents sheet. File names may include subfolders. Successful imports move the source files into policy document storage.</div>
+        </div>
+
         <div class="migration-actions">
           <button class="btn-outline" (click)="runMigration(true)" [disabled]="migrationRunning || !migrationFile">
             <mat-icon>rule</mat-icon> Validate Only
@@ -591,6 +605,7 @@
           <div><strong>Employee Managers</strong><span>employee_code/empnum, email/emailaddress, manager_empnum, manager_email, reporting_manager_name</span></div>
           <div><strong>Leave Records</strong><span>employeeId/employee_code, leavetype_name/leave_type, appliedleavescount/total_days, from_date/start_date, to_date/end_date, leavestatus, hr_status, reason</span></div>
           <div><strong>Loan Records</strong><span>emailaddress/employee_code, empnum, loanId/reference, amount, loantype_name/loan_type, installmentnumber, emi_amount, emi_date, finance/reporting manager status</span></div>
+          <div><strong>Documents</strong><span>id, category_id, subcategory_id, document_name, document_version, description, document_type, file_name (legacy JSON), isactive, modifiedby, createdby, modifieddate, createddate. Department visibility is not changed.</span></div>
         </div>
       </div>
     </div>

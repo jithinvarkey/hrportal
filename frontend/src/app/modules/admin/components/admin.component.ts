@@ -66,6 +66,25 @@ export class AdminComponent implements OnInit {
     { id:'settings',     label:'Settings',     icon:'settings'           },
   ];
 
+  migrationCategories = [
+    { id: '', label: 'All Categories' },
+    { id: 1, label: 'IT and Cyber Security' },
+    { id: 2, label: 'HR' },
+    { id: 3, label: 'Cyber security' },
+    { id: 4, label: 'Circulars' },
+    { id: 5, label: 'Quality and Development' },
+    { id: 6, label: 'Sales and Marketing' },
+    { id: 7, label: 'Technical' },
+    { id: 8, label: 'Finance' },
+    { id: 9, label: 'Operation' },
+    { id: 10, label: 'Compliance' },
+    { id: 11, label: 'Shahin' },
+    { id: 12, label: 'Business Services' },
+    { id: 13, label: 'Operation Enrollment' },
+    { id: 14, label: 'Operation Medical approval' },
+    { id: 15, label: 'Executive Management' },
+    { id: 16, label: 'Violations and Penalties' },
+  ];
   migrationScopes = [
     { id: 'all', label: 'All Modules' },
     { id: 'departments', label: 'Departments' },
@@ -74,9 +93,12 @@ export class AdminComponent implements OnInit {
     { id: 'employee_managers', label: 'Employee Managers' },
     { id: 'leave_records', label: 'Leave Records' },
     { id: 'loan_records', label: 'Loan Records' },
+    { id: 'documents', label: 'Policies & Documents' },
   ];
-  migrationOrder = ['Departments', 'Job Positions', 'Employees', 'Employee Managers', 'Leave Records', 'Loan Records'];
+  migrationOrder = ['Departments', 'Job Positions', 'Employees', 'Employee Managers', 'Leave Records', 'Loan Records', 'Documents'];
   migrationScope = 'all';
+  migrationCategoryId: number | '' = '';
+  migrationSourceFolder = '';
   migrationFile: File | null = null;
   migrationSummary: any = null;
   migrationRunning = false;
@@ -276,10 +298,18 @@ export class AdminComponent implements OnInit {
       this.migrationError = 'Please choose a CSV or Excel file.';
       return;
     }
+    if (this.migrationScope === 'documents' && !this.migrationSourceFolder.trim()) {
+      this.migrationError = 'Please enter the source document folder.';
+      return;
+    }
     const payload = new FormData();
     payload.append('file', this.migrationFile);
     payload.append('scope', this.migrationScope);
+    if ((this.migrationScope === 'documents' || this.migrationScope === 'all') && this.migrationCategoryId !== '') {
+      payload.append('legacy_category_id', String(this.migrationCategoryId));
+    }
     payload.append('dry_run', dryRun ? '1' : '0');
+    if (this.migrationSourceFolder.trim()) payload.append('source_folder', this.migrationSourceFolder.trim());
     this.migrationRunning = true;
     this.migrationMessage = '';
     this.migrationError = '';
