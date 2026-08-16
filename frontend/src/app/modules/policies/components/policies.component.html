@@ -49,6 +49,7 @@
         <div class="pr-title">
           {{ p.title }}
           <span class="ver-chip">v{{ p.version }}</span>
+          <span class="type-chip" *ngIf="p.document_type">{{ p.document_type }}</span>
           <span class="mand-flag" *ngIf="p.mandatory">Mandatory</span>
           <span class="draft-flag" *ngIf="!p.is_published">Draft</span>
         </div>
@@ -106,6 +107,11 @@
           <mat-icon>visibility</mat-icon>
         </button>
         <button class="link-btn" (click)="downloadAttachment(selected)">Download</button>
+      </div>
+      <div class="reader-attach" *ngIf="selected.has_attachment && !isManager && canDownloadAttachment(selected)">
+        <mat-icon>description</mat-icon>
+        <span>{{ selected.attachment_name }}</span>
+        <button class="link-btn" (click)="downloadAttachment(selected)">Download Form</button>
       </div>
       <div class="policy-preview-wrap" *ngIf="!isManager && selected.has_attachment && selected.attachment_mime === 'application/pdf'">
         <div class="pdf-loading" *ngIf="pdfLoading"><mat-spinner diameter="32"></mat-spinner> Preparing secure preview...</div>

@@ -7,6 +7,7 @@ interface Policy {
   title: string;
   content: string | null;
   version: string;
+  document_type?: string | null;
   effective_date: string | null;
   review_date?: string | null;
   requires_acknowledgement: boolean;
@@ -184,11 +185,15 @@ export class PoliciesComponent implements OnInit {
     this.pdfLoading = true;
     this.pdfError = '';
     this.cdr.markForCheck();
-    this.http.get(`${this.api}/${policy.id}/attachment`, { responseType: 'blob' }).subscribe({
+    this.http.get(`${this.api}/${policy.id}/attachment`, {
+      params: { inline: '1' },
+      responseType: 'blob',
+    }).subscribe({
       next: blob => this.renderPolicyPdf(blob, generation),
-      error: () => {
+      error: err => {
         this.pdfLoading = false;
-        this.pdfError = 'Secure policy preview is unavailable.';
+        const status = err?.status ? ` (HTTP ${err.status})` : '';
+        this.pdfError = `Secure policy preview request failed${status}.`;
         this.cdr.markForCheck();
       },
     });
@@ -197,7 +202,7 @@ export class PoliciesComponent implements OnInit {
   private async renderPolicyPdf(blob: Blob, generation: number): Promise<void> {
     try {
       const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf.mjs');
-      pdfjs.GlobalWorkerOptions.workerSrc = '/assets/pdfjs/pdf.worker.min.mjs';
+      pdfjs.GlobalWorkerOptions.workerSrc = '/assets/pdfjs/pdf.worker.min.mjs?v=5.4.624';
       const pdfDocument = await pdfjs.getDocument({ data: await blob.arrayBuffer() }).promise;
       if (generation !== this.previewGeneration) return;
 
@@ -242,7 +247,10 @@ export class PoliciesComponent implements OnInit {
       if (generation !== this.previewGeneration) return;
       console.error('Policy PDF preview failed.', error);
       this.pdfLoading = false;
-      this.pdfError = 'Secure policy preview is unavailable.';
+      const detail = error instanceof Error && error.message
+        ? ` ${error.message}`
+        : '';
+      this.pdfError = `The PDF could not be rendered.${detail}`;
       this.cdr.markForCheck();
     }
   }
@@ -288,6 +296,10 @@ export class PoliciesComponent implements OnInit {
 
   downloadAttachment(p: Policy): void {
     window.open(`${this.api}/${p.id}/attachment`, '_blank');
+  }
+
+  canDownloadAttachment(p: Policy): boolean {
+    return this.isManager || (p.document_type || '').trim().toLowerCase() === 'form';
   }
 
   viewAttachment(p: Policy): void {

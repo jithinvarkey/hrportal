@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PolicyCategory extends Model
 {
-    protected $fillable = ['name', 'slug', 'icon', 'sort_order', 'is_active'];
+    protected $fillable = ['legacy_category_id', 'name', 'slug', 'icon', 'sort_order', 'is_active'];
 
     protected $casts = [
         'sort_order' => 'integer',

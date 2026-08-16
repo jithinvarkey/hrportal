@@ -417,7 +417,22 @@ class PolicyController extends Controller
         }
 
         if (!$this->isManager()) {
-            if ($policy->attachment_mime !== 'application/pdf') {
+            $isForm = strtolower(trim((string) $policy->document_type)) === 'form';
+            $isInlinePreview = $request->boolean('inline')
+                || strtolower((string) $request->header('Sec-Fetch-Dest')) === 'empty';
+
+            if (!$isInlinePreview) {
+                if (!$isForm) {
+                    return response()->json(['message' => 'Only form documents can be downloaded.'], 403);
+                }
+
+                return Storage::disk($disk)->download(
+                    $policy->attachment_path,
+                    $policy->attachment_name ?: 'form'
+                );
+            }
+
+            if (strtolower((string) $policy->attachment_mime) !== 'application/pdf') {
                 return response()->json(['message' => 'This attachment is not available in secure preview format.'], 403);
             }
 
@@ -481,7 +496,7 @@ class PolicyController extends Controller
         }
 
         $policy = Policy::findOrFail($id);
-        if (!$this->policyVisibleToCurrentUser($policy)) {
+        if (!$policy->is_published || !$this->policyVisibleToCurrentUser($policy)) {
             return response()->json(['message' => 'Not found.'], 404);
         }
 

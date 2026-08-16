@@ -67,6 +67,7 @@ export class ProfileComponent implements OnInit {
     { key: 'passport', label: 'Passport', type: 'passport', defaultTitle: 'Passport' },
     { key: 'hdf', label: 'HDF', type: 'medical', defaultTitle: 'HDF' },
     { key: 'signed_offer_letter', label: 'Signed Offer Letter', type: 'contract', defaultTitle: 'Signed Offer Letter' },
+    { key: 'certificate', label: 'Certificate', type: 'certificate', defaultTitle: 'Certificate' },
     { key: 'experience_letter', label: 'Experience Letter', type: 'certificate', defaultTitle: 'Experience Letter' },
     { key: 'bank_details', label: 'Bank Details', type: 'other', defaultTitle: 'Bank Details' },
     { key: 'national_address', label: 'National Address', type: 'other', defaultTitle: 'National Address' },
