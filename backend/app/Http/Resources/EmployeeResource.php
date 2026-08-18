@@ -27,7 +27,7 @@ class EmployeeResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $canViewSensitive = $request->user()?->hasAnyRole(['super_admin', 'hr_manager', 'finance_manager']);
+        $canViewSensitive = $request->user()?->hasAnyRole(['super_admin', 'hr_manager']);
 
         return [
             'id'                  => $this->id,
@@ -66,8 +66,13 @@ class EmployeeResource extends JsonResource
             'probation_period'    => $this->probation_period,
             'years_of_experience' => $this->years_of_experience,
 
-            // Financial — only visible to HR/Finance roles
+            // Financial — only visible to the system admin and HR manager.
             'salary'              => $canViewSensitive ? $this->salary : null,
+            'housing_allowance'    => $canViewSensitive ? $this->housing_allowance : null,
+            'transport_allowance'  => $canViewSensitive ? $this->transport_allowance : null,
+            'other_allowances'     => $canViewSensitive ? $this->other_allowances : null,
+            'mobile_allowance'     => $canViewSensitive ? $this->mobile_allowance : null,
+            'food_allowance'       => $canViewSensitive ? $this->food_allowance : null,
             'bank_name'           => $canViewSensitive ? $this->bank_name : null,
             'bank_account'        => $canViewSensitive ? $this->bank_account : null,
             'national_id'         => $canViewSensitive ? $this->national_id : null,

@@ -31,7 +31,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
 
   constructor(private http: HttpClient, private router: Router, private cdr: ChangeDetectorRef, public auth: AuthService) {}
 
-  get canViewPayroll(): boolean { return this.auth.isHRManager(); }
+  get canViewPayroll(): boolean { return this.auth.hasAnyRole(['super_admin', 'hr_manager']); }
 
   // ── Greeting / Date ───────────────────────────────────────────────────────
   readonly greeting = (() => {

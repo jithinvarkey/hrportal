@@ -459,6 +459,9 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     if (this.hireForm.invalid) return;
     this.submitting = true;
     const body = { ...this.hireForm.value };
+    // The linked job posting is the source of truth for placement.
+    delete body.department_id;
+    delete body.designation_id;
     // Split custom tasks string into array
     if (body.custom_tasks) {
       body.custom_tasks = String(body.custom_tasks).split('\n').map((t: string) => t.trim()).filter((t: string) => t);
@@ -484,6 +487,21 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
         this.cdr.markForCheck();
       },
     });
+  }
+
+  hireDepartmentName(): string {
+    const job = this.selectedApp?.job_posting;
+    return job?.department?.name
+      ?? this.departments.find(d => Number(d.id) === Number(job?.department_id))?.name
+      ?? 'Not specified';
+  }
+
+  hirePositionName(): string {
+    const job = this.selectedApp?.job_posting;
+    return job?.designation?.title
+      ?? this.designations.find(d => Number(d.id) === Number(job?.designation_id))?.title
+      ?? job?.title
+      ?? 'Not specified';
   }
 
   openJobForm(job?: any): void {

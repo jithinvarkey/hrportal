@@ -107,6 +107,10 @@ class NewHireOnboardingService
 
     private function ccEmails(?string $employeeEmail): array
     {
+        if (app()->environment('prod')) {
+            return [];
+        }
+
         $testEmail = config('mail.test_email');
         if (!$testEmail) {
             return [];

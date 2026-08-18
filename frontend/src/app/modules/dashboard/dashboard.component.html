@@ -124,7 +124,7 @@
      CHARTS — Row 2: Payroll (wide) + Performance
 ══════════════════════════════════════════════════ -->
 <div class="charts-row">
-  <div class="chart-card chart-wide">
+  <div class="chart-card chart-wide" *ngIf="canViewPayroll">
     <div class="chart-header">
       <div class="chart-title">Monthly Payroll Disbursement</div>
       <span class="chart-badge chart-badge-green">Last 6 Months</span>

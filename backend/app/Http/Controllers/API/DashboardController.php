@@ -28,7 +28,7 @@ class DashboardController extends Controller
             ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
             ->where('model_has_roles.model_id', $user->id)
             ->where('model_has_roles.model_type', get_class($user))
-            ->where('roles.name', 'hr_manager')
+            ->whereIn('roles.name', ['super_admin', 'hr_manager'])
             ->exists();
     }
 
