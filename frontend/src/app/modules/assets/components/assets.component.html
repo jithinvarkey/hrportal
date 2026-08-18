@@ -7,8 +7,8 @@
     <button class="btn-outline" (click)="downloadReport('assets')"><mat-icon>download</mat-icon> Assets</button>
     <button class="btn-outline" (click)="downloadReport('assignments')"><mat-icon>assignment</mat-icon> Assignments</button>
     <button class="btn-outline" (click)="downloadReport('maintenance')"><mat-icon>build</mat-icon> Maintenance</button>
-    <button class="btn-outline" (click)="openCategories()"><mat-icon>sell</mat-icon> Categories</button>
-    <button class="btn btn-primary" (click)="openForm()"><mat-icon>add</mat-icon> Add Asset</button>
+    <button class="btn-outline" *ngIf="canManage" (click)="openCategories()"><mat-icon>sell</mat-icon> Categories</button>
+    <button class="btn btn-primary" *ngIf="canManage" (click)="openForm()"><mat-icon>add</mat-icon> Add Asset</button>
   </div>
 </div>
 
@@ -28,7 +28,7 @@
 <div class="filters">
   <div class="search-box">
     <mat-icon>search</mat-icon>
-    <input [(ngModel)]="search" (keyup.enter)="onFilterChange()" placeholder="Search assets…">
+    <input [(ngModel)]="search" (keyup.enter)="onFilterChange()" placeholder="Search asset, assignee or employee code…">
   </div>
   <select [(ngModel)]="filterStatus" (ngModelChange)="onFilterChange()">
     <option value="">All statuses</option>
@@ -70,16 +70,28 @@
         <td>{{ (a.assigned_date | date:'MMM d, y') || 'N/A' }}</td>
         <td>{{ a.return_date ? (a.return_date | date:'MMM d, y') : (a.status === 'assigned' ? 'Current' : 'N/A') }}</td>
         <td class="row-actions" (click)="$event.stopPropagation()">
-          <button class="icon-btn" *ngIf="isManager && a.status === 'available'" (click)="openAssign(a)" matTooltip="Assign"><mat-icon>person_add</mat-icon></button>
-          <button class="icon-btn" *ngIf="isManager && a.status === 'assigned'" (click)="openReturn(a)" matTooltip="Return"><mat-icon>assignment_return</mat-icon></button>
-          <button class="icon-btn" *ngIf="isManager" (click)="openMaintenance(a)" matTooltip="Maintenance"><mat-icon>build</mat-icon></button>
-          <button class="icon-btn" *ngIf="isManager" (click)="openForm(a)" matTooltip="Edit"><mat-icon>edit</mat-icon></button>
-          <button class="icon-btn danger" *ngIf="isManager" (click)="deleteAsset(a)" matTooltip="Delete"><mat-icon>delete_outline</mat-icon></button>
+          <button class="icon-btn" *ngIf="canManage && a.status === 'available'" (click)="openAssign(a)" matTooltip="Assign"><mat-icon>person_add</mat-icon></button>
+          <button class="icon-btn" *ngIf="canManage && a.status === 'assigned'" (click)="openReturn(a)" matTooltip="Return"><mat-icon>assignment_return</mat-icon></button>
+          <button class="icon-btn" *ngIf="canManage" (click)="openMaintenance(a)" matTooltip="Maintenance"><mat-icon>build</mat-icon></button>
+          <button class="icon-btn" *ngIf="canManage" (click)="openForm(a)" matTooltip="Edit"><mat-icon>edit</mat-icon></button>
+          <button class="icon-btn danger" *ngIf="canManage" (click)="deleteAsset(a)" matTooltip="Delete"><mat-icon>delete_outline</mat-icon></button>
         </td>
       </tr>
     </tbody>
   </table>
 </div>
+
+<mat-paginator
+  *ngIf="!loading && totalAssets > 0"
+  class="asset-paginator"
+  [length]="totalAssets"
+  [pageIndex]="pageIndex"
+  [pageSize]="pageSize"
+  [pageSizeOptions]="pageSizeOptions"
+  [showFirstLastButtons]="true"
+  aria-label="Select asset page"
+  (page)="onPageChange($event)">
+</mat-paginator>
 
 <div class="empty-hint" *ngIf="!loading && !assets.length">
   <mat-icon>inventory_2</mat-icon><p>No assets found.</p>

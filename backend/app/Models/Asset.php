@@ -25,6 +25,7 @@ class Asset extends Model
         'description', 'status', 'condition', 'purchase_price', 'purchase_date',
         'vendor', 'warranty_expiry', 'location', 'custodian_employee_id',
         'attachment_path', 'attachment_name', 'created_by',
+        'source_system', 'source_id',
     ];
 
     protected $casts = [

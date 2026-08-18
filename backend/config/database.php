@@ -63,6 +63,22 @@ return [
             ]) : [],
         ],
 
+        'itasset' => [
+            'driver' => 'mysql',
+            'host' => env('ITASSET_DB_HOST', '127.0.0.1'),
+            'port' => env('ITASSET_DB_PORT', '3306'),
+            'database' => env('ITASSET_DB_DATABASE', 'itasset'),
+            'username' => env('ITASSET_DB_USERNAME', 'root'),
+            'password' => env('ITASSET_DB_PASSWORD', ''),
+            'unix_socket' => env('ITASSET_DB_SOCKET', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+        ],
+
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => env('DATABASE_URL'),

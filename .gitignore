@@ -31,3 +31,13 @@ backend/nbproject/private/
 # Test and runtime cache
 .phpunit.result.cache
 backend/.phpunit.result.cache
+outputs/itasset-unmatched-users-after-code-match-20260818/itasset_unmatched_users_after_employee_code_match.xlsx.inspect.ndjson
+outputs/itasset-unmatched-users-20260818/Unmatched_Users.png
+outputs/itasset-unmatched-users-after-code-match-20260818/Overview.png
+outputs/itasset-unmatched-users-after-code-match-20260818/Unmatched_Users.png
+outputs/itasset-unmatched-users-after-code-match-20260818/Affected_Assets.png
+outputs/itasset-unmatched-users-20260818/Overview.png
+outputs/itasset-unmatched-users-20260818/itasset_unmatched_users.xlsx.inspect.ndjson
+outputs/itasset-unmatched-users-20260818/itasset_unmatched_users.xlsx
+outputs/itasset-unmatched-users-20260818/Affected_Assets.png
+docs/ITASSET_MIGRATION.md

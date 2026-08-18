@@ -43,7 +43,13 @@ class AssetService
                 return $q->where(function ($w) use ($s) {
                     $w->where('name', 'like', "%{$s}%")
                         ->orWhere('asset_code', 'like', "%{$s}%")
-                        ->orWhere('serial_number', 'like', "%{$s}%");
+                        ->orWhere('serial_number', 'like', "%{$s}%")
+                        ->orWhereHas('custodian', function ($employee) use ($s) {
+                            $employee->where('first_name', 'like', "%{$s}%")
+                                ->orWhere('last_name', 'like', "%{$s}%")
+                                ->orWhere('employee_code', 'like', "%{$s}%")
+                                ->orWhereRaw("TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))) LIKE ?", ["%{$s}%"]);
+                        });
                 });
             })
             ->when($filters['status'] ?? null, function ($q, $s) {
