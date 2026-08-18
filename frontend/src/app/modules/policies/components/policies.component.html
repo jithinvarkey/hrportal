@@ -219,6 +219,20 @@
         <div class="fg"><label>Icon</label><input [(ngModel)]="catForm.icon" placeholder="material icon"></div>
       </div>
       <div class="fg"><label>Sort order</label><input type="number" min="0" [(ngModel)]="catForm.sort_order"></div>
+      <div class="fg"><label>Category visibility</label>
+        <select [(ngModel)]="catForm.audience_type">
+          <option value="all">All departments</option>
+          <option value="departments">Selected departments</option>
+        </select>
+      </div>
+      <div class="target-box" *ngIf="catForm.audience_type === 'departments'">
+        <span class="target-hint">Select departments:</span>
+        <label class="chip-check" *ngFor="let d of departments"
+               [class.on]="catForm.target_department_ids.includes(d.id)">
+          <input type="checkbox" [checked]="catForm.target_department_ids.includes(d.id)" (change)="toggleCategoryDept(d.id)">
+          {{ d.name }}
+        </label>
+      </div>
       <button class="btn btn-primary sm" (click)="saveCategory()">
         <mat-icon>{{ catEditId ? 'save' : 'add' }}</mat-icon> {{ catEditId ? 'Update' : 'Add' }} Category
       </button>

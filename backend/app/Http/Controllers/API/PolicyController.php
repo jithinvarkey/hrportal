@@ -60,17 +60,58 @@ class PolicyController extends Controller
             return true;
         }
 
-        $audienceType = $policy->audience_type ?: 'all';
-        if ($audienceType === 'all') {
-            return true;
-        }
+        $departmentId = auth()->user()->employee?->department_id;
 
-        if ($audienceType === 'departments') {
-            $departmentId = auth()->user()->employee?->department_id;
-            return $departmentId && in_array((int) $departmentId, array_map('intval', $policy->target_department_ids ?? []), true);
-        }
+        return $this->audienceIncludesDepartment(
+            $policy->audience_type,
+            $policy->target_department_ids,
+            $departmentId,
+        ) && (!$policy->category || $this->audienceIncludesDepartment(
+            $policy->category->audience_type,
+            $policy->category->target_department_ids,
+            $departmentId,
+        ));
+    }
 
-        return false;
+    private function audienceIncludesDepartment(?string $audienceType, ?array $departmentIds, ?int $departmentId): bool
+    {
+        if (($audienceType ?: 'all') === 'all') return true;
+
+        return $departmentId
+            && in_array((int) $departmentId, array_map('intval', $departmentIds ?? []), true);
+    }
+
+    /** Null means unrestricted; an array is the effective intersection of policy and category departments. */
+    private function effectiveDepartmentIds(Policy $policy): ?array
+    {
+        $policyIds = ($policy->audience_type ?? 'all') === 'departments'
+            ? array_map('intval', $policy->target_department_ids ?? [])
+            : null;
+        $category = $policy->category;
+        $categoryIds = $category && ($category->audience_type ?? 'all') === 'departments'
+            ? array_map('intval', $category->target_department_ids ?? [])
+            : null;
+
+        if ($policyIds === null) return $categoryIds;
+        if ($categoryIds === null) return $policyIds;
+
+        return array_values(array_intersect($policyIds, $categoryIds));
+    }
+
+    private function applyCategoryAudience($query, ?int $departmentId)
+    {
+        return $query->where(function ($w) use ($departmentId) {
+            $w->where('audience_type', 'all')->orWhereNull('audience_type');
+            if ($departmentId) {
+                $w->orWhere(function ($d) use ($departmentId) {
+                    $d->where('audience_type', 'departments')
+                        ->where(function ($ids) use ($departmentId) {
+                            $ids->whereJsonContains('target_department_ids', $departmentId)
+                                ->orWhereJsonContains('target_department_ids', (string) $departmentId);
+                        });
+                });
+            }
+        });
     }
 
     private function applyPolicyAudience($query, Request $request)
@@ -118,11 +159,16 @@ class PolicyController extends Controller
 
     // ── Categories ────────────────────────────────────────────────────────
 
-    public function categories(): JsonResponse
+    public function categories(Request $request): JsonResponse
     {
+        $departmentId = $this->isManager()
+            ? ($request->department_id ? (int) $request->department_id : null)
+            : (auth()->user()->employee?->department_id ? (int) auth()->user()->employee->department_id : null);
+        $query = PolicyCategory::withCount('policies');
+        if (!$this->isManager() || $departmentId) $this->applyCategoryAudience($query, $departmentId);
+
         return response()->json([
-            'categories' => PolicyCategory::withCount('policies')
-                ->orderBy('sort_order')->orderBy('name')->get(),
+            'categories' => $query->orderBy('sort_order')->orderBy('name')->get(),
         ]);
     }
 
@@ -134,7 +180,15 @@ class PolicyController extends Controller
             'name'       => 'required|string|max:100',
             'icon'       => 'nullable|string|max:50',
             'sort_order' => 'nullable|integer|min:0',
+            'audience_type' => 'nullable|in:all,departments',
+            'target_department_ids' => 'nullable|array',
+            'target_department_ids.*' => 'integer|exists:departments,id',
         ]);
+        $audience = $this->normalizeAudience($request);
+        if ($audience['audience_type'] === 'departments' && empty($audience['target_department_ids'])) {
+            return response()->json(['message' => 'Select at least one department, or choose all departments.'], 422);
+        }
+        $data = array_merge($data, $audience);
         $data['slug']      = $this->uniqueSlug($data['name']);
         $data['is_active'] = true;
 
@@ -146,12 +200,23 @@ class PolicyController extends Controller
         if ($deny = $this->ensureManager()) return $deny;
 
         $category = PolicyCategory::findOrFail($id);
-        $category->update($request->validate([
+        $data = $request->validate([
             'name'       => 'sometimes|string|max:100',
             'icon'       => 'nullable|string|max:50',
             'sort_order' => 'nullable|integer|min:0',
             'is_active'  => 'sometimes|boolean',
-        ]));
+            'audience_type' => 'nullable|in:all,departments',
+            'target_department_ids' => 'nullable|array',
+            'target_department_ids.*' => 'integer|exists:departments,id',
+        ]);
+        if ($request->has('audience_type') || $request->has('target_department_ids')) {
+            $audience = $this->normalizeAudience($request);
+            if ($audience['audience_type'] === 'departments' && empty($audience['target_department_ids'])) {
+                return response()->json(['message' => 'Select at least one department, or choose all departments.'], 422);
+            }
+            $data = array_merge($data, $audience);
+        }
+        $category->update($data);
 
         return response()->json(['category' => $category]);
     }
@@ -173,13 +238,27 @@ class PolicyController extends Controller
     {
         $empId = $this->employeeId();
 
-        $query = Policy::with(['category:id,name,icon', 'creator:id,name'])->withCount('reads')
+        // Load the complete category record rather than naming the visibility
+        // columns here. This keeps policy listing available during a rolling
+        // deployment before the accompanying category migration is applied.
+        $query = Policy::with(['category', 'creator:id,name'])->withCount('reads')
             ->when(!$this->isManager(), fn($q) => $q->where('is_published', true))
             ->when($request->category_id, fn($q) => $q->where('category_id', $request->category_id))
             ->when($request->search, fn($q) => $q->where('title', 'like', "%{$request->search}%"));
 
-        if ($this->isManager()) {
+        $manager = $this->isManager();
+        if ($manager) {
             $this->applyPolicyAudience($query, $request);
+        }
+
+        if (!$manager || $request->department_id) {
+            $departmentId = $manager
+                ? (int) $request->department_id
+                : (auth()->user()->employee?->department_id ? (int) auth()->user()->employee->department_id : null);
+            $query->where(function ($categoryScope) use ($departmentId) {
+                $categoryScope->whereNull('category_id')
+                    ->orWhereHas('category', fn ($category) => $this->applyCategoryAudience($category, $departmentId));
+            });
         }
 
         $policies = $query->orderBy('title')->get();
@@ -303,9 +382,10 @@ class PolicyController extends Controller
     /** Notify every targeted active employee about a policy. */
     private function notifyPolicyAudience(Policy $policy, string $action): void
     {
+        $departmentIds = $this->effectiveDepartmentIds($policy->loadMissing('category'));
         $ids = $this->notifications->resolveAudience(
-            $policy->audience_type ?? 'all',
-            $policy->target_department_ids,
+            $departmentIds === null ? 'all' : 'departments',
+            $departmentIds,
             null
         );
         $emailMessage = "{$policy->title} {$action}.";
@@ -584,12 +664,13 @@ class PolicyController extends Controller
      */
     private function buildAckReport(Policy $policy): array
     {
+        $departmentIds = $this->effectiveDepartmentIds($policy->loadMissing('category'));
         // Only acknowledgements of the CURRENT version count as "done".
         $acked = PolicyAcknowledgement::with('employee:id,first_name,last_name,employee_code,department_id')
             ->where('policy_id', $policy->id)
             ->where('policy_version', $policy->version)
-            ->when(($policy->audience_type ?? 'all') === 'departments', function ($q) use ($policy) {
-                $q->whereHas('employee', fn($eq) => $eq->whereIn('department_id', $policy->target_department_ids ?? []));
+            ->when($departmentIds !== null, function ($q) use ($departmentIds) {
+                $q->whereHas('employee', fn($eq) => $eq->whereIn('department_id', $departmentIds));
             })
             ->get()
             ->map(fn($a) => [
@@ -606,8 +687,8 @@ class PolicyController extends Controller
 
         $pending = DB::table('employees')
             ->where('status', 'active')
-            ->when(($policy->audience_type ?? 'all') === 'departments', function ($q) use ($policy) {
-                $q->whereIn('department_id', $policy->target_department_ids ?? []);
+            ->when($departmentIds !== null, function ($q) use ($departmentIds) {
+                $q->whereIn('department_id', $departmentIds);
             })
             ->when(!empty($ackedIds), fn($q) => $q->whereNotIn('id', $ackedIds))
             ->select('id', 'first_name', 'last_name', 'employee_code', 'department_id')
