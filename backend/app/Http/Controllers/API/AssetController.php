@@ -19,23 +19,13 @@ use Illuminate\Support\Str;
 /**
  * REST API for the Asset Management module.
  *
- * All management actions (create, assign, delete …) are restricted to
- * HR/Admin roles via the established raw-DB role check (avoids the
- * Spatie/Sanctum guard mismatch). Employees can view their own assets.
+ * System Admin and the configured IT department manager can manage assets.
+ * HR Manager has global read-only access. Other employees see only their own.
  */
 class AssetController extends Controller
 {
     /** @var AssetService */
     private $service;
-
-    private const MANAGER_ROLES = [
-        'super_admin',
-        'hr_manager',
-        'hr_staff',
-        'it_manager',
-        'it_supervisor',
-        'cybersecurity_officer',
-    ];
 
     public function __construct(AssetService $service)
     {
@@ -61,29 +51,42 @@ class AssetController extends Controller
         }, [], false);
     }
 
-    private function isManager(): bool
+    private function isItDepartmentManager(): bool
     {
-        if (count(array_intersect($this->userRoles(), self::MANAGER_ROLES)) > 0) {
-            return true;
-        }
-
         $user = auth()->user();
-        $employee = optional($user)->employee;
-        $designation = strtolower((string) optional(optional($employee)->designation)->title);
-        if (!$designation) {
-            $designation = strtolower((string) optional(optional($employee)->designation)->name);
-        }
-        $department = strtolower((string) optional(optional($employee)->department)->name);
+        $employeeId = (int) optional(optional($user)->employee)->id;
 
-        $isInformationTechnology = in_array($department, ['information technology', 'it'], true);
-        $isTechnologyManager = strpos($designation, 'manager') !== false || strpos($designation, 'supervisor') !== false;
-
-        return $isInformationTechnology && $isTechnologyManager;
+        return $employeeId > 0 && DB::table('departments')
+            ->where('manager_id', $employeeId)
+            ->where(function ($query) {
+                $query->whereRaw('UPPER(code) = ?', ['IT'])
+                    ->orWhereRaw('LOWER(name) IN (?, ?)', ['information technology', 'it']);
+            })
+            ->exists();
     }
 
-    private function denyIfNotManager(): ?JsonResponse
+    private function canViewAllAssets(): bool
     {
-        return $this->isManager()
+        return count(array_intersect($this->userRoles(), ['super_admin', 'hr_manager'])) > 0
+            || $this->isItDepartmentManager();
+    }
+
+    private function canManageAssets(): bool
+    {
+        return in_array('super_admin', $this->userRoles(), true)
+            || $this->isItDepartmentManager();
+    }
+
+    private function denyIfCannotManage(): ?JsonResponse
+    {
+        return $this->canManageAssets()
+            ? null
+            : response()->json(['message' => 'Insufficient permissions.'], 403);
+    }
+
+    private function denyIfCannotViewAll(): ?JsonResponse
+    {
+        return $this->canViewAllAssets()
             ? null
             : response()->json(['message' => 'Insufficient permissions.'], 403);
     }
@@ -101,7 +104,7 @@ class AssetController extends Controller
 
     private function scopedEmployeeId(): ?int
     {
-        if ($this->isManager()) {
+        if ($this->canViewAllAssets()) {
             return null;
         }
 
@@ -113,8 +116,15 @@ class AssetController extends Controller
     /** @return JsonResponse */
     public function categories(): JsonResponse
     {
+        $employeeId = $this->scopedEmployeeId();
+
         return response()->json([
-            'categories' => AssetCategory::withCount('assets')
+            'categories' => AssetCategory::withCount(['assets' => function ($query) use ($employeeId) {
+                if ($employeeId !== null) {
+                    $query->where('custodian_employee_id', $employeeId)
+                        ->where('status', 'assigned');
+                }
+            }])
                 ->orderBy('sort_order')->orderBy('name')->get(),
         ]);
     }
@@ -122,7 +132,7 @@ class AssetController extends Controller
     /** @return JsonResponse */
     public function storeCategory(Request $request): JsonResponse
     {
-        if ($deny = $this->denyIfNotManager()) return $deny;
+        if ($deny = $this->denyIfCannotManage()) return $deny;
 
         $data = $request->validate([
             'name'       => 'required|string|max:100',
@@ -138,7 +148,7 @@ class AssetController extends Controller
     /** @return JsonResponse */
     public function updateCategory(Request $request, int $id): JsonResponse
     {
-        if ($deny = $this->denyIfNotManager()) return $deny;
+        if ($deny = $this->denyIfCannotManage()) return $deny;
         $cat = AssetCategory::findOrFail($id);
         $cat->update($request->validate([
             'name'       => 'sometimes|string|max:100',
@@ -152,7 +162,7 @@ class AssetController extends Controller
     /** @return JsonResponse */
     public function deleteCategory(int $id): JsonResponse
     {
-        if ($deny = $this->denyIfNotManager()) return $deny;
+        if ($deny = $this->denyIfCannotManage()) return $deny;
         AssetCategory::findOrFail($id)->delete();
         return response()->json(['message' => 'Category deleted.']);
     }
@@ -179,7 +189,7 @@ class AssetController extends Controller
     /** @return JsonResponse */
     public function store(Request $request): JsonResponse
     {
-        if ($deny = $this->denyIfNotManager()) return $deny;
+        if ($deny = $this->denyIfCannotManage()) return $deny;
 
         $data = $request->validate([
             'category_id'    => 'nullable|exists:asset_categories,id',
@@ -209,7 +219,7 @@ class AssetController extends Controller
     /** @return JsonResponse */
     public function update(Request $request, int $id): JsonResponse
     {
-        if ($deny = $this->denyIfNotManager()) return $deny;
+        if ($deny = $this->denyIfCannotManage()) return $deny;
 
         $asset = Asset::findOrFail($id);
         $data  = $request->validate([
@@ -241,7 +251,7 @@ class AssetController extends Controller
     /** @return JsonResponse */
     public function destroy(int $id): JsonResponse
     {
-        if ($deny = $this->denyIfNotManager()) return $deny;
+        if ($deny = $this->denyIfCannotManage()) return $deny;
 
         try {
             $this->service->delete(Asset::findOrFail($id));
@@ -255,11 +265,7 @@ class AssetController extends Controller
     /** Download the asset's attached document. */
     public function downloadAttachment(int $id): mixed
     {
-        if (!$this->isManager()) {
-            return response()->json(['message' => 'Insufficient permissions.'], 403);
-        }
-
-        $asset = Asset::findOrFail($id);
+        $asset = $this->service->find($id, $this->scopedEmployeeId());
         if (!$asset->attachment_path || !\Illuminate\Support\Facades\Storage::disk('public')->exists($asset->attachment_path)) {
             return response()->json(['message' => 'No attachment.'], 404);
         }
@@ -272,7 +278,7 @@ class AssetController extends Controller
     /** Assign asset to an employee. */
     public function assign(Request $request, int $id): JsonResponse
     {
-        if ($deny = $this->denyIfNotManager()) return $deny;
+        if ($deny = $this->denyIfCannotManage()) return $deny;
 
         $asset = Asset::findOrFail($id);
         $data  = $request->validate([
@@ -294,7 +300,7 @@ class AssetController extends Controller
     /** Return an asset from an employee. */
     public function return(Request $request, int $id): JsonResponse
     {
-        if ($deny = $this->denyIfNotManager()) return $deny;
+        if ($deny = $this->denyIfCannotManage()) return $deny;
 
         $asset = Asset::findOrFail($id);
         $data  = $request->validate([
@@ -315,7 +321,7 @@ class AssetController extends Controller
     /** All assets currently assigned to a specific employee. */
     public function forEmployee(int $employeeId): JsonResponse
     {
-        if (!$this->isManager() && $employeeId !== $this->currentEmployeeId()) {
+        if (!$this->canViewAllAssets() && $employeeId !== $this->currentEmployeeId()) {
             return response()->json(['message' => 'Insufficient permissions.'], 403);
         }
 
@@ -329,7 +335,7 @@ class AssetController extends Controller
     /** Log a new maintenance event for an asset. */
     public function logMaintenance(Request $request, int $id): JsonResponse
     {
-        if ($deny = $this->denyIfNotManager()) return $deny;
+        if ($deny = $this->denyIfCannotManage()) return $deny;
 
         $asset = Asset::findOrFail($id);
         $data  = $request->validate([
@@ -350,7 +356,7 @@ class AssetController extends Controller
     /** Update a maintenance record. */
     public function updateMaintenance(Request $request, int $id, int $maintenanceId): JsonResponse
     {
-        if ($deny = $this->denyIfNotManager()) return $deny;
+        if ($deny = $this->denyIfCannotManage()) return $deny;
 
         $record = AssetMaintenance::where('asset_id', $id)->findOrFail($maintenanceId);
         $data   = $request->validate([
@@ -373,13 +379,13 @@ class AssetController extends Controller
     /** Inventory dashboard stats. */
     public function stats(): JsonResponse
     {
-        if ($deny = $this->denyIfNotManager()) return $deny;
+        if ($deny = $this->denyIfCannotViewAll()) return $deny;
         return response()->json($this->service->stats());
     }
 
     public function assetReport()
     {
-        if ($deny = $this->denyIfNotManager()) return $deny;
+        if ($deny = $this->denyIfCannotViewAll()) return $deny;
 
         $rows = Asset::with(['category', 'custodian', 'currentAssignment'])->orderBy('name')->get();
         return $this->csvDownload('asset_report_' . now()->format('Ymd_His') . '.csv', [
@@ -414,7 +420,7 @@ class AssetController extends Controller
 
     public function assignmentReport()
     {
-        if ($deny = $this->denyIfNotManager()) return $deny;
+        if ($deny = $this->denyIfCannotViewAll()) return $deny;
 
         $rows = AssetAssignment::with(['asset.category', 'employee', 'assignedBy', 'returnedTo'])
             ->orderByDesc('assigned_date')
@@ -445,7 +451,7 @@ class AssetController extends Controller
 
     public function maintenanceReport()
     {
-        if ($deny = $this->denyIfNotManager()) return $deny;
+        if ($deny = $this->denyIfCannotViewAll()) return $deny;
 
         $rows = AssetMaintenance::with(['asset.category', 'createdBy'])->orderByDesc('scheduled_date')->get();
         return $this->csvDownload('asset_maintenance_report_' . now()->format('Ymd_His') . '.csv', [

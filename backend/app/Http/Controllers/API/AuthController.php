@@ -270,6 +270,8 @@ class AuthController extends Controller
                 'avatar_url' => $user->employee->avatar_url,
                 'department' => optional($user->employee->department)->name,
                 'departmentId'=>optional($user->employee)->department_id,
+                'departmentCode'=>optional($user->employee->department)->code,
+                'isDepartmentManager'=>(int) optional($user->employee->department)->manager_id === (int) $user->employee->id,
                 'designation' => optional($user->employee->designation)->title ?? optional($user->employee->designation)->name,
                 'designationId'=>optional($user->employee)->designation_id,
             ] : null,

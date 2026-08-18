@@ -18,7 +18,10 @@ describe('AssetsComponent', () => {
   const API = '/api/v1/assets';
 
   function setup(isManager: boolean): void {
-    const authStub = { hasAnyRole: () => isManager } as unknown as AuthService;
+    const authStub = {
+      hasAssetManagementAccess: () => isManager,
+      canManageAssets: () => isManager,
+    } as unknown as AuthService;
     TestBed.configureTestingModule({
       declarations: [AssetsComponent],
       imports: [HttpClientTestingModule, FormsModule],
@@ -47,6 +50,21 @@ describe('AssetsComponent', () => {
     flushInit();
     expect(component.assets.length).toBe(0);
     expect(component.loading).toBeFalse();
+  });
+
+  it('requests the selected asset page and keeps pagination totals', () => {
+    setup(false);
+    fixture.detectChanges();
+    httpMock.expectOne(`${API}/categories`).flush({ categories: [] });
+    httpMock.expectOne(r => r.url === API).flush({ data: [{ id: 1 }], current_page: 1, per_page: 15, total: 113 });
+
+    expect(component.totalAssets).toBe(113);
+    component.onPageChange({ pageIndex: 1, pageSize: 15, length: 113, previousPageIndex: 0 });
+
+    const pageRequest = httpMock.expectOne(r => r.url === API && r.params.get('page') === '2');
+    expect(pageRequest.request.params.get('per_page')).toBe('15');
+    pageRequest.flush({ data: [], current_page: 2, per_page: 15, total: 113 });
+    expect(component.pageIndex).toBe(1);
   });
 
   it('managers see stats and employee list', () => {

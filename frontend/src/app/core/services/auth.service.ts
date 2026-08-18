@@ -157,18 +157,22 @@ export class AuthService {
   isAdminRole(): boolean { return this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.HR_MANAGER]); }
   isManagerRole(): boolean { return this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.HR_MANAGER, ROLES.HR_STAFF, ROLES.DEPT_MANAGER]); }
 
-  hasAssetManagementAccess(): boolean {
-    if (this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.HR_MANAGER, ROLES.HR_STAFF, ROLES.IT_MANAGER, ROLES.IT_SUPERVISOR, ROLES.CYBERSECURITY_OFFICER])) {
-      return true;
-    }
-
+  isITDepartmentManager(): boolean {
     const employee = this.getUser()?.employee || {};
-    const designation = String(employee.designation || '').trim().toLowerCase();
-    const department = String(employee.department || '').trim().toLowerCase();
-    const isInformationTechnology = department === 'information technology' || department === 'it';
-    const isTechnologyManager = designation.includes('manager') || designation.includes('supervisor');
+    return String(employee.departmentCode || '').trim().toUpperCase() === 'IT'
+      && employee.isDepartmentManager === true;
+  }
 
-    return isInformationTechnology && isTechnologyManager;
+  canViewAllAssets(): boolean {
+    return this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.HR_MANAGER]) || this.isITDepartmentManager();
+  }
+
+  canManageAssets(): boolean {
+    return this.hasRole(ROLES.SUPER_ADMIN) || this.isITDepartmentManager();
+  }
+
+  hasAssetManagementAccess(): boolean {
+    return this.canViewAllAssets();
   }
 
   getPortalType(): 'admin' | 'hr' | 'finance' | 'manager' | 'employee' {

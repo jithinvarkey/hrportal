@@ -1,6 +1,7 @@
 import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
+import { PageEvent } from '@angular/material/paginator';
 
 interface Asset {
   id: number;
@@ -49,11 +50,16 @@ export class AssetsComponent implements OnInit {
   private readonly api = '/api/v1/assets';
 
   isManager = false;
+  canManage = false;
   loading = false;
   assets: Asset[] = [];
   categories: any[] = [];
   employees: any[] = [];
   stats: any = null;
+  totalAssets = 0;
+  pageIndex = 0;
+  pageSize = 15;
+  readonly pageSizeOptions = [15, 25, 50, 100];
 
   // Filters
   filterStatus = '';
@@ -120,11 +126,12 @@ export class AssetsComponent implements OnInit {
 
   ngOnInit(): void {
     this.isManager = this.auth.hasAssetManagementAccess();
+    this.canManage = this.auth.canManageAssets();
     this.loadCategories();
     this.load();
     if (this.isManager) {
       this.loadStats();
-      this.loadEmployees();
+      if (this.canManage) this.loadEmployees();
     }
   }
 
@@ -167,14 +174,32 @@ export class AssetsComponent implements OnInit {
     if (this.filterStatus) params.status = this.filterStatus;
     if (this.filterCategoryId) params.category_id = this.filterCategoryId;
     if (this.search.trim()) params.search = this.search.trim();
+    params.page = this.pageIndex + 1;
+    params.per_page = this.pageSize;
 
     this.http.get<any>(this.api, { params }).subscribe({
-      next: r => { this.assets = r?.data || []; this.loading = false; this.cdr.markForCheck(); },
+      next: r => {
+        this.assets = r?.data || [];
+        this.totalAssets = Number(r?.total ?? this.assets.length);
+        this.pageIndex = Math.max(0, Number(r?.current_page ?? 1) - 1);
+        this.pageSize = Number(r?.per_page ?? this.pageSize);
+        this.loading = false;
+        this.cdr.markForCheck();
+      },
       error: () => { this.loading = false; this.cdr.markForCheck(); },
     });
   }
 
-  onFilterChange(): void { this.load(); }
+  onFilterChange(): void {
+    this.pageIndex = 0;
+    this.load();
+  }
+
+  onPageChange(event: PageEvent): void {
+    this.pageIndex = event.pageIndex;
+    this.pageSize = event.pageSize;
+    this.load();
+  }
 
   // ── Detail drawer ─────────────────────────────────────────────────────
 
