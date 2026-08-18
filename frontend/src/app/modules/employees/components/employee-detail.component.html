@@ -116,7 +116,7 @@
       </div>
 
       <!-- Financial -->
-      <div class="detail-card">
+      <div class="detail-card" *ngIf="canViewSalary">
         <div class="dc-title"><mat-icon>account_balance_wallet</mat-icon> Financial</div>
         <div class="info-rows">
           <div class="info-row"><span class="ir-label">Total Monthly Salary</span><span class="ir-val" style="color:var(--success);font-family:'Syne',sans-serif;font-size:16px;font-weight:700">SAR {{ totalMonthlySalary | number:'1.2-2' }}</span></div>
@@ -576,7 +576,7 @@
               <mat-icon>work_outline</mat-icon>
               <span>{{ displayText(c.position || employee?.designation?.title) }}</span>
             </div>
-            <div class="cc-field">
+            <div class="cc-field" *ngIf="canViewSalary">
               <mat-icon>payments</mat-icon>
               <span>{{ formatSalary(c.salary, c.currency || 'SAR') }}</span>
             </div>

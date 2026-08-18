@@ -20,6 +20,8 @@ class ContractResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $canViewSalary = $request->user()?->hasAnyRole(['super_admin', 'hr_manager']);
+
         return [
             'id'            => $this->id,
             'reference'     => $this->reference,
@@ -27,7 +29,7 @@ class ContractResource extends JsonResource
             'status'        => $this->status,
             'start_date'    => $this->start_date?->toDateString(),
             'end_date'      => $this->end_date?->toDateString(),
-            'salary'        => $this->salary,
+            'salary'        => $canViewSalary ? $this->salary : null,
             'currency'      => $this->currency,
             'position'      => $this->position,
             'terms'         => $this->terms,

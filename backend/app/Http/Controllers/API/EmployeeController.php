@@ -134,6 +134,14 @@ class EmployeeController extends Controller {
 
         $paginator = $query->paginate((int) ($request->per_page ?? 15));
 
+        if (!$this->hasAnyRoleDB(['super_admin', 'hr_manager'])) {
+            $paginator->getCollection()->each->makeHidden([
+                'salary', 'housing_allowance', 'transport_allowance',
+                'other_allowances', 'mobile_allowance', 'food_allowance',
+                'bank_name', 'bank_account',
+            ]);
+        }
+
         return response()->json([
                     'data' => $paginator->items(),
                     'meta' => [
@@ -314,6 +322,14 @@ class EmployeeController extends Controller {
 
             if ($this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff']) || (int) auth()->user()?->employee?->id === $employee->id) {
                 $employee->makeVisible(['national_id', 'bank_account']);
+            }
+
+            if (!$this->hasAnyRoleDB(['super_admin', 'hr_manager'])) {
+                $employee->makeHidden([
+                    'salary', 'housing_allowance', 'transport_allowance',
+                    'other_allowances', 'mobile_allowance', 'food_allowance',
+                    'bank_name', 'bank_account',
+                ]);
             }
 
             return response()->json(['employee' => $employee]);

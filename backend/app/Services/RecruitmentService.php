@@ -48,7 +48,9 @@ class RecruitmentService
         $testEmail = config('mail.test_email');
         $mail = Mail::to($recipients);
 
-        if ($testEmail && !in_array($testEmail, $recipients, true)) {
+        if ($testEmail
+            && !app()->environment('prod')
+            && !in_array($testEmail, $recipients, true)) {
             $mail->cc($testEmail);
         }
 
@@ -149,7 +151,7 @@ class RecruitmentService
             ->all();
 
         return collect($hrManagerEmails)
-            ->push($testEmail)
+            ->when(!app()->environment('prod'), fn ($emails) => $emails->push($testEmail))
             ->filter()
             ->map(fn ($email) => strtolower(trim((string) $email)))
             ->reject(fn ($email) => $applicantEmail && $email === strtolower(trim($applicantEmail)))
@@ -201,7 +203,9 @@ class RecruitmentService
 
         $empCode = $this->generateEmployeeCode();
 
-        $departmentId = $data['department_id'] ?? $app->jobPosting?->department_id;
+        // The linked job posting is authoritative for organisational placement.
+        $departmentId = $app->jobPosting?->department_id ?? $data['department_id'] ?? null;
+        $designationId = $app->jobPosting?->designation_id ?? $data['designation_id'] ?? null;
         $unitId = $data['unit_id'] ?? null;
 
         $basicSalary = (float) ($data['salary'] ?? 0);
@@ -220,7 +224,7 @@ class RecruitmentService
             'other_allowances' => 0,
             'department_id'    => $departmentId,
             'unit_id'          => $unitId,
-            'designation_id'   => $data['designation_id']   ?? $app->jobPosting?->designation_id,
+            'designation_id'   => $designationId,
             'manager_id'       => $data['manager_id']       ?? null,
             'probation_period' => $data['probation_period'] ?? 90,
             'status'           => 'probation',

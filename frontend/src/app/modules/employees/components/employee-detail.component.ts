@@ -97,6 +97,7 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
 
   years = Array.from({ length: 3 }, (_, i) => new Date().getFullYear() - i);
   isHR = false;
+  canViewSalary = false;
 
   private readonly destroy$ = new Subject<void>();
 
@@ -111,6 +112,7 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
     const id = this.route.snapshot.paramMap.get('id');
     this.employeeId = id;
     this.isHR = this.auth.isHRRole();
+    this.canViewSalary = this.auth.hasAnyRole(['super_admin', 'hr_manager']);
     this.http.get<any>(`/api/v1/employees/${id}`)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
