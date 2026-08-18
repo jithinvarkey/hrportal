@@ -71,7 +71,7 @@ export class PoliciesComponent implements OnInit {
 
   showCategories = false;
   catEditId: number | null = null;
-  catForm: any = { name: '', icon: 'policy', sort_order: 0 };
+  catForm: any = this.blankCategoryForm();
   catError = '';
 
   // Acknowledgement report (HR)
@@ -298,6 +298,10 @@ export class PoliciesComponent implements OnInit {
     window.open(`${this.api}/${p.id}/attachment`, '_blank');
   }
 
+  private blankCategoryForm(): any {
+    return { name: '', icon: 'policy', sort_order: 0, audience_type: 'all', target_department_ids: [] };
+  }
+
   canDownloadAttachment(p: Policy): boolean {
     return this.isManager || (p.document_type || '').trim().toLowerCase() === 'form';
   }
@@ -404,6 +408,15 @@ export class PoliciesComponent implements OnInit {
     this.cdr.markForCheck();
   }
 
+  toggleCategoryDept(id: number): void {
+    const arr = (this.catForm.target_department_ids || []) as number[];
+    const numericId = Number(id);
+    this.catForm.target_department_ids = arr.includes(numericId)
+      ? arr.filter(x => x !== numericId)
+      : [...arr, numericId];
+    this.cdr.markForCheck();
+  }
+
   savePolicy(): void {
     if (!this.form.title?.trim()) { this.formError = 'Title is required.'; this.cdr.markForCheck(); return; }
     if (this.form.audience_type === 'departments' && !(this.form.target_department_ids || []).length) {
@@ -494,18 +507,29 @@ export class PoliciesComponent implements OnInit {
 
   resetCatForm(): void {
     this.catEditId = null;
-    this.catForm = { name: '', icon: 'policy', sort_order: 0 };
+    this.catForm = this.blankCategoryForm();
   }
 
   editCategory(c: any): void {
     this.catEditId = c.id;
-    this.catForm = { name: c.name, icon: c.icon || 'policy', sort_order: c.sort_order || 0 };
+    this.catForm = {
+      name: c.name,
+      icon: c.icon || 'policy',
+      sort_order: c.sort_order || 0,
+      audience_type: c.audience_type || 'all',
+      target_department_ids: (c.target_department_ids || []).map(Number),
+    };
     this.cdr.markForCheck();
   }
 
   saveCategory(): void {
     if (!this.catForm.name?.trim()) {
       this.catError = 'Category name is required.';
+      this.cdr.markForCheck();
+      return;
+    }
+    if (this.catForm.audience_type === 'departments' && !(this.catForm.target_department_ids || []).length) {
+      this.catError = 'Select at least one department, or choose All departments.';
       this.cdr.markForCheck();
       return;
     }
