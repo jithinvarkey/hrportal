@@ -171,6 +171,13 @@ export class LeaveListComponent implements OnInit {
     if (Number.isInteger(requestId) && requestId > 0) {
       this.viewRequest({ id: requestId });
     }
+
+    const attendanceDate = this.route.snapshot.queryParamMap.get('apply_date');
+    if (attendanceDate && /^\d{4}-\d{2}-\d{2}$/.test(attendanceDate)) {
+      this.openNewRequest();
+      this.form.start_date = attendanceDate;
+      this.form.end_date = attendanceDate;
+    }
   }
 
   // ── Stats ─────────────────────────────────────────────────────────────────

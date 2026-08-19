@@ -160,7 +160,7 @@
               <th>Duration</th>
               <th>Status</th>
               <th>Source</th>
-              <th *ngIf="isHR">Actions</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -201,15 +201,21 @@
               <td>
                 <span class="source-badge" [class]="'src-' + r.source">{{ r.source }}</span>
               </td>
-              <td *ngIf="isHR">
-                <button class="icon-btn" matTooltip="Edit record" (click)="openEdit(r)">
+              <td>
+                <button class="apply-leave-btn" *ngIf="canApplyForLeave(r)"
+                        matTooltip="Apply for leave for this attendance exception"
+                        (click)="applyForLeave(r)">
+                  <mat-icon>event_available</mat-icon>
+                  Apply leave
+                </button>
+                <button class="icon-btn" *ngIf="isHR" matTooltip="Edit record" (click)="openEdit(r)">
                   <mat-icon>edit</mat-icon>
                 </button>
               </td>
             </tr>
 
             <tr *ngIf="!reportLoading && !reportRows.length">
-              <td [colspan]="isHR ? 8 : 7" class="empty-row">
+              <td colspan="8" class="empty-row">
                 <mat-icon>event_busy</mat-icon>
                 <span>No attendance records found for selected filters</span>
               </td>

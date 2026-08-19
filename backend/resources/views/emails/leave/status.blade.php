@@ -33,6 +33,25 @@
         default => 'Leave Request'
         };
 
+        $isHourlyLeave = (bool) ($leave->leaveType?->is_hourly ?? false)
+            || in_array(strtoupper((string) ($leave->leaveType?->code ?? '')), ['BE', 'PE'], true);
+
+        if ($isHourlyLeave) {
+            $hours = (float) ($leave->total_hours ?? 0);
+            $formattedHours = rtrim(rtrim(number_format($hours, 2, '.', ''), '0'), '.');
+            $hourUnit = abs($hours - 1) < 0.001 ? 'hour' : 'hours';
+            $startTime = $leave->start_time
+                ? \Carbon\Carbon::parse($leave->start_time)->format('H:i')
+                : null;
+            $endTime = $leave->end_time
+                ? \Carbon\Carbon::parse($leave->end_time)->format('H:i')
+                : null;
+            $durationText = $formattedHours . ' ' . $hourUnit
+                . ($startTime && $endTime ? " ({$startTime} – {$endTime})" : '');
+        } else {
+            $durationText = $leave->total_days . ' day(s)';
+        }
+
         @endphp
 
         <table width="100%" cellpadding="0" cellspacing="0">
@@ -176,7 +195,7 @@
                                         </td>
 
                                         <td style="padding:10px 16px;border-top:1px solid #e5e7eb;font-weight:600">
-                                            {{ $leave->total_days }} day(s)
+                                            {{ $durationText }}
                                         </td>
                                     </tr>
 
