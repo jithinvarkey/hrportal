@@ -296,6 +296,25 @@
   &:disabled { opacity:.45; cursor:not-allowed; }
   mat-icon { font-size:15px!important; width:15px!important; height:15px!important; }
 }
+
+.apply-leave-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  margin-right: 6px;
+  border: 1px solid #c7d7fe;
+  border-radius: 7px;
+  background: #eef4ff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+
+  mat-icon { width: 16px; height: 16px; font-size: 16px; }
+  &:hover { background: #dfeaff; }
+}
 .btn-spinner {
   width:16px; height:16px; border-radius:50%;
   border:2px solid rgba(255,255,255,.45); border-top-color:#fff;

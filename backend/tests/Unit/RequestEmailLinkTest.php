@@ -43,6 +43,40 @@ class RequestEmailLinkTest extends TestCase
         $this->assertStringContainsString('View Leave Request', $mail->render());
     }
 
+    /** @dataProvider hourlyExcuseProvider */
+    public function test_hourly_excuse_email_displays_hours_and_time_range(string $name, string $code): void
+    {
+        $leave = new LeaveRequest([
+            'start_date' => '2026-08-04',
+            'end_date' => '2026-08-04',
+            'start_time' => '09:30',
+            'end_time' => '11:00',
+            'total_days' => 0,
+            'total_hours' => 1.5,
+            'status' => 'pending',
+        ]);
+        $leave->id = 56;
+        $leave->setRelation('employee', new Employee(['first_name' => 'Jithin', 'last_name' => 'Varkey']));
+        $leave->setRelation('leaveType', new LeaveType([
+            'name' => $name,
+            'code' => $code,
+            'is_hourly' => true,
+        ]));
+
+        $rendered = (new LeaveStatusMail($leave, 'submitted', 'Manager'))->render();
+
+        $this->assertStringContainsString('1.5 hours (09:30 – 11:00)', $rendered);
+        $this->assertStringNotContainsString('0.0 day(s)', $rendered);
+    }
+
+    public static function hourlyExcuseProvider(): array
+    {
+        return [
+            'business excuse' => ['Business Excuse', 'BE'],
+            'personal excuse' => ['Personal Excuse', 'PE'],
+        ];
+    }
+
     public function test_all_loan_request_emails_link_to_exact_request(): void
     {
         $loan = new Loan([

@@ -6,6 +6,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceLog;
+use App\Models\LeaveRequest;
 use App\Services\Attendance\AttendancePolicyService;
 use App\Services\Attendance\MonthlyAttendanceReportService;
 use Carbon\Carbon;
@@ -125,6 +126,16 @@ class AttendanceController extends Controller
         $scope = $request->input('scope');
 
         $data = AttendanceLog::with('employee.department')
+            ->select('attendance_logs.*')
+            ->addSelect([
+                'has_active_leave' => LeaveRequest::query()
+                    ->selectRaw('1')
+                    ->whereColumn('leave_requests.employee_id', 'attendance_logs.employee_id')
+                    ->whereColumn('leave_requests.start_date', '<=', 'attendance_logs.date')
+                    ->whereColumn('leave_requests.end_date', '>=', 'attendance_logs.date')
+                    ->where('leave_requests.status', '!=', 'cancelled')
+                    ->limit(1),
+            ])
             ->when(!$isHR && !$isMgr && $user->employee, fn ($q) =>
                 // Regular employee: own records only
                 $q->where('employee_id', $user->employee->id)

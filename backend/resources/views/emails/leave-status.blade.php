@@ -2,6 +2,21 @@
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f0f4f8;font-family:Arial,sans-serif;">
+@php
+  $isHourlyLeave = (bool) ($leave->leaveType?->is_hourly ?? false)
+      || in_array(strtoupper((string) ($leave->leaveType?->code ?? '')), ['BE', 'PE'], true);
+  if ($isHourlyLeave) {
+      $hours = (float) ($leave->total_hours ?? 0);
+      $formattedHours = rtrim(rtrim(number_format($hours, 2, '.', ''), '0'), '.');
+      $hourUnit = abs($hours - 1) < 0.001 ? 'hour' : 'hours';
+      $startTime = $leave->start_time ? \Carbon\Carbon::parse($leave->start_time)->format('H:i') : null;
+      $endTime = $leave->end_time ? \Carbon\Carbon::parse($leave->end_time)->format('H:i') : null;
+      $durationText = $formattedHours . ' ' . $hourUnit
+          . ($startTime && $endTime ? " ({$startTime} – {$endTime})" : '');
+  } else {
+      $durationText = $leave->total_days . ' day(s)';
+  }
+@endphp
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:30px 10px">
 <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.1)">
 
@@ -57,7 +72,7 @@
         <td style="padding:10px 16px;font-size:13px;color:#1a1a2e;border-top:1px solid #e5e7eb">{{ \Carbon\Carbon::parse($leave->end_date)->format('d M Y') }}</td>
       </tr>
       <tr style="background:#f9fafb"><td style="padding:10px 16px;font-size:12px;color:#6b7280;font-weight:bold;text-transform:uppercase;letter-spacing:.05em;border-top:1px solid #e5e7eb">Duration</td>
-        <td style="padding:10px 16px;font-size:13px;color:#1a1a2e;font-weight:600;border-top:1px solid #e5e7eb">{{ $leave->total_days }} day(s)</td>
+        <td style="padding:10px 16px;font-size:13px;color:#1a1a2e;font-weight:600;border-top:1px solid #e5e7eb">{{ $durationText }}</td>
       </tr>
     </table>
 

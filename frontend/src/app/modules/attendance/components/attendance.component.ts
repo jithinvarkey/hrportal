@@ -7,7 +7,7 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Subject, interval } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AuthService } from '../../../core/services/auth.service';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 export interface AttendanceLog {
   id:            number;
@@ -18,6 +18,7 @@ export interface AttendanceLog {
   total_minutes: number | null;
   status:        string;
   source:        string;
+  has_active_leave?: boolean | number | null;
   notes?:        string;
 }
 
@@ -59,6 +60,7 @@ export class AttendanceComponent implements OnInit, OnDestroy {
   isHR             = false;
   isAdmin   = false;
   isMgr = false;
+  currentEmployeeId: number | null = null;
   activeTab: 'log' | 'mine' | 'manual' | 'settings' = 'log';
   showSettings     = false;
   showManualEntry  = false;
@@ -109,12 +111,14 @@ export class AttendanceComponent implements OnInit, OnDestroy {
     private readonly auth:  AuthService,
     private readonly cdr:   ChangeDetectorRef,
     private readonly route: ActivatedRoute,
+    private readonly router: Router,
   ) {}
 
   ngOnInit(): void {
     // Multi-strategy role check — guards against Collection serialisation issues
     // from older login tokens where roles may be {"0":"super_admin"} instead of ["super_admin"]
     const user = this.auth.getUser();
+    this.currentEmployeeId = Number(user?.employee?.id ?? user?.employee_id) || null;
 const toArr = (v: any): string[] => !v ? [] : Array.isArray(v) ? v : Object.values(v);
 const roleValues = toArr(user?.roles);
 const permValues = toArr(user?.permissions);
@@ -440,6 +444,26 @@ this.isAdmin = this.auth.isAdminRole();
     const d = new Date();
     const riyadh = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Riyadh' }));
     return `${riyadh.getFullYear()}-${String(riyadh.getMonth() + 1).padStart(2, '0')}-${String(riyadh.getDate()).padStart(2, '0')}`;
+  }
+
+  /** Employees can request leave from their own attendance exception only. */
+  canApplyForLeave(row: AttendanceLog): boolean {
+    const isOwnRecord = this.currentEmployeeId !== null
+      && Number(row.employee_id) === this.currentEmployeeId;
+    const hasShortRecordedDay = row.total_minutes !== null
+      && row.total_minutes < 8 * 60;
+    const hasMissingCheckOut = Boolean(row.check_in) && !row.check_out;
+
+    return isOwnRecord
+      && !Boolean(row.has_active_leave)
+      && (this.isLate(row.check_in) || hasShortRecordedDay || hasMissingCheckOut);
+  }
+
+  applyForLeave(row: AttendanceLog): void {
+    if (!this.canApplyForLeave(row)) return;
+    this.router.navigate(['/leave/my'], {
+      queryParams: { apply_date: this.displayDate(row.date) },
+    });
   }
 
   displayDate(value: string | null | undefined): string {
