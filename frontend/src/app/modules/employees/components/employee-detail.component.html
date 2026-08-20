@@ -348,7 +348,7 @@
         <div class="lc-header">
           <div class="lc-name">{{ lb.leave_type?.name || 'Leave' }}</div>
           <div class="lc-period" *ngIf="isAnnualLeaveBalance(lb)">
-            {{ lb.year || '—' }}
+            {{ annualLeavePeriodLabel(lb) }}
           </div>
         </div>
         <div class="lc-numbers" [class.has-carry-forward]="isAnnualLeaveBalance(lb)">
