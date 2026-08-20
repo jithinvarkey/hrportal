@@ -431,14 +431,22 @@ export class SeparationListComponent implements OnInit {
       return this.isDirectManager(sep) || this.isSuperAdmin;
     }
     if (sep.status === 'pending_hr') {
-      return this.isHRManager || this.isFinanceManager || this.isSuperAdmin;
+      return sep.type === 'termination'
+        ? this.isHRManager || this.isSuperAdmin
+        : this.isHRManager || this.isFinanceManager || this.isSuperAdmin;
     }
     return false;
   }
 
   canCancel(sep: any): boolean {
     if (!sep) return false;
-    if (sep.status === 'approved') return this.canManageOffboarding();
+    if (sep.type === 'termination') {
+      return ['draft', 'pending_hr', 'approved'].includes(sep.status)
+        && (this.isHRManager || this.isSuperAdmin);
+    }
+    if (sep.status === 'approved') {
+      return this.canManageOffboarding();
+    }
     if (!['draft', 'pending_manager', 'pending_hr'].includes(sep.status)) return false;
 
     const isOwnRequest = Number(sep.employee_id) === Number(this.currentEmployeeId);
@@ -451,7 +459,9 @@ export class SeparationListComponent implements OnInit {
       return this.isDirectManager(sep) || this.isSuperAdmin;
     }
     if (sep.status === 'pending_hr') {
-      return this.isHRManager || this.isFinanceManager || this.isSuperAdmin;
+      return sep.type === 'termination'
+        ? this.isHRManager || this.isSuperAdmin
+        : this.isHRManager || this.isFinanceManager || this.isSuperAdmin;
     }
     return false;
   }

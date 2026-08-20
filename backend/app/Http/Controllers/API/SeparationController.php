@@ -171,8 +171,10 @@ class SeparationController extends Controller
                 break;
 
             case 'pending_hr':
-                if (!$this->canApproveHrStage($user)) {
-                    return response()->json(['message' => 'Only HR Manager, Finance Manager, or CEO can approve this stage.'], 403);
+                if (!$this->canApproveHrStage($user, $sep)) {
+                    return response()->json(['message' => $sep->type === 'termination'
+                        ? 'Only HR Manager or CEO can approve a termination.'
+                        : 'Only HR Manager, Finance Manager, or CEO can approve this stage.'], 403);
                 }
                 // Calculate settlement
                 $gratuity  = $this->service->calculateGratuity($sep->employee, $sep->type, $sep->last_working_day);
@@ -225,7 +227,7 @@ class SeparationController extends Controller
         $user = auth()->user();
         if (
             ($sep->status === 'pending_manager' && !$this->canApproveManagerStage($sep, $user)) ||
-            ($sep->status === 'pending_hr' && !$this->canApproveHrStage($user))
+            ($sep->status === 'pending_hr' && !$this->canApproveHrStage($user, $sep))
         ) {
             return response()->json(['message' => 'You do not have permission to reject this separation.'], 403);
         }
@@ -243,11 +245,16 @@ class SeparationController extends Controller
     {
         $sep = Separation::with('employee')->findOrFail($id);
         $user = auth()->user();
-        $isOwn = (int) $sep->employee_id === (int) $user?->employee?->id;
-        if ($sep->status === 'approved' && !$this->canManageOffboarding($user)) {
-            return response()->json(['message' => 'Only HR Manager, Finance Manager, or CEO can cancel an approved separation.'], 403);
+        if ($sep->type === 'termination' && !$this->canApproveHrStage($user, $sep)) {
+            return response()->json(['message' => 'Only HR Manager or CEO can cancel a termination.'], 403);
         }
-        if (!$isOwn && !$this->canApproveManagerStage($sep, $user) && !$this->canApproveHrStage($user)) {
+        $isOwn = (int) $sep->employee_id === (int) $user?->employee?->id;
+        if ($sep->status === 'approved' && !$this->canCancelApprovedSeparation($sep, $user)) {
+            return response()->json(['message' => $sep->type === 'termination'
+                ? 'Only HR Manager or CEO can cancel an approved termination.'
+                : 'Only HR Manager, Finance Manager, or CEO can cancel an approved separation.'], 403);
+        }
+        if (!$isOwn && !$this->canApproveManagerStage($sep, $user) && !$this->canApproveHrStage($user, $sep)) {
             return response()->json(['message' => 'You do not have permission to cancel this separation.'], 403);
         }
         if (!in_array($sep->status, ['draft','pending_manager','pending_hr','approved'])) {
@@ -456,9 +463,20 @@ class SeparationController extends Controller
             && (int) $sep->employee?->manager_id === (int) $user?->employee?->id;
     }
 
-    private function canApproveHrStage($user): bool
+    private function canApproveHrStage($user, ?Separation $sep = null): bool
     {
+        if ($sep?->type === 'termination') {
+            return $user?->hasAnyRole(['super_admin', 'ceo', 'hr_manager']);
+        }
         return $user?->hasAnyRole(['super_admin', 'ceo', 'hr_manager', 'finance_manager']);
+    }
+
+    private function canCancelApprovedSeparation(Separation $sep, $user): bool
+    {
+        if ($sep->type === 'termination') {
+            return $user?->hasAnyRole(['super_admin', 'ceo', 'hr_manager']);
+        }
+        return $this->canManageOffboarding($user);
     }
 
     private function canManageOffboarding($user): bool
