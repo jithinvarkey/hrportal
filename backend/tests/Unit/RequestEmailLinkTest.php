@@ -10,11 +10,13 @@ use App\Mail\LoanApprovedMail;
 use App\Mail\LoanRejectedMail;
 use App\Mail\LoanRequestSubmittedMail;
 use App\Mail\MonthlyLeaveReminderMail;
+use App\Mail\SeparationWorkflowMail;
 use App\Models\Employee;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\Loan;
 use App\Models\LoanType;
+use App\Models\Separation;
 use Tests\TestCase;
 
 class RequestEmailLinkTest extends TestCase
@@ -107,5 +109,55 @@ class RequestEmailLinkTest extends TestCase
         $this->assertSame('https://hr.example.test/leave/my', $monthlyReminder->leaveUrl);
         $this->assertStringContainsString('View Leave Balance', $annualReminder->render());
         $this->assertStringContainsString('Open Leave Requests', $monthlyReminder->render());
+    }
+
+    public function test_offboarding_email_lists_only_the_assigned_department_tasks(): void
+    {
+        $separation = new Separation([
+            'reference' => 'SEP-2026-00002',
+            'type' => 'resignation',
+            'last_working_day' => '2026-09-17',
+        ]);
+        $separation->id = 88;
+        $separation->setRelation('employee', new Employee(['first_name' => 'Jinesh', 'last_name' => 'Mani']));
+
+        $mail = new SeparationWorkflowMail(
+            $separation,
+            'offboarding_tasks',
+            'Finance Manager',
+            ['Clear outstanding loans', 'Return petty cash / advances'],
+            'finance'
+        );
+        $rendered = $mail->render();
+
+        $this->assertStringContainsString('Offboarding Tasks Assigned', $rendered);
+        $this->assertStringContainsString('Clear outstanding loans', $rendered);
+        $this->assertStringContainsString('Return petty cash / advances', $rendered);
+        $this->assertStringContainsString('https://hr.example.test/separations?separation_id=88', $rendered);
+    }
+
+    public function test_department_task_completion_email_notifies_hr_with_manager_and_tasks(): void
+    {
+        $separation = new Separation([
+            'reference' => 'SEP-2026-00003',
+            'type' => 'resignation',
+            'last_working_day' => '2026-09-20',
+        ]);
+        $separation->id = 89;
+        $separation->setRelation('employee', new Employee(['first_name' => 'Jinesh', 'last_name' => 'Mani']));
+
+        $rendered = (new SeparationWorkflowMail(
+            $separation,
+            'department_tasks_completed',
+            'HR Manager',
+            ['Return laptop — COMPLETED', 'Disable account — COMPLETED'],
+            'it',
+            'IT Manager'
+        ))->render();
+
+        $this->assertStringContainsString('Department Offboarding Tasks Completed', $rendered);
+        $this->assertStringContainsString('IT Manager', $rendered);
+        $this->assertStringContainsString('Return laptop — COMPLETED', $rendered);
+        $this->assertStringContainsString('https://hr.example.test/separations?separation_id=89', $rendered);
     }
 }
