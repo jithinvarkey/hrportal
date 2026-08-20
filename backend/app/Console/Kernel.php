@@ -23,6 +23,13 @@ class Kernel extends ConsoleKernel
                  ->withoutOverlapping()
                  ->appendOutputTo(storage_path('logs/leave-accrual.log'));
 
+        // Retain OTP challenge records for seven days, then remove them daily.
+        $schedule->command('login-otps:prune --days=7')
+                 ->dailyAt('02:15')
+                 ->timezone('Asia/Riyadh')
+                 ->withoutOverlapping()
+                 ->appendOutputTo(storage_path('logs/login-otp-prune.log'));
+
         // Mark overdue requests daily (closure — no artisan command required)
         $schedule->call(function () {
             \App\Models\EmployeeRequest::whereNotIn('status', ['completed','rejected','cancelled'])

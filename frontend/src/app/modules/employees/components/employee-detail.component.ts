@@ -382,6 +382,17 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
     return balance?.leave_type?.is_annual === true || code === 'al' || name.includes('annual');
   }
 
+  annualLeavePeriodLabel(balance: any): string {
+    const start = balance?.accrual_year_start ? new Date(`${balance.accrual_year_start}T00:00:00`) : null;
+    const startYear = start && !Number.isNaN(start.getTime())
+      ? start.getFullYear()
+      : Number(balance?.year);
+
+    return Number.isInteger(startYear) && startYear > 0
+      ? `${startYear}-${startYear + 1}`
+      : '—';
+  }
+
   loadAnnualBalanceToday(): void {
     if (!this.employeeId) return;
     this.http.get<any>(`/api/v1/leave/balance/${this.employeeId}`, {
