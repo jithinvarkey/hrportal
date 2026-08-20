@@ -61,6 +61,19 @@ class SeparationController extends Controller
         if (!$this->canViewSeparation($sep)) {
             return response()->json(['message' => 'You do not have permission to view this separation.'], 403);
         }
+
+        // HR/CEO can see the full checklist. Other departmental users receive
+        // only the tasks assigned to their own department category.
+        $category = $this->offboardingCategoryForUser(auth()->user());
+        if ($category !== null && !$this->canViewAllChecklistItems(auth()->user())) {
+            $sep->setRelation(
+                'checklistItems',
+                $sep->checklistItems->where('category', $category)->values()
+            );
+        }
+        $sep->checklistItems->each(function ($item) {
+            $item->setAttribute('completed_by_name', optional($item->completedBy)->name);
+        });
         return response()->json(['separation' => $sep]);
     }
 
@@ -112,6 +125,8 @@ class SeparationController extends Controller
             'exit_interview_required' => !in_array($type, ['abandonment']),
         ]);
 
+        $this->service->notifySubmitted($sep);
+
         return response()->json(['message' => 'Separation request created.', 'separation' => $sep->load('employee')], 201);
     }
 
@@ -152,6 +167,7 @@ class SeparationController extends Controller
                     'manager_approved_by' => $user->id,
                     'manager_approved_at' => now(),
                 ]);
+                $this->service->notifyManagerApproved($sep);
                 break;
 
             case 'pending_hr':
@@ -187,6 +203,7 @@ class SeparationController extends Controller
                 $this->service->generateChecklist($sep);
                 // Mark employee status
                 $sep->employee->update(['status' => 'inactive']);
+                $this->service->notifyOffboardingDepartments($sep->fresh());
                 break;
 
             default:
@@ -227,10 +244,13 @@ class SeparationController extends Controller
         $sep = Separation::with('employee')->findOrFail($id);
         $user = auth()->user();
         $isOwn = (int) $sep->employee_id === (int) $user?->employee?->id;
+        if ($sep->status === 'approved' && !$this->canManageOffboarding($user)) {
+            return response()->json(['message' => 'Only HR Manager, Finance Manager, or CEO can cancel an approved separation.'], 403);
+        }
         if (!$isOwn && !$this->canApproveManagerStage($sep, $user) && !$this->canApproveHrStage($user)) {
             return response()->json(['message' => 'You do not have permission to cancel this separation.'], 403);
         }
-        if (!in_array($sep->status, ['draft','pending_manager','pending_hr'])) {
+        if (!in_array($sep->status, ['draft','pending_manager','pending_hr','approved'])) {
             return response()->json(['message' => 'Cannot cancel at this stage.'], 422);
         }
         $sep->update(['status' => 'cancelled']);
@@ -240,12 +260,22 @@ class SeparationController extends Controller
     // ── Complete (after offboarding done) ──────────────────────────────────
     public function complete(Request $request, $id)
     {
-        $sep = Separation::with('employee')->findOrFail($id);
-        if (!$this->canManageOffboarding(auth()->user())) {
-            return response()->json(['message' => 'Only HR Manager, Finance Manager, or CEO can complete offboarding.'], 403);
+        $sep = Separation::with(['employee', 'checklistItems'])->findOrFail($id);
+        if (!$this->canCompleteSeparation(auth()->user())) {
+            return response()->json(['message' => 'Only HR Manager or Super Admin can complete offboarding.'], 403);
         }
         if ($sep->status !== 'offboarding') {
             return response()->json(['message' => 'Separation is not in offboarding stage.'], 422);
+        }
+        if ($sep->checklistItems->isEmpty()) {
+            return response()->json(['message' => 'No offboarding checklist tasks were generated for this separation.'], 422);
+        }
+        $pendingTasks = $sep->checklistItems->where('status', 'pending');
+        if ($pendingTasks->isNotEmpty()) {
+            return response()->json([
+                'message' => "Complete, skip, or mark all offboarding tasks N/A before completing the separation. {$pendingTasks->count()} task(s) remain pending.",
+                'pending_tasks' => $pendingTasks->pluck('title')->values(),
+            ], 422);
         }
         $sep->update([
             'status'                 => 'completed',
@@ -293,16 +323,35 @@ class SeparationController extends Controller
     // ── Checklist item update ─────────────────────────────────────────────
     public function updateChecklistItem(Request $request, $sepId, $itemId)
     {
-        if (!$this->canManageOffboarding(auth()->user())) {
-            return response()->json(['message' => 'Only HR Manager, Finance Manager, or CEO can update offboarding checklist.'], 403);
-        }
+        $request->validate([
+            'status' => 'required|in:pending,completed,skipped,na',
+            'notes' => 'nullable|string|max:1000',
+        ]);
         $item = OffboardingItem::where('separation_id', $sepId)->findOrFail($itemId);
+        if (!$this->canUpdateChecklistItem($item, auth()->user())) {
+            return response()->json(['message' => 'You can update only offboarding tasks assigned to your department.'], 403);
+        }
+        $previousStatus = $item->status;
         $item->update([
             'status'       => $request->status,
             'notes'        => $request->notes,
             'completed_by' => in_array($request->status, ['completed']) ? auth()->id() : null,
             'completed_at' => in_array($request->status, ['completed']) ? now() : null,
         ]);
+        if ($previousStatus === 'pending' && in_array($request->status, ['completed', 'skipped', 'na'], true)) {
+            $categoryStillPending = OffboardingItem::where('separation_id', $sepId)
+                ->where('category', $item->category)
+                ->where('status', 'pending')
+                ->exists();
+            if (!$categoryStillPending) {
+                $separation = Separation::with(['employee', 'checklistItems'])->findOrFail($sepId);
+                $this->service->notifyDepartmentTasksCompleted(
+                    $separation,
+                    $item->category,
+                    auth()->user()?->name ?: 'Department Manager'
+                );
+            }
+        }
         return response()->json(['item' => $item->fresh()]);
     }
 
@@ -372,7 +421,8 @@ class SeparationController extends Controller
         if ($user?->hasRole('department_manager') && $user->employee) {
             return $query->where(function ($q) use ($user) {
                 $q->where('employee_id', $user->employee->id)
-                    ->orWhereHas('employee', fn($employee) => $employee->where('manager_id', $user->employee->id));
+                    ->orWhereHas('employee', fn($employee) => $employee->where('manager_id', $user->employee->id))
+                    ->orWhereIn('status', ['offboarding', 'completed']);
             });
         }
 
@@ -384,6 +434,7 @@ class SeparationController extends Controller
         $user = auth()->user();
         if ($this->canViewAllSeparations($user)) return true;
         if ((int) $sep->employee_id === (int) $user?->employee?->id) return true;
+        if ($user?->hasRole('department_manager') && in_array($sep->status, ['offboarding', 'completed'])) return true;
         return $user?->hasRole('department_manager')
             && (int) $sep->employee?->manager_id === (int) $user?->employee?->id;
     }
@@ -413,5 +464,40 @@ class SeparationController extends Controller
     private function canManageOffboarding($user): bool
     {
         return $user?->hasAnyRole(['super_admin', 'ceo', 'hr_manager', 'finance_manager']);
+    }
+
+    private function canCompleteSeparation($user): bool
+    {
+        return $user?->hasAnyRole(['super_admin', 'hr_manager']);
+    }
+
+    private function canViewAllChecklistItems($user): bool
+    {
+        return $user?->hasAnyRole(['super_admin', 'ceo', 'hr_manager', 'hr_staff']);
+    }
+
+    private function canUpdateChecklistItem(OffboardingItem $item, $user): bool
+    {
+        if ($this->canViewAllChecklistItems($user)) return true;
+
+        $category = $this->offboardingCategoryForUser($user);
+        return $category !== null && $item->category === $category;
+    }
+
+    private function offboardingCategoryForUser($user): ?string
+    {
+        if (!$user) return null;
+        if ($user->hasRole('finance_manager')) return 'finance';
+
+        $department = $user->employee?->department;
+        if (!$department) return null;
+
+        $identity = strtolower(trim(($department->code ?? '') . ' ' . ($department->name ?? '')));
+        if (preg_match('/\b(fin|finance|account|accounts|accounting)\b/', $identity)) return 'finance';
+        if (preg_match('/\b(it|information technology|technology|cyber|systems)\b/', $identity)) return 'it';
+        if (preg_match('/\b(hr|human resources|people)\b/', $identity)) return 'hr';
+        if (preg_match('/\b(admin|administration|facilities)\b/', $identity)) return 'admin';
+
+        return 'general';
     }
 }

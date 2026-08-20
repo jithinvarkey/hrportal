@@ -5,10 +5,135 @@ use App\Models\Separation;
 use App\Models\OffboardingTemplate;
 use App\Models\OffboardingItem;
 use App\Models\Employee;
+use App\Models\Department;
+use App\Models\User;
+use App\Mail\SeparationWorkflowMail;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class SeparationService
 {
+    public function notifySubmitted(Separation $sep): void
+    {
+        $sep->loadMissing('employee.manager.user');
+        $recipients = [];
+        $manager = $sep->employee?->manager;
+        if ($manager?->user?->email || $manager?->email) {
+            $email = $manager->user?->email ?: $manager->email;
+            $recipients[strtolower($email)] = ['email' => $email, 'name' => $manager->full_name];
+        }
+
+        foreach (User::role('hr_manager')->whereNotNull('email')->get() as $user) {
+            $recipients[strtolower($user->email)] = ['email' => $user->email, 'name' => $user->name];
+        }
+
+        $this->queueRecipients($sep, 'submitted', $recipients);
+    }
+
+    public function notifyManagerApproved(Separation $sep): void
+    {
+        $recipients = User::role('hr_manager')->whereNotNull('email')->get()
+            ->mapWithKeys(fn ($user) => [strtolower($user->email) => ['email' => $user->email, 'name' => $user->name]])
+            ->all();
+        $this->queueRecipients($sep, 'manager_approved', $recipients);
+    }
+
+    public function notifyOffboardingDepartments(Separation $sep): void
+    {
+        $sep->loadMissing('employee', 'checklistItems');
+        $tasksByCategory = $sep->checklistItems->groupBy('category');
+
+        foreach ($tasksByCategory as $category => $items) {
+            $recipients = $this->departmentRecipients($sep, (string) $category);
+            $this->queueRecipients(
+                $sep,
+                'offboarding_tasks',
+                $recipients,
+                $items->pluck('title')->values()->all(),
+                (string) $category
+            );
+        }
+    }
+
+    public function notifyDepartmentTasksCompleted(Separation $sep, string $category, string $completedByName): void
+    {
+        $sep->loadMissing('employee', 'checklistItems');
+        $items = $sep->checklistItems->where('category', $category);
+        if ($items->isEmpty() || $items->contains('status', 'pending')) return;
+
+        $recipients = $this->departmentRecipients($sep, 'hr');
+        $this->queueRecipients(
+            $sep,
+            'department_tasks_completed',
+            $recipients,
+            $items->map(fn ($item) => $item->title . ' — ' . strtoupper($item->status))->values()->all(),
+            $category,
+            $completedByName
+        );
+    }
+
+    private function departmentRecipients(Separation $sep, string $category): array
+    {
+        $recipients = [];
+        $targetCategory = $category === 'general' ? 'hr' : $category;
+
+        $departments = Department::with('manager.user')
+            ->whereNotNull('manager_id')
+            ->get()
+            ->filter(fn (Department $department) => $this->categoryForDepartment($department) === $targetCategory);
+
+        foreach ($departments as $department) {
+            $manager = $department->manager;
+            $email = $manager?->user?->email ?: $manager?->email;
+            if (!$email) continue;
+            $recipients[strtolower($email)] = [
+                'email' => $email,
+                'name' => $manager->full_name,
+            ];
+        }
+        return $recipients;
+    }
+
+    private function categoryForDepartment(Department $department): string
+    {
+        $identity = strtolower(trim(($department?->code ?? '') . ' ' . ($department?->name ?? '')));
+        if (preg_match('/\b(fin|finance|account|accounts|accounting)\b/', $identity)) return 'finance';
+        if (preg_match('/\b(it|information technology|technology|cyber|systems)\b/', $identity)) return 'it';
+        if (preg_match('/\b(hr|human resources|people)\b/', $identity)) return 'hr';
+        if (preg_match('/\b(admin|administration|facilities)\b/', $identity)) return 'admin';
+        return 'general';
+    }
+
+    private function queueRecipients(
+        Separation $sep,
+        string $event,
+        array $recipients,
+        array $tasks = [],
+        ?string $category = null,
+        ?string $completedByName = null
+    ): void {
+        foreach ($recipients as $recipient) {
+            try {
+                Mail::to($recipient['email'])->queue(new SeparationWorkflowMail(
+                    $sep,
+                    $event,
+                    $recipient['name'] ?: 'Colleague',
+                    $tasks,
+                    $category,
+                    $completedByName
+                ));
+            } catch (\Throwable $e) {
+                Log::error('Separation notification email failed.', [
+                    'separation_id' => $sep->id,
+                    'event' => $event,
+                    'recipient' => $recipient['email'],
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
     // ── Generate reference ────────────────────────────────────────────────
     public function generateReference(): string
     {

@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
+import { ActivatedRoute } from '@angular/router';
 
 @Component({
   standalone: false,
@@ -46,6 +47,8 @@ export class SeparationListComponent implements OnInit {
   selectedSep: any = null;
   rejectTarget:any = null;
   rejectReason     = '';
+  checklistError   = '';
+  checklistUpdatingIds = new Set<number>();
 
   // ── New separation form ──────────────────────────────────────────────────
   employees:   any[] = [];
@@ -54,6 +57,7 @@ export class SeparationListComponent implements OnInit {
     last_working_day:'', notice_waived: false, notice_waived_reason:'', hr_notes:''
   };
   formError     = '';
+  completeError = '';
   settlementPreview: any = null;
 
   // ── HR Approval form ──────────────────────────────────────────────────────
@@ -117,7 +121,7 @@ export class SeparationListComponent implements OnInit {
 
   checklistCategories = ['it','hr','finance','admin','general'];
 
-  constructor(private http: HttpClient, private auth: AuthService) {}
+  constructor(private http: HttpClient, private auth: AuthService, private route: ActivatedRoute) {}
 
   ngOnInit() {
     const user = this.auth.getUser();
@@ -129,13 +133,18 @@ export class SeparationListComponent implements OnInit {
     this.isSuperAdmin = this.auth.isSuperAdmin() || this.auth.hasRole('ceo');
     this.isApprover = this.isDeptManager || this.isHRManager || this.isFinanceManager || this.isSuperAdmin;
     this.tabs = this.isApprover
-      ? [...this.allTabs]
+      ? this.allTabs.filter(t => t.id !== 'templates' || this.canManageOffboarding())
       : this.allTabs.filter(t => t.id === 'all');
     this.separationTypes = this.isHR ? [...this.allSeparationTypes] : this.allSeparationTypes.filter(t => t.id === 'resignation');
     this.loadStats();
     this.load();
     this.loadEmployees();
-    if (this.isApprover) this.loadTemplates();
+    if (this.canManageOffboarding()) this.loadTemplates();
+
+    const separationId = Number(this.route.snapshot.queryParamMap.get('separation_id'));
+    if (Number.isInteger(separationId) && separationId > 0) {
+      this.viewSep({ id: separationId });
+    }
   }
 
   loadStats() {
@@ -290,9 +299,26 @@ export class SeparationListComponent implements OnInit {
 
   // ── Checklist item ──────────────────────────────────────────────────────
   toggleChecklistItem(item: any, status: string) {
+    if (this.checklistUpdatingIds.has(item.id)) return;
+    this.checklistError = '';
+    this.checklistUpdatingIds.add(item.id);
+    const previousItem = { ...item };
+    item.status = status;
     this.http.put(`/api/v1/separations/${this.selectedSep.id}/checklist/${item.id}`, { status }).subscribe({
-      next: () => this.reloadDetail()
+      next: (response: any) => {
+        Object.assign(item, response?.item || { status });
+        this.checklistUpdatingIds.delete(item.id);
+      },
+      error: err => {
+        Object.assign(item, previousItem);
+        this.checklistUpdatingIds.delete(item.id);
+        this.checklistError = err?.error?.message || 'Unable to update this offboarding task.';
+      }
     });
+  }
+
+  isChecklistUpdating(item: any): boolean {
+    return this.checklistUpdatingIds.has(item?.id);
   }
 
   checklistProgress(sep: any): number {
@@ -325,13 +351,16 @@ export class SeparationListComponent implements OnInit {
 
   // ── Complete ────────────────────────────────────────────────────────────
   openComplete(sep: any) {
+    if (!this.canCompleteSeparation() || !this.allChecklistTasksResolved(sep)) return;
     this.selectedSep = sep; this.completeForm = { settlement_paid: false, settlement_notes: '' };
+    this.completeError = '';
     this.showComplete = true;
   }
 
   submitComplete() {
     this.http.post(`/api/v1/separations/${this.selectedSep.id}/complete`, this.completeForm).subscribe({
-      next: () => { this.showComplete = false; this.load(this.currentPage); this.loadStats(); this.showDetail = false; }
+      next: () => { this.showComplete = false; this.load(this.currentPage); this.loadStats(); this.showDetail = false; },
+      error: err => { this.completeError = err?.error?.message || 'Unable to complete this separation.'; }
     });
   }
 
@@ -404,10 +433,16 @@ export class SeparationListComponent implements OnInit {
     if (sep.status === 'pending_hr') {
       return this.isHRManager || this.isFinanceManager || this.isSuperAdmin;
     }
-    if (sep.status === 'approved') {
-      return this.isHRManager || this.isFinanceManager || this.isSuperAdmin;
-    }
     return false;
+  }
+
+  canCancel(sep: any): boolean {
+    if (!sep) return false;
+    if (sep.status === 'approved') return this.canManageOffboarding();
+    if (!['draft', 'pending_manager', 'pending_hr'].includes(sep.status)) return false;
+
+    const isOwnRequest = Number(sep.employee_id) === Number(this.currentEmployeeId);
+    return isOwnRequest || this.canReject(sep);
   }
 
   canReject(sep: any): boolean {
@@ -423,6 +458,104 @@ export class SeparationListComponent implements OnInit {
 
   canManageOffboarding(): boolean {
     return this.isHRManager || this.isFinanceManager || this.isSuperAdmin;
+  }
+
+  canCompleteSeparation(): boolean {
+    return this.auth.isHRManager() || this.auth.isSuperAdmin();
+  }
+
+  canPrintClearance(sep: any): boolean {
+    return sep?.status === 'completed' && (this.auth.isHRManager() || this.auth.isSuperAdmin());
+  }
+
+  printClearance(sep: any): void {
+    if (!this.canPrintClearance(sep)) return;
+    const printWindow = window.open('', '_blank', 'width=1000,height=800');
+    if (!printWindow) {
+      this.checklistError = 'Please allow pop-ups to print the clearance report.';
+      return;
+    }
+
+    const groups = this.checklistByCategory(sep.checklist_items || []);
+    const departmentSections = groups.map((group: any) => {
+      const rows = group.items.map((item: any) => {
+        const completedBy = item.completed_by_name
+          || (typeof item.completed_by === 'object' ? item.completed_by?.name : null)
+          || item.completed_by_user?.name;
+        return `<tr>
+          <td>${this.escapeHtml(item.title)}</td>
+          <td class="status">${this.escapeHtml(this.taskStatusLabel(item.status))}</td>
+          <td>${this.escapeHtml(completedBy || '—')}</td>
+          <td>${this.escapeHtml(this.printDate(item.completed_at))}</td>
+        </tr>`;
+      }).join('');
+      return `<section>
+        <h2>${this.escapeHtml(this.categoryLabel(group.category))} Clearance</h2>
+        <table><thead><tr><th>Task</th><th>Status</th><th>Completed By</th><th>Date</th></tr></thead>
+        <tbody>${rows}</tbody></table>
+        <div class="signoff"><span>Department Manager Signature</span><span>Date</span></div>
+      </section>`;
+    }).join('');
+
+    const employeeName = `${sep.employee?.first_name || ''} ${sep.employee?.last_name || ''}`.trim();
+    printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8">
+      <title>Clearance - ${this.escapeHtml(sep.reference)}</title>
+      <style>
+        @page{size:A4;margin:14mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#172033;margin:0;font-size:12px}
+        .header{border-bottom:3px solid #1e3a5f;padding-bottom:12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-end}
+        h1{font-size:21px;color:#1e3a5f;margin:0 0 4px}.sub{color:#64748b}.ref{font-weight:700;color:#1e3a5f}
+        .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}.meta div{border:1px solid #d9e2ec;border-radius:6px;padding:9px}
+        .label{display:block;font-size:9px;text-transform:uppercase;color:#64748b;font-weight:700;margin-bottom:3px}
+        section{margin:0 0 20px;break-inside:avoid}h2{font-size:14px;color:#1e3a5f;margin:0;padding:8px 10px;background:#edf3f8;border-left:4px solid #2563eb}
+        table{width:100%;border-collapse:collapse}th,td{border:1px solid #d9e2ec;padding:7px;text-align:left}th{background:#f8fafc;font-size:10px;text-transform:uppercase;color:#475569}.status{font-weight:700}
+        .signoff{display:grid;grid-template-columns:2fr 1fr;gap:30px;margin-top:22px}.signoff span{border-top:1px solid #64748b;padding-top:5px;color:#64748b;font-size:10px}
+        .footer{margin-top:25px;padding-top:10px;border-top:1px solid #d9e2ec;color:#64748b;font-size:10px;text-align:center}
+        .actions{position:fixed;right:16px;top:16px}@media print{.actions{display:none}}
+      </style></head><body>
+      <button class="actions" onclick="window.print()">Print</button>
+      <div class="header"><div><h1>Employee Clearance Report</h1><div class="sub">Separation &amp; Offboarding</div></div><div class="ref">${this.escapeHtml(sep.reference)}</div></div>
+      <div class="meta">
+        <div><span class="label">Employee</span>${this.escapeHtml(employeeName)}</div>
+        <div><span class="label">Department</span>${this.escapeHtml(sep.employee?.department?.name || '—')}</div>
+        <div><span class="label">Designation</span>${this.escapeHtml(sep.employee?.designation?.title || '—')}</div>
+        <div><span class="label">Separation Type</span>${this.escapeHtml(this.typeInfo(sep.type).label)}</div>
+        <div><span class="label">Last Working Day</span>${this.escapeHtml(this.printDate(sep.last_working_day))}</div>
+        <div><span class="label">Completed</span>${this.escapeHtml(this.printDate(sep.updated_at))}</div>
+      </div>
+      ${departmentSections || '<p>No clearance tasks found.</p>'}
+      <div class="signoff"><span>HR Manager Final Approval</span><span>Date</span></div>
+      <div class="footer">Generated from HRMS on ${this.escapeHtml(this.printDate(new Date().toISOString()))}</div>
+      </body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+  }
+
+  private taskStatusLabel(status: string): string {
+    return ({ completed: 'Completed', skipped: 'Skipped', na: 'N/A', pending: 'Pending' } as any)[status] || status;
+  }
+
+  private printDate(value: string | null | undefined): string {
+    if (!value) return '—';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Riyadh'
+    });
+  }
+
+  private escapeHtml(value: any): string {
+    return String(value ?? '').replace(/[&<>'"]/g, character => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    } as Record<string, string>)[character]);
+  }
+
+  allChecklistTasksResolved(sep: any): boolean {
+    const items = sep?.checklist_items || [];
+    return items.length > 0 && items.every((item: any) => ['completed', 'skipped', 'na'].includes(item.status));
+  }
+
+  canViewOffboardingTasks(sep: any): boolean {
+    return ['offboarding', 'completed'].includes(sep?.status)
+      && (this.isHR || this.isFinanceManager || this.isDeptManager || this.isSuperAdmin);
   }
 
   private isDirectManager(sep: any): boolean {
