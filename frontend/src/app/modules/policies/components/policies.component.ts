@@ -90,7 +90,8 @@ export class PoliciesComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    this.isManager = this.auth.hasAnyRole(['super_admin', 'hr_manager', 'hr_staff']);
+    this.isManager = this.auth.hasAnyRole(['super_admin', 'hr_manager', 'hr_staff'])
+      || this.auth.can('policies.manage');
     this.loadCategories();
     this.loadDepartments();
     this.load();
