@@ -76,6 +76,9 @@ class DatabaseSeeder extends Seeder {
 
             // Admin
             'admin.manage_users','admin.manage_roles','admin.view_logs',
+
+            // Policies
+            'policies.view_all','policies.view_documents','policies.manage',
         ];
         foreach ($permissions as $perm) {
             Permission::firstOrCreate(['name' => $perm, 'guard_name' => 'web']);
@@ -97,6 +100,7 @@ class DatabaseSeeder extends Seeder {
             'attendance.view_all','attendance.checkin','attendance.manual_entry','attendance.manage',
             'orgchart.view',
             'admin.manage_users','admin.manage_roles', // HR Manager manages system access
+            'policies.view_all','policies.view_documents','policies.manage',
         ]);
 
         Role::findByName('hr_staff')->syncPermissions([

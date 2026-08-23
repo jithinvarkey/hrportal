@@ -97,6 +97,11 @@ class RolesPermissionsSeeder extends Seeder
             // Assets
             'assets.view',
             'assets.manage',
+
+            // Policies
+            'policies.view_all',
+            'policies.view_documents',
+            'policies.manage',
         ];
 
         foreach ($permissions as $perm) {
@@ -124,6 +129,7 @@ class RolesPermissionsSeeder extends Seeder
                 'contracts.view_all','contracts.create','contracts.edit','contracts.delete',
                 'orgchart.view',
                 'assets.view',
+                'policies.view_all','policies.view_documents','policies.manage',
             ],
 
             'hr_staff' => [

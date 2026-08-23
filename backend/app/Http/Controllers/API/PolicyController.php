@@ -39,7 +39,12 @@ class PolicyController extends Controller
 
     private function isManager(): bool
     {
-        return count(array_intersect($this->userRoles(), self::MANAGER_ROLES)) > 0;
+        $user = auth()->user();
+
+        return $user && (
+            $user->hasAnyRole(self::MANAGER_ROLES)
+            || $user->can('policies.manage')
+        );
     }
 
     private function ensureManager(): ?JsonResponse
