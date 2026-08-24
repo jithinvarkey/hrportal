@@ -105,6 +105,73 @@ class PayrollApiTest extends TestCase
     }
 
     /** @test */
+    public function payroll_includes_probation_employees(): void
+    {
+        $probationEmployee = Employee::factory()->create([
+            'status' => 'probation',
+            'salary' => 8000,
+        ]);
+
+        $month = now()->format('Y-m');
+
+        $response = $this->actingAs($this->hrManager, 'sanctum')
+            ->postJson('/api/v1/payroll/run', [
+                'month'        => $month,
+                'period_start' => now()->startOfMonth()->toDateString(),
+                'period_end'   => now()->endOfMonth()->toDateString(),
+            ])
+            ->assertCreated();
+
+        $this->assertDatabaseHas('payslips', [
+            'payroll_id'  => $response->json('payroll.id'),
+            'employee_id' => $probationEmployee->id,
+        ]);
+    }
+
+    /** @test */
+    public function hr_manager_can_remove_only_a_probation_employee_from_pending_payroll(): void
+    {
+        $payroll = Payroll::factory()->create([
+            'status' => 'pending_approval',
+            'total_gross' => 20000,
+            'total_deductions' => 1800,
+            'total_net' => 18200,
+        ]);
+        $probationEmployee = Employee::factory()->create(['status' => 'probation']);
+        $activeEmployee = Employee::factory()->create(['status' => 'active']);
+        $probationPayslip = Payslip::factory()->create([
+            'payroll_id' => $payroll->id,
+            'employee_id' => $probationEmployee->id,
+        ]);
+        $activePayslip = Payslip::factory()->create([
+            'payroll_id' => $payroll->id,
+            'employee_id' => $activeEmployee->id,
+        ]);
+
+        $this->actingAs($this->hrManager, 'sanctum')
+            ->deleteJson("/api/v1/payroll/{$payroll->id}/payslips/{$activePayslip->id}")
+            ->assertUnprocessable();
+
+        $this->actingAs($this->hrManager, 'sanctum')
+            ->deleteJson("/api/v1/payroll/{$payroll->id}/payslips/{$probationPayslip->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Probation employee removed from this payroll');
+
+        $this->assertDatabaseHas('payslips', ['id' => $activePayslip->id]);
+        $this->assertDatabaseMissing('payslips', ['id' => $probationPayslip->id]);
+        $this->assertSame((float) $activePayslip->gross_salary, (float) $payroll->fresh()->total_gross);
+
+        $this->actingAs($this->hrManager, 'sanctum')
+            ->postJson("/api/v1/payroll/{$payroll->id}/recalculate")
+            ->assertOk();
+
+        $this->assertDatabaseHas('payslips', [
+            'payroll_id' => $payroll->id,
+            'employee_id' => $probationEmployee->id,
+        ]);
+    }
+
+    /** @test */
     public function payroll_reflects_due_loans_and_approved_unpaid_leave(): void
     {
         $employee = Employee::factory()->create([

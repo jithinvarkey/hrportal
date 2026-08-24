@@ -160,6 +160,14 @@ class AttendanceController extends Controller
             ->orderBy('id', 'desc')
             ->paginate($perPage);
 
+        $data->getCollection()->each(function (AttendanceLog $log): void {
+            $log->status = $this->attendancePolicy->statusForReport(
+                $log->check_in ? (string) $log->check_in : null,
+                (string) $log->status,
+                $log->source ? (string) $log->source : null
+            );
+        });
+
         return response()->json($data);
     }
 
@@ -234,7 +242,7 @@ class AttendanceController extends Controller
         $weekStart = now()->startOfWeek(Carbon::SUNDAY)->toDateString();
         $monthStart = now()->startOfMonth()->toDateString();
         $employeeIds = \App\Models\Employee::query()
-            ->where('status', 'active')
+            ->whereIn('status', ['active', 'probation'])
             ->when($departmentId, fn ($q) => $q->where('department_id', $departmentId))
             ->when($excludeEmployeeId, fn ($q) => $q->where('id', '!=', $excludeEmployeeId))
             ->pluck('id');

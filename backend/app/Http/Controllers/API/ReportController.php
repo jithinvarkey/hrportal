@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use App\Models\{Employee, Payslip, Payroll, LeaveRequest, LeaveAllocation, LeaveType,
                 AttendanceLog, Loan, LoanInstallment, Department};
 use App\Services\ExportService;
+use App\Services\Attendance\AttendancePolicyService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -13,7 +14,7 @@ class ReportController extends Controller
 {
     protected ExportService $export;
 
-    public function __construct(ExportService $export)
+    public function __construct(ExportService $export, private AttendancePolicyService $attendancePolicy)
     {
         $this->export = $export;
     }
@@ -66,6 +67,7 @@ class ReportController extends Controller
                 'other_earn'   => number_format($p->other_allowances ?? 0, 2),
                 'gross'        => number_format($p->gross_salary ?? 0, 2),
                 'gosi'         => number_format($p->gosi_employee ?? 0, 2),
+                'other_deductions' => number_format($p->other_deductions ?? 0, 2),
                 'deductions'   => number_format($p->total_deductions ?? 0, 2),
                 'net'          => number_format($p->net_salary ?? 0, 2),
                 'working_days' => $p->working_days ?? '—',
@@ -164,7 +166,11 @@ class ReportController extends Controller
                 'check_in'   => $l->check_in  ? substr($l->check_in, 0, 5) : '—',
                 'check_out'  => $l->check_out ? substr($l->check_out, 0, 5) : '—',
                 'hours'      => $l->duration_label ?? '—',
-                'status'     => $l->status,
+                'status'     => $this->attendancePolicy->statusForReport(
+                    $l->check_in ? (string) $l->check_in : null,
+                    (string) $l->status,
+                    $l->source ? (string) $l->source : null
+                ),
                 'source'     => $l->source ?? 'system',
                 'notes'      => $l->notes ?? '',
             ]);
@@ -251,7 +257,7 @@ class ReportController extends Controller
     {
         return match ($type) {
             'employees'      => ['Code','Name','Department','Designation','Hire Date','Nationality','Status','Email','Phone','Basic Salary (SAR)'],
-            'payroll'        => ['Code','Name','Department','Basic','Housing Allow.','Transport Allow.','Other Earnings','Gross','GOSI Employee','Total Deductions','Net Salary','Working Days','Absent Days'],
+            'payroll'        => ['Code','Name','Department','Basic','Housing Allow.','Transport Allow.','Other Earnings','Gross','GOSI Employee','Other Deductions','Total Deductions','Net Salary','Working Days','Absent Days'],
             'leave-balance'  => ['Code','Name','Department','Leave Type','Entitlement','Used','Pending','Remaining','Year'],
             'leave-requests' => ['Code','Name','Department','Leave Type','From','To','Days','Status','Reason','Approved By'],
             'attendance'     => ['Code','Name','Department','Date','Check In','Check Out','Hours','Status','Source','Notes'],

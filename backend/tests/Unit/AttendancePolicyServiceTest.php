@@ -34,4 +34,20 @@ class AttendancePolicyServiceTest extends TestCase
 
         $this->assertSame('late', $policy->statusForCheckIn('09:15:01', $this->settings));
     }
+
+    public function test_report_recalculates_automatic_present_and_late_rows(): void
+    {
+        $policy = new AttendancePolicyService();
+
+        $this->assertSame('present', $policy->statusForReport('09:10:00', 'late', 'api', $this->settings));
+        $this->assertSame('late', $policy->statusForReport('09:20:00', 'present', 'biometric', $this->settings));
+    }
+
+    public function test_report_preserves_manual_and_special_statuses(): void
+    {
+        $policy = new AttendancePolicyService();
+
+        $this->assertSame('present', $policy->statusForReport('09:20:00', 'present', 'manual', $this->settings));
+        $this->assertSame('half_day', $policy->statusForReport('09:20:00', 'half_day', 'api', $this->settings));
+    }
 }

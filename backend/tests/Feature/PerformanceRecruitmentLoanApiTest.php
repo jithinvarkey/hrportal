@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Mail\ApplicantRejectedMail;
+use App\Mail\LoanInstallmentSkippedMail;
 use App\Models\Employee;
 use App\Models\JobApplication;
 use App\Models\JobPosting;
 use App\Models\Loan;
+use App\Models\LoanInstallment;
 use App\Models\LoanType;
 use App\Models\PerformanceCycle;
 use App\Models\PerformanceReview;
@@ -271,6 +273,61 @@ class PerformanceRecruitmentLoanApiTest extends TestCase
     }
 
     // ── Loans ─────────────────────────────────────────────────────────────
+
+    /** @test */
+    public function only_finance_or_hr_manager_can_mark_an_installment_as_paid(): void
+    {
+        $loan = Loan::factory()->create([
+            'employee_id' => $this->empRecord->id,
+            'status' => 'disbursed',
+        ]);
+        $installment = LoanInstallment::factory()->create([
+            'loan_id' => $loan->id,
+            'status' => 'pending',
+            'payslip_id' => null,
+        ]);
+
+        $this->actingAs($this->deptManager, 'sanctum')
+            ->postJson("/api/v1/loans/{$loan->id}/installments/{$installment->id}/pay")
+            ->assertForbidden();
+
+        $this->actingAs($this->financeManager, 'sanctum')
+            ->postJson("/api/v1/loans/{$loan->id}/installments/{$installment->id}/pay")
+            ->assertOk();
+    }
+
+    /** @test */
+    public function skipping_an_installment_notifies_hr_and_finance_managers(): void
+    {
+        Mail::fake();
+        $loan = Loan::factory()->create([
+            'employee_id' => $this->empRecord->id,
+            'status' => 'disbursed',
+        ]);
+        $installment = LoanInstallment::factory()->create([
+            'loan_id' => $loan->id,
+            'installment_no' => 1,
+            'due_date' => '2026-09-01',
+            'status' => 'pending',
+            'payslip_id' => null,
+        ]);
+
+        $this->actingAs($this->deptManager, 'sanctum')
+            ->postJson("/api/v1/loans/{$loan->id}/installments/{$installment->id}/skip", [
+                'notes' => 'Employee requested a one-month deferment.',
+            ])
+            ->assertOk();
+
+        Mail::assertQueued(LoanInstallmentSkippedMail::class, 2);
+        Mail::assertQueued(LoanInstallmentSkippedMail::class, fn ($mail) =>
+            $mail->hasTo($this->hrManager->email)
+            && $mail->skippedInstallment->is($installment)
+        );
+        Mail::assertQueued(LoanInstallmentSkippedMail::class, fn ($mail) =>
+            $mail->hasTo($this->financeManager->email)
+            && $mail->replacementInstallment->due_date->toDateString() === '2026-10-01'
+        );
+    }
 
     /** @test */
     public function employee_can_submit_loan_request(): void

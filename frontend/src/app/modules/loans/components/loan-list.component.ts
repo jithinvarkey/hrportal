@@ -92,6 +92,7 @@ export class LoanListComponent implements OnInit {
   isFinance = false;
   isMgr = false;
   isHR = false;
+  canMarkInstallmentPaid = false;
   showMyLoansTab = true;
   approvalLevels = 3;
 
@@ -127,6 +128,7 @@ export class LoanListComponent implements OnInit {
     this.isHR = this.auth.isHRRole();
     this.isMgr = this.auth.isManagerRole();
     this.isFinance = this.auth.isFinanceManager();
+    this.canMarkInstallmentPaid = this.auth.isFinanceManager() || this.auth.isHRManager();
     this.typeColumns = this.isHR
       ? ['name', 'code', 'max_amount', 'installments', 'interest', 'status', 'actions']
       : ['name', 'code', 'max_amount', 'installments', 'interest', 'status'];
@@ -316,6 +318,7 @@ export class LoanListComponent implements OnInit {
   }
 
   openPayInst(inst: any) {
+    if (!this.canMarkInstallmentPaid) return;
     this.activeInst = inst;
     this.instPayDate = new Date().toISOString().slice(0, 10);
     this.instNotes = '';

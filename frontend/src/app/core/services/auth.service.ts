@@ -250,7 +250,7 @@ export class AuthService {
       {
         group: 'Finance',
         path: '/payroll', label: 'Payroll', icon: 'payments',
-        roles: [ROLES.HR_MANAGER]
+        roles: [ROLES.SUPER_ADMIN, ROLES.HR_MANAGER]
       },
       {
         path: '/loans', label: 'Loans', icon: 'account_balance',

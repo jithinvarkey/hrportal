@@ -153,11 +153,13 @@ class PayrollController extends Controller {
         return response()->json(['message' => 'Payroll rejected']);
     }
 
-    public function payslips($id) {
+    public function payslips(Request $request, $id) {
+        $perPage = min(max($request->integer('per_page', 100), 1), 1000);
+
         $payslips = Payslip::with(['employee.department'])
             ->where('payroll_id', $id)
             ->whereDoesntHave('employee.user.roles', fn ($query) => $query->where('name', 'super_admin'))
-            ->paginate(20);
+            ->paginate($perPage);
         return response()->json($payslips);
     }
 
@@ -277,14 +279,18 @@ class PayrollController extends Controller {
             'transport_allowance' => 'sometimes|numeric|min:0',
             'other_allowances'    => 'sometimes|numeric|min:0',
             'gosi_employee'       => 'sometimes|numeric|min:0',
+            'leave_deduction'     => 'sometimes|numeric|min:0',
+            'loan_deduction'      => 'sometimes|numeric|min:0',
             'other_deductions'    => 'sometimes|numeric|min:0',
+            'unpaid_leave_days'   => 'sometimes|numeric|min:0',
             'absent_days'         => 'sometimes|integer|min:0',
             'notes'               => 'sometimes|string|nullable',
         ]);
 
         $data = $request->only([
             'basic_salary','housing_allowance','transport_allowance',
-            'other_allowances','gosi_employee','other_deductions','absent_days',
+            'other_allowances','gosi_employee','leave_deduction','loan_deduction',
+            'other_deductions','unpaid_leave_days','absent_days',
         ]);
 
         // Recalculate totals
@@ -293,11 +299,13 @@ class PayrollController extends Controller {
         $transport = $data['transport_allowance'] ?? $payslip->transport_allowance;
         $otherEarn = $data['other_allowances']    ?? $payslip->other_allowances;
         $gosiEmp   = $data['gosi_employee']       ?? $payslip->gosi_employee;
+        $leaveDed  = $data['leave_deduction']     ?? $payslip->leave_deduction;
+        $loanDed   = $data['loan_deduction']      ?? $payslip->loan_deduction;
         $otherDed  = $data['other_deductions']    ?? $payslip->other_deductions;
 
         $totalEarnings   = round($basic + $housing + $transport + $otherEarn, 2);
         $totalDeductions = round(
-            $gosiEmp + $otherDed + (float) $payslip->leave_deduction + (float) $payslip->loan_deduction,
+            $gosiEmp + $leaveDed + $loanDed + $otherDed,
             2
         );
         $netSalary       = round(max(0, $totalEarnings - $totalDeductions), 2);
@@ -320,6 +328,41 @@ class PayrollController extends Controller {
             'message' => 'Payslip updated successfully',
             'payslip' => $payslip->fresh()->load('employee.department'),
             'payroll' => $payroll->fresh()->loadCount('payslips'),
+        ]);
+    }
+
+    /** Remove a probation employee from a payroll that is still editable. */
+    public function removeProbationPayslip($payrollId, $payslipId)
+    {
+        $result = DB::transaction(function () use ($payrollId, $payslipId) {
+            $payroll = Payroll::lockForUpdate()->findOrFail($payrollId);
+
+            if (!in_array($payroll->status, ['draft', 'pending_approval'])) {
+                abort(422, 'Cannot remove an employee after payroll approval');
+            }
+
+            $payslip = Payslip::with('employee')
+                ->where('payroll_id', $payroll->id)
+                ->findOrFail($payslipId);
+
+            if ($payslip->employee?->status !== 'probation') {
+                abort(422, 'Only probation employees can be removed from payroll');
+            }
+
+            $payslip->delete();
+
+            $payroll->update([
+                'total_gross'      => $payroll->payslips()->sum('gross_salary'),
+                'total_deductions' => $payroll->payslips()->sum('total_deductions'),
+                'total_net'        => $payroll->payslips()->sum('net_salary'),
+            ]);
+
+            return $payroll->fresh()->loadCount('payslips');
+        });
+
+        return response()->json([
+            'message' => 'Probation employee removed from this payroll',
+            'payroll' => $result,
         ]);
     }
 

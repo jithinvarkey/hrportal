@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\LoanApprovedMail;
 use App\Mail\LoanRejectedMail;
 use App\Mail\LoanRequestSubmittedMail;
+use App\Mail\LoanInstallmentSkippedMail;
 use App\Models\Loan;
 use App\Models\LoanInstallment;
 use App\Models\LoanType;
@@ -102,6 +103,31 @@ class LoanController extends Controller {
             Mail::to($employee->email)->queue($mail);
         } catch (\Throwable $e) {
             Log::warning("Loan {$action} email failed: ".$e->getMessage());
+        }
+    }
+
+    private function notifyInstallmentSkipped(
+        Loan $loan,
+        LoanInstallment $skippedInstallment,
+        LoanInstallment $replacementInstallment
+    ): void {
+        try {
+            $loan->loadMissing(['employee', 'loanType']);
+            $recipients = User::whereHas('roles', fn ($query) =>
+                $query->whereIn('name', ['hr_manager', 'finance_manager'])
+            )->whereNotNull('email')->get()->unique('id');
+
+            foreach ($recipients as $recipient) {
+                Mail::to($recipient->email)->queue(new LoanInstallmentSkippedMail(
+                    $loan,
+                    $skippedInstallment,
+                    $replacementInstallment,
+                    $recipient->name,
+                    auth()->user()->name
+                ));
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Skipped installment notification failed: '.$e->getMessage());
         }
     }
 
@@ -728,6 +754,12 @@ class LoanController extends Controller {
      * @return JsonResponse
      */
     public function payInstallment(Request $request, int $loanId, int $instId): JsonResponse {
+        if (!$this->hasAnyRoleDB(['finance_manager', 'hr_manager'])) {
+            return response()->json([
+                'message' => 'Only the Finance Manager or HR Manager can mark an installment as paid.',
+            ], 403);
+        }
+
         $inst = LoanInstallment::where('loan_id', $loanId)->findOrFail($instId);
 
         if (!in_array($inst->status, ['pending', 'overdue'])) {
@@ -772,13 +804,17 @@ class LoanController extends Controller {
             ], 422);
         }
 
-        $this->service->skipInstallment($inst, $request->notes);
-        $this->logLoanActivity($inst->loan()->first(), 'installment_skipped', "Installment #{$inst->installment_no} skipped and rescheduled.", [
+        $replacementInstallment = $this->service->skipInstallment($inst, $request->notes);
+        $loan = $inst->loan()->with(['employee', 'loanType'])->firstOrFail();
+        $this->logLoanActivity($loan, 'installment_skipped', "Installment #{$inst->installment_no} skipped and rescheduled.", [
             'installment_id' => $inst->id,
             'installment_no' => $inst->installment_no,
             'amount' => $inst->amount,
             'notes' => $request->notes,
+            'replacement_installment_id' => $replacementInstallment->id,
+            'replacement_due_date' => $replacementInstallment->due_date?->toDateString(),
         ]);
+        $this->notifyInstallmentSkipped($loan, $inst->fresh(), $replacementInstallment);
 
         return response()->json(['message' => 'Installment skipped — rescheduled to end of loan.']);
     }

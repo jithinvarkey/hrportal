@@ -84,7 +84,7 @@ class LoanService {
     }
 
     // ── Skip installment for one month ────────────────────────────────────
-    public function skipInstallment(LoanInstallment $inst, ?string $notes = null): void {
+    public function skipInstallment(LoanInstallment $inst, ?string $notes = null): LoanInstallment {
         $inst->update([
             'status' => 'skipped',
             'processed_by' => auth()->id(),
@@ -103,7 +103,7 @@ class LoanService {
                 ->first();
         $newDue = Carbon::parse($lastInst->due_date)->addMonth()->toDateString();
 
-        LoanInstallment::create([
+        return LoanInstallment::create([
             'loan_id' => $loan->id,
             'installment_no' => $lastInst->installment_no + 1,
             'due_date' => $newDue,

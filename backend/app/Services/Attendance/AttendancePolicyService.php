@@ -53,6 +53,16 @@ class AttendancePolicyService
         return $this->timeToSeconds($checkIn) > $lateThreshold ? 'late' : 'present';
     }
 
+    /** Apply the current late policy to automatic report rows without overriding manual/special statuses. */
+    public function statusForReport(?string $checkIn, string $storedStatus, ?string $source, ?array $settings = null): string
+    {
+        if (!$checkIn || $source === 'manual' || !in_array($storedStatus, ['present', 'late'], true)) {
+            return $storedStatus;
+        }
+
+        return $this->statusForCheckIn($checkIn, $settings);
+    }
+
     /**
      * Reclassify today's automatically created rows after a policy change.
      * Manual corrections and special statuses are intentionally preserved.
