@@ -31,7 +31,7 @@ const routes: Routes = [
         path: 'payroll',
         loadChildren: () => import('./modules/payroll/payroll.module').then(m => m.PayrollModule),
         canActivate: [RoleGuard],
-        data: { roles: ['hr_manager'] }
+        data: { roles: ['super_admin', 'hr_manager'] }
       },
       {
         path: 'leave',

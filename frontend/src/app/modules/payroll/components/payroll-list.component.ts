@@ -30,6 +30,7 @@ export class PayrollListComponent implements OnInit {
   detailLoading         = false;
   editSaving            = false;
   recalculating         = false;
+  removingPayslipId: number | null = null;
   downloading           = false;
   slipIndex             = 0;
   runError              = '';
@@ -249,7 +250,7 @@ export class PayrollListComponent implements OnInit {
     this.showDetail      = true;
     this.detailLoading   = true;
     this.payslips        = [];
-    this.http.get<any>(`/api/v1/payroll/${p.id}/payslips`, { params: { per_page: 100 } }).subscribe({
+    this.http.get<any>(`/api/v1/payroll/${p.id}/payslips`, { params: { per_page: 1000 } }).subscribe({
       next: r => { this.payslips = r?.data || r || []; this.detailLoading = false; this.cdr.markForCheck(); },
       error: () => { this.detailLoading = false; this.cdr.markForCheck(); }
     });
@@ -296,7 +297,10 @@ export class PayrollListComponent implements OnInit {
       transport_allowance: ps.transport_allowance || 0,
       other_allowances:    ps.other_allowances    || 0,
       gosi_employee:       ps.gosi_employee       || 0,
+      leave_deduction:     ps.leave_deduction     || 0,
+      loan_deduction:      ps.loan_deduction      || 0,
       other_deductions:    ps.other_deductions    || 0,
+      unpaid_leave_days:   ps.unpaid_leave_days   || 0,
       absent_days:         ps.absent_days         || 0,
     };
     this.editError    = '';
@@ -331,6 +335,30 @@ export class PayrollListComponent implements OnInit {
         this.cdr.markForCheck();
       },
       error: err => { this.editSaving = false; this.editError = err?.error?.message || 'Save failed.'; }
+    });
+  }
+
+  removeProbationPayslip(ps: any) {
+    if (ps?.employee?.status !== 'probation' || !this.canEdit(this.selectedPayroll)) return;
+
+    const employeeName = `${ps.employee?.first_name || ''} ${ps.employee?.last_name || ''}`.trim();
+    if (!confirm(`Remove ${employeeName} from this payroll? The employee record will not be deleted.`)) return;
+
+    this.removingPayslipId = ps.id;
+    this.http.delete<any>(`/api/v1/payroll/${this.selectedPayroll.id}/payslips/${ps.id}`).subscribe({
+      next: r => {
+        this.payslips = this.payslips.filter(p => p.id !== ps.id);
+        this.selectedPayroll = { ...this.selectedPayroll, ...r.payroll };
+        this.removingPayslipId = null;
+        this.load();
+        this.loadStats();
+        this.cdr.markForCheck();
+      },
+      error: err => {
+        this.removingPayslipId = null;
+        alert(err?.error?.message || 'Employee could not be removed from this payroll.');
+        this.cdr.markForCheck();
+      }
     });
   }
 
@@ -425,7 +453,7 @@ export class PayrollListComponent implements OnInit {
 
   editDeductionPreview(): number {
     return (+this.editForm.gosi_employee||0) + (+this.editForm.other_deductions||0)
-      + (+this.selectedSlip?.leave_deduction||0) + (+this.selectedSlip?.loan_deduction||0);
+      + (+this.editForm.leave_deduction||0) + (+this.editForm.loan_deduction||0);
   }
 
   editGrossPreview(): number {

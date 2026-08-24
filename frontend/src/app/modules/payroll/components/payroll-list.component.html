@@ -221,7 +221,14 @@
           <div class="name-main">{{ ps.employee?.first_name }} {{ ps.employee?.last_name }}</div>
           <div class="name-sub">
             {{ ps.employee?.department?.name }}
+            <span class="probation-badge" *ngIf="ps.employee?.status === 'probation'">Probation</span>
             <span class="nat-badge" [class.saudi]="ps.is_saudi">{{ ps.is_saudi ? '🇸🇦 Saudi' : 'Non-Saudi' }}</span>
+            <button class="probation-remove-btn" matTooltip="Remove probation employee from this payroll"
+                    *ngIf="canEdit(selectedPayroll) && ps.employee?.status === 'probation'"
+                    (click)="removeProbationPayslip(ps)" [disabled]="removingPayslipId === ps.id">
+              <mat-icon>{{ removingPayslipId === ps.id ? 'hourglass_empty' : 'person_remove' }}</mat-icon>
+              Remove
+            </button>
           </div>
         </td>
       </ng-container>
@@ -523,21 +530,37 @@
         <input class="field-input" type="number" [(ngModel)]="editForm.gosi_employee" min="0">
       </div>
       <div class="field-group">
-        <label class="field-label">Other Deductions (SAR)</label>
+        <label class="field-label">Unpaid Leave Deduction (SAR)</label>
+        <input class="field-input" type="number" [(ngModel)]="editForm.leave_deduction" min="0">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Loan Deduction (SAR)</label>
+        <input class="field-input" type="number" [(ngModel)]="editForm.loan_deduction" min="0">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Other Deduction Amount (SAR)</label>
         <input class="field-input" type="number" [(ngModel)]="editForm.other_deductions" min="0">
       </div>
     </div>
 
-    <div class="field-group" style="margin-top:12px">
-      <label class="field-label">Absent Days</label>
-      <input class="field-input" type="number" [(ngModel)]="editForm.absent_days" min="0" style="max-width:120px">
+    <div class="two-col" style="margin-top:12px">
+      <div class="field-group">
+        <label class="field-label">Unpaid Leave Days</label>
+        <input class="field-input" type="number" [(ngModel)]="editForm.unpaid_leave_days" min="0" step="0.5">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Absent Days</label>
+        <input class="field-input" type="number" [(ngModel)]="editForm.absent_days" min="0">
+      </div>
     </div>
 
     <!-- Live preview -->
     <div class="live-preview">
       <div class="lp-row"><span>Gross</span><span class="earn-amt">{{ fmtSAR(editGrossPreview()) }}</span></div>
-      <div class="lp-row" *ngIf="selectedSlip.leave_deduction > 0"><span>Unpaid Leave</span><span class="deduct-amt">{{ fmtSAR(selectedSlip.leave_deduction) }}</span></div>
-      <div class="lp-row" *ngIf="selectedSlip.loan_deduction > 0"><span>Loan Installments</span><span class="deduct-amt">{{ fmtSAR(selectedSlip.loan_deduction) }}</span></div>
+      <div class="lp-row"><span>GOSI Employee</span><span class="deduct-amt">{{ fmtSAR(editForm.gosi_employee) }}</span></div>
+      <div class="lp-row"><span>Unpaid Leave</span><span class="deduct-amt">{{ fmtSAR(editForm.leave_deduction) }}</span></div>
+      <div class="lp-row"><span>Loan Installments</span><span class="deduct-amt">{{ fmtSAR(editForm.loan_deduction) }}</span></div>
+      <div class="lp-row"><span>Other Deductions</span><span class="deduct-amt">{{ fmtSAR(editForm.other_deductions) }}</span></div>
       <div class="lp-row"><span>Deductions</span><span class="deduct-amt">{{ fmtSAR(editDeductionPreview()) }}</span></div>
       <div class="lp-row lp-net"><span>Net Salary</span><span class="net-val">{{ fmtSAR(editNetPreview()) }}</span></div>
     </div>

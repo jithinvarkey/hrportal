@@ -192,6 +192,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/{id}/payslips',                       [PayrollController::class, 'payslips'])->whereNumber('id');
             Route::get('/{id}/export',                         [PayrollController::class, 'export'])->whereNumber('id');
             Route::put('/{id}/payslips/{psId}',                [PayrollController::class, 'updatePayslip'])->whereNumber(['id','psId']);
+            Route::delete('/{id}/payslips/{psId}',             [PayrollController::class, 'removeProbationPayslip'])->whereNumber(['id','psId']);
         });
 
         // Leave

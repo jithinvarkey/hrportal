@@ -18,6 +18,10 @@ class MonthlyAttendanceReportService
     private int $fullDayMinutes = 480;
     private array $weekendDays = [5, 6];
 
+    public function __construct(private AttendancePolicyService $attendancePolicy)
+    {
+    }
+
     public function download(Request $request)
     {
         $request->validate([
@@ -31,7 +35,7 @@ class MonthlyAttendanceReportService
         $this->loadAttendanceSettings();
 
         $employees = Employee::with(['department'])
-            ->where('status', 'active')
+            ->whereIn('status', ['active', 'probation'])
             ->when($request->department_id, fn($query) => $query->where('department_id', $request->department_id))
             ->orderBy('employee_code')
             ->get();
@@ -180,7 +184,14 @@ class MonthlyAttendanceReportService
         $firstIn = $log?->check_in ? $date . ' ' . $log->check_in : '';
         $lastOut = $log?->check_out ? $date . ' ' . $log->check_out : '';
         $total = $this->workedMinutes($day, $log);
-        $status = $log ? ucfirst(str_replace('_', ' ', (string) $log->status)) : 'Absent';
+        $reportStatus = $log
+            ? $this->attendancePolicy->statusForReport(
+                $log->check_in ? (string) $log->check_in : null,
+                (string) $log->status,
+                $log->source ? (string) $log->source : null
+            )
+            : 'absent';
+        $status = ucfirst(str_replace('_', ' ', $reportStatus));
         $note = trim((string) ($log?->notes ?? ''));
 
         if ($isWeekend) {
@@ -192,7 +203,19 @@ class MonthlyAttendanceReportService
         }
 
         if ($approvedLeaves->isNotEmpty()) {
-            return [$date, $day->format('l'), $firstIn, $lastOut, $minimum, $minimum, 'Leave', $this->appendNote('', $note)];
+            $pendingDetails = $pendingLeaves->isNotEmpty()
+                ? 'Pending: ' . $this->leaveDetails($pendingLeaves, true)
+                : '';
+            return [
+                $date,
+                $day->format('l'),
+                $firstIn,
+                $lastOut,
+                $minimum,
+                $minimum,
+                'Leave',
+                $this->appendNote($pendingDetails, $note),
+            ];
         }
 
         if ($pendingLeaves->isNotEmpty()) {

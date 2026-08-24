@@ -573,7 +573,7 @@
           </span>
 
           <div class="inst-actions" *ngIf="inst.status==='pending'||inst.status==='overdue'">
-            <button class="inst-btn pay-btn" matTooltip="Mark as Paid" (click)="openPayInst(inst)">
+            <button class="inst-btn pay-btn" *ngIf="canMarkInstallmentPaid" matTooltip="Mark as Paid" (click)="openPayInst(inst)">
               <mat-icon>check_circle</mat-icon>
             </button>
             <button class="inst-btn skip-btn" matTooltip="Skip this month" (click)="openSkipInst(inst)">
