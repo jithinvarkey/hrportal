@@ -29,6 +29,7 @@ class SeparationWorkflowMail extends Mailable
         $subject = match ($this->event) {
             'submitted' => "New Separation Request - {$this->separation->reference}",
             'manager_approved' => "Separation Awaiting HR Approval - {$this->separation->reference}",
+            'hr_approved' => "Separation Awaiting Manager Approval - {$this->separation->reference}",
             'offboarding_tasks' => "Offboarding Tasks Assigned - {$this->separation->reference}",
             'department_tasks_completed' => "Offboarding Tasks Completed - {$this->separation->reference}",
             default => "Separation Update - {$this->separation->reference}",

@@ -11,6 +11,7 @@
   <tr><td style="background:#2563eb;padding:13px 32px;color:#fff;font-size:14px;font-weight:bold;text-transform:uppercase">
     @if($event === 'submitted') New Separation Request
     @elseif($event === 'manager_approved') Manager Approval Completed
+    @elseif($event === 'hr_approved') HR Approval Completed
     @elseif($event === 'offboarding_tasks') Offboarding Tasks Assigned
     @else Department Offboarding Tasks Completed
     @endif
@@ -21,6 +22,8 @@
       <p style="font-size:14px;line-height:1.6">A new separation request has been submitted and requires review.</p>
     @elseif($event === 'manager_approved')
       <p style="font-size:14px;line-height:1.6">The direct manager has approved this separation request. HR approval is now required.</p>
+    @elseif($event === 'hr_approved')
+      <p style="font-size:14px;line-height:1.6">HR has approved this resignation request. Direct manager approval is now required.</p>
     @elseif($event === 'offboarding_tasks')
       <p style="font-size:14px;line-height:1.6">Offboarding has started. Please complete the following <strong>{{ ucfirst($taskCategory ?? '') }}</strong> tasks:</p>
     @else
