@@ -29,6 +29,7 @@ export class SeparationListComponent implements OnInit {
   isFinanceManager = false;
   isDeptManager = false;
   isSuperAdmin = false;
+  isCEO = false;
   isApprover = false;
   currentEmployeeId: any = null;
 
@@ -127,11 +128,12 @@ export class SeparationListComponent implements OnInit {
     const user = this.auth.getUser();
     this.currentEmployeeId = user?.employee?.id || user?.employee_id || null;
     this.isHR = this.auth.isHRRole() || this.auth.isSuperAdmin();
-    this.isHRManager = this.auth.isHRManager() || this.auth.isSuperAdmin() || this.auth.hasRole('ceo');
+    this.isHRManager = this.auth.isHRManager() || this.auth.isSuperAdmin();
     this.isFinanceManager = this.auth.isFinanceManager();
     this.isDeptManager = this.auth.isDeptManager();
-    this.isSuperAdmin = this.auth.isSuperAdmin() || this.auth.hasRole('ceo');
-    this.isApprover = this.isDeptManager || this.isHRManager || this.isFinanceManager || this.isSuperAdmin;
+    this.isSuperAdmin = this.auth.isSuperAdmin();
+    this.isCEO = this.auth.hasRole('ceo');
+    this.isApprover = this.isDeptManager || this.isHRManager || this.isFinanceManager || this.isSuperAdmin || this.isCEO;
     this.tabs = this.isApprover
       ? this.allTabs.filter(t => t.id !== 'templates' || this.canManageOffboarding())
       : this.allTabs.filter(t => t.id === 'all');
@@ -428,10 +430,10 @@ export class SeparationListComponent implements OnInit {
   canApprove(sep: any): boolean {
     if (!sep) return false;
     if (sep.status === 'pending_manager') {
-      return this.isDirectManager(sep) || this.isSuperAdmin;
+      return this.isDirectManager(sep) || this.isHRManager || this.isSuperAdmin;
     }
     if (sep.status === 'pending_hr') {
-      return sep.type === 'termination'
+      return sep.type === 'termination' || sep.type === 'resignation'
         ? this.isHRManager || this.isSuperAdmin
         : this.isHRManager || this.isFinanceManager || this.isSuperAdmin;
     }
@@ -456,10 +458,10 @@ export class SeparationListComponent implements OnInit {
   canReject(sep: any): boolean {
     if (!sep) return false;
     if (sep.status === 'pending_manager') {
-      return this.isDirectManager(sep) || this.isSuperAdmin;
+      return this.isDirectManager(sep) || this.isHRManager || this.isSuperAdmin;
     }
     if (sep.status === 'pending_hr') {
-      return sep.type === 'termination'
+      return sep.type === 'termination' || sep.type === 'resignation'
         ? this.isHRManager || this.isSuperAdmin
         : this.isHRManager || this.isFinanceManager || this.isSuperAdmin;
     }
@@ -467,7 +469,7 @@ export class SeparationListComponent implements OnInit {
   }
 
   canManageOffboarding(): boolean {
-    return this.isHRManager || this.isFinanceManager || this.isSuperAdmin;
+    return this.isHRManager || this.isFinanceManager || this.isSuperAdmin || this.isCEO;
   }
 
   canCompleteSeparation(): boolean {
@@ -591,17 +593,27 @@ export class SeparationListComponent implements OnInit {
 
   approvalSteps(sep: any): any[] {
     const isTermination = sep.type === 'termination' || sep.type === 'abandonment';
+    const hrFirst = sep.type === 'resignation'
+      && (sep.hr_approved_at || (sep.status === 'pending_hr' && !sep.manager_approved_at));
     const steps = [
       { label:'Request', done: true, active: false, by: sep.initiated_by?.name, date: sep.created_at },
     ];
-    if (!isTermination) {
+    if (hrFirst) {
+      steps.push(
+        { label:'HR', done: !!sep.hr_approved_at, active: sep.status === 'pending_hr', by: sep.hr_approver?.name, date: sep.hr_approved_at },
+        { label:'Manager', done: !!sep.manager_approved_at, active: sep.status === 'pending_manager', by: sep.manager_approver?.name, date: sep.manager_approved_at }
+      );
+    }
+    if (!isTermination && !hrFirst) {
       steps.push({
         label:'Manager', done: !!sep.manager_approved_at, active: sep.status === 'pending_manager',
         by: sep.manager_approver?.name, date: sep.manager_approved_at
       });
     }
+    if (!hrFirst) {
+      steps.push({ label:'HR', done: !!sep.hr_approved_at, active: sep.status === 'pending_hr', by: sep.hr_approver?.name, date: sep.hr_approved_at });
+    }
     steps.push(
-      { label:'HR', done: !!sep.hr_approved_at, active: sep.status === 'pending_hr', by: sep.hr_approver?.name, date: sep.hr_approved_at },
       { label:'Offboarding', done: sep.status === 'offboarding' || sep.status === 'completed', active: sep.status === 'approved', by: '', date: null },
       { label:'Completed', done: sep.status === 'completed', active: false, by: '', date: null }
     );

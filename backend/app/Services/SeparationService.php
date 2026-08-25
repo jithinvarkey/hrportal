@@ -5,6 +5,7 @@ use App\Models\Separation;
 use App\Models\OffboardingTemplate;
 use App\Models\OffboardingItem;
 use App\Models\Employee;
+use App\Models\Contract;
 use App\Models\Department;
 use App\Models\User;
 use App\Mail\SeparationWorkflowMail;
@@ -18,14 +19,16 @@ class SeparationService
     {
         $sep->loadMissing('employee.manager.user');
         $recipients = [];
-        $manager = $sep->employee?->manager;
-        if ($manager?->user?->email || $manager?->email) {
-            $email = $manager->user?->email ?: $manager->email;
-            $recipients[strtolower($email)] = ['email' => $email, 'name' => $manager->full_name];
-        }
-
-        foreach (User::role('hr_manager')->whereNotNull('email')->get() as $user) {
-            $recipients[strtolower($user->email)] = ['email' => $user->email, 'name' => $user->name];
+        if ($sep->status === 'pending_hr') {
+            foreach (User::role('hr_manager')->whereNotNull('email')->get() as $user) {
+                $recipients[strtolower($user->email)] = ['email' => $user->email, 'name' => $user->name];
+            }
+        } else {
+            $manager = $sep->employee?->manager;
+            if ($manager?->user?->email || $manager?->email) {
+                $email = $manager->user?->email ?: $manager->email;
+                $recipients[strtolower($email)] = ['email' => $email, 'name' => $manager->full_name];
+            }
         }
 
         $this->queueRecipients($sep, 'submitted', $recipients);
@@ -37,6 +40,53 @@ class SeparationService
             ->mapWithKeys(fn ($user) => [strtolower($user->email) => ['email' => $user->email, 'name' => $user->name]])
             ->all();
         $this->queueRecipients($sep, 'manager_approved', $recipients);
+    }
+
+    public function notifyHrApproved(Separation $sep): void
+    {
+        $sep->loadMissing('employee.manager.user');
+        $manager = $sep->employee?->manager;
+        $email = $manager?->user?->email ?: $manager?->email;
+        $recipients = $email
+            ? [strtolower($email) => ['email' => $email, 'name' => $manager->full_name]]
+            : [];
+        $this->queueRecipients($sep, 'hr_approved', $recipients);
+    }
+
+    /**
+     * Saudi employees always follow Manager -> HR. A non-Saudi employee on a
+     * fixed-term contract is compliant when either the selected last working
+     * day or the end of the 60-day notice period reaches the contract end.
+     * Unlimited contracts still require the full 60-day notice period.
+     */
+    public function resignationRequiresHrFirst(Employee $employee, Carbon $lastWorkingDay, Carbon $requestDate): bool
+    {
+        $nationality = strtolower(trim((string) $employee->nationality));
+        $isSaudi = in_array($nationality, ['saudi', 'saudi arabian', 'saudi arabia'], true);
+        if ($isSaudi) return false;
+
+        $requestDate = $requestDate->copy()->startOfDay();
+        $lastWorkingDay = $lastWorkingDay->copy()->startOfDay();
+        $noticeEndDate = $requestDate->copy()->addDays(60);
+        $noticeCompliant = $requestDate->diffInDays($lastWorkingDay) >= 60;
+        $contract = Contract::query()
+            ->where('employee_id', $employee->id)
+            ->where('status', 'active')
+            ->whereDate('start_date', '<=', $requestDate->toDateString())
+            ->orderByDesc('start_date')
+            ->first();
+
+        // Missing active contracts go to HR for review. For a fixed contract,
+        // either reaching its end with the chosen date or with the statutory
+        // notice end is enough. Unlimited contracts have no end date to meet.
+        if ($contract === null) return true;
+        if ($contract->end_date === null) return !$noticeCompliant;
+
+        $contractEndDate = $contract->end_date->copy()->startOfDay();
+        $meetsContract = !$lastWorkingDay->lt($contractEndDate)
+            || !$noticeEndDate->lt($contractEndDate);
+
+        return !$meetsContract;
     }
 
     public function notifyOffboardingDepartments(Separation $sep): void

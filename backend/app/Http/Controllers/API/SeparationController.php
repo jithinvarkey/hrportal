@@ -106,12 +106,18 @@ class SeparationController extends Controller
         $lwDay   = Carbon::parse($request->last_working_day);
         $today   = now()->startOfDay();
         $noticeDays = (int)$lwDay->diffInDays($today);
+        $status = in_array($type, ['termination','abandonment'])
+            ? 'pending_hr'
+            : 'pending_manager';
+        if ($type === 'resignation' && $this->service->resignationRequiresHrFirst($emp, $lwDay, $today)) {
+            $status = 'pending_hr';
+        }
 
         $sep = Separation::create([
             'reference'          => $this->service->generateReference(),
             'employee_id'        => $employeeId,
             'type'               => $type,
-            'status'             => in_array($type, ['termination','abandonment']) ? 'pending_hr' : 'pending_manager',
+            'status'             => $status,
             'request_date'       => now()->toDateString(),
             'last_working_day'   => $request->last_working_day,
             'notice_period_start'=> now()->toDateString(),
@@ -147,6 +153,18 @@ class SeparationController extends Controller
         if (!$this->canCreateAnySeparation(auth()->user())) {
             unset($payload['hr_notes'], $payload['exit_interview_required']);
         }
+        if (array_key_exists('last_working_day', $payload)) {
+            if ($sep->manager_approved_at || $sep->hr_approved_at) {
+                return response()->json(['message' => 'The last working day cannot be changed after approval has started.'], 422);
+            }
+            $lastWorkingDay = Carbon::parse($payload['last_working_day']);
+            $payload['notice_period_days'] = (int) $lastWorkingDay->diffInDays(now()->startOfDay());
+            if ($sep->type === 'resignation') {
+                $payload['status'] = $this->service->resignationRequiresHrFirst($sep->employee, $lastWorkingDay, now()->startOfDay())
+                    ? 'pending_hr'
+                    : 'pending_manager';
+            }
+        }
         $sep->update($payload);
         return response()->json(['separation' => $sep->fresh()]);
     }
@@ -160,23 +178,30 @@ class SeparationController extends Controller
         switch ($sep->status) {
             case 'pending_manager':
                 if (!$this->canApproveManagerStage($sep, $user)) {
-                    return response()->json(['message' => 'Only the employee direct manager can approve this stage.'], 403);
+                    return response()->json(['message' => 'Only the employee direct manager, HR Manager, or Super Admin can approve this stage.'], 403);
                 }
+                $hrAlreadyApproved = $sep->hr_approved_at !== null;
                 $sep->update([
-                    'status'              => 'pending_hr',
+                    'status'              => $hrAlreadyApproved ? 'approved' : 'pending_hr',
                     'manager_approved_by' => $user->id,
                     'manager_approved_at' => now(),
                 ]);
-                $this->service->notifyManagerApproved($sep);
+                if (!$hrAlreadyApproved) {
+                    $this->service->notifyManagerApproved($sep);
+                }
                 break;
 
             case 'pending_hr':
                 if (!$this->canApproveHrStage($user, $sep)) {
                     return response()->json(['message' => $sep->type === 'termination'
-                        ? 'Only HR Manager or CEO can approve a termination.'
-                        : 'Only HR Manager, Finance Manager, or CEO can approve this stage.'], 403);
+                        ? 'Only HR Manager or Super Admin can approve a termination.'
+                        : ($sep->type === 'resignation'
+                            ? 'Only HR Manager or Super Admin can approve this stage.'
+                            : 'Only HR Manager, Finance Manager, or Super Admin can approve this stage.')], 403);
                 }
-                // Calculate settlement
+                $managerAlreadyApproved = $sep->manager_approved_at !== null;
+                // Calculate settlement at HR approval, regardless of whether HR
+                // is the first or second approver.
                 $gratuity  = $this->service->calculateGratuity($sep->employee, $sep->type, $sep->last_working_day);
                 $encash    = $this->service->calculateLeaveEncashment($sep->employee);
                 $additions = (float)($request->other_additions ?? 0);
@@ -184,7 +209,7 @@ class SeparationController extends Controller
                 $settlement= max(0, $gratuity + $encash + $additions - $deductions);
 
                 $sep->update([
-                    'status'              => 'approved',
+                    'status'              => $managerAlreadyApproved ? 'approved' : 'pending_manager',
                     'hr_approved_by'      => $user->id,
                     'hr_approved_at'      => now(),
                     'gratuity_amount'     => $gratuity,
@@ -194,6 +219,9 @@ class SeparationController extends Controller
                     'final_settlement_amount' => $settlement,
                     'hr_notes'            => $request->hr_notes ?? $sep->hr_notes,
                 ]);
+                if (!$managerAlreadyApproved) {
+                    $this->service->notifyHrApproved($sep);
+                }
                 break;
 
             case 'approved':
@@ -458,17 +486,17 @@ class SeparationController extends Controller
 
     private function canApproveManagerStage(Separation $sep, $user): bool
     {
-        if ($user?->hasAnyRole(['super_admin', 'ceo'])) return true;
+        if ($user?->hasAnyRole(['super_admin', 'hr_manager'])) return true;
         return $user?->hasRole('department_manager')
             && (int) $sep->employee?->manager_id === (int) $user?->employee?->id;
     }
 
     private function canApproveHrStage($user, ?Separation $sep = null): bool
     {
-        if ($sep?->type === 'termination') {
-            return $user?->hasAnyRole(['super_admin', 'ceo', 'hr_manager']);
+        if (in_array($sep?->type, ['termination', 'resignation'], true)) {
+            return $user?->hasAnyRole(['super_admin', 'hr_manager']);
         }
-        return $user?->hasAnyRole(['super_admin', 'ceo', 'hr_manager', 'finance_manager']);
+        return $user?->hasAnyRole(['super_admin', 'hr_manager', 'finance_manager']);
     }
 
     private function canCancelApprovedSeparation(Separation $sep, $user): bool
