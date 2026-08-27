@@ -75,6 +75,11 @@
           <input class="field-input" formControlName="phone" placeholder="+966 5X XXX XXXX">
         </div>
 
+        <div class="field-group" *ngIf="isEdit && canManageExtension">
+          <label class="field-label">Telephone Extension</label>
+          <input class="field-input" formControlName="extension" maxlength="10" placeholder="e.g. 1234">
+        </div>
+
         <div class="field-group">
           <label class="field-label">Date of Birth</label>
           <input class="field-input" formControlName="dob" type="date">

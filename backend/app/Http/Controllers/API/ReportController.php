@@ -40,6 +40,7 @@ class ReportController extends Controller
                 'status'      => $e->status,
                 'email'       => $e->email,
                 'phone'       => $e->phone ?? '—',
+                'extension'   => $e->extension ?? '—',
                 'salary'      => number_format($e->salary ?? 0, 2),
             ]);
 
@@ -256,7 +257,7 @@ class ReportController extends Controller
     private function humanHeaders(string $type): array
     {
         return match ($type) {
-            'employees'      => ['Code','Name','Department','Designation','Hire Date','Nationality','Status','Email','Phone','Basic Salary (SAR)'],
+            'employees'      => ['Code','Name','Department','Designation','Hire Date','Nationality','Status','Email','Phone','Extension','Basic Salary (SAR)'],
             'payroll'        => ['Code','Name','Department','Basic','Housing Allow.','Transport Allow.','Other Earnings','Gross','GOSI Employee','Other Deductions','Total Deductions','Net Salary','Working Days','Absent Days'],
             'leave-balance'  => ['Code','Name','Department','Leave Type','Entitlement','Used','Pending','Remaining','Year'],
             'leave-requests' => ['Code','Name','Department','Leave Type','From','To','Days','Status','Reason','Approved By'],

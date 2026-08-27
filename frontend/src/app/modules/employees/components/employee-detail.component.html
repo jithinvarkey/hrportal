@@ -93,6 +93,7 @@
           <div class="info-row"><span class="ir-label">Full Name</span>   <span class="ir-val">{{ employee.full_name }}</span></div>
           <div class="info-row"><span class="ir-label">Email</span>       <span class="ir-val">{{ employee.email }}</span></div>
           <div class="info-row"><span class="ir-label">Phone</span>       <span class="ir-val">{{ displayText(employee.phone) }}</span></div>
+          <div class="info-row"><span class="ir-label">Extension</span>   <span class="ir-val">{{ displayText(employee.extension) }}</span></div>
           <div class="info-row"><span class="ir-label">Date of Birth</span><span class="ir-val">{{ employee.dob ? (employee.dob | date:'dd MMM yyyy') : '-' }}</span></div>
           <div class="info-row"><span class="ir-label">Gender</span>      <span class="ir-val">{{ displayLabel(employee.gender) | titlecase }}</span></div>
           <div class="info-row"><span class="ir-label">Marital Status</span><span class="ir-val">{{ displayLabel(employee.marital_status) | titlecase }}</span></div>

@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
+import { AuthService } from '../../../core/services/auth.service';
 
 @Component({
   standalone: false,
@@ -33,8 +34,13 @@ export class EmployeeFormComponent implements OnInit {
     private fb: FormBuilder,
     private http: HttpClient,
     private router: Router,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private auth: AuthService
   ) {}
+
+  get canManageExtension(): boolean {
+    return this.auth.hasAnyRole(['super_admin', 'hr_manager']);
+  }
 
   ngOnInit() {
     this.buildForm();
@@ -272,6 +278,7 @@ export class EmployeeFormComponent implements OnInit {
 
   buildPayload(): any {
     const payload = { ...this.form.getRawValue() };
+    if (!this.canManageExtension) delete payload.extension;
     ['dob', 'hire_date', 'confirmation_date', 'termination_date'].forEach(field => {
       payload[field] = this.toDateInput(payload[field]) || null;
     });
