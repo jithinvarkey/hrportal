@@ -81,12 +81,25 @@
 .drawer-hdr-left{display:flex;align-items:center;gap:12px;min-width:0;}
 .drawer-name{font-size:14px;font-weight:700;color:var(--text);}
 .drawer-sub{font-size:11px;color:var(--text3);margin-top:2px;}
+.detail-top-tabs{display:flex;align-items:stretch;gap:3px;padding:7px 10px;border-bottom:1px solid var(--border);
+  background:var(--surface2);overflow-x:auto;flex-shrink:0;
+  button{display:flex;align-items:center;justify-content:center;gap:4px;min-width:0;flex:1;border:0;border-radius:7px;
+    background:transparent;color:var(--text3);padding:7px 6px;font-size:10px;font-weight:700;white-space:nowrap;cursor:pointer;
+    mat-icon{font-size:15px!important;width:15px!important;height:15px!important;}
+    b{font-size:9px;line-height:16px;min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:var(--border2);}
+    &.active{background:var(--surface);color:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.12);}
+    &.needs-attention{color:#b45309;background:rgba(245,158,11,.14);box-shadow:inset 0 0 0 1px rgba(245,158,11,.45);
+      animation:taskAttention 1.8s ease-in-out infinite;
+      mat-icon{color:#f59e0b;}
+      .task-count{background:#ef4444;color:#fff;box-shadow:0 0 0 3px rgba(239,68,68,.13);}}}}
 .drawer-body{flex:1;min-height:0;overflow-y:scroll;scrollbar-gutter:stable;padding:16px;display:flex;flex-direction:column;gap:14px;
   overscroll-behavior:contain;
   &::-webkit-scrollbar{width:9px;}
   &::-webkit-scrollbar-track{background:var(--surface2);border-radius:8px;}
   &::-webkit-scrollbar-thumb{background:var(--border2);border-radius:8px;border:2px solid var(--surface2);}
   &::-webkit-scrollbar-thumb:hover{background:var(--text3);}}
+.drawer-body.show-overview>.clearance-card{display:none;}
+.drawer-body.show-clearance>:not(.clearance-card){display:none;}
 .drawer-footer{padding:14px 18px;border-top:1px solid var(--border);display:flex;gap:8px;
   justify-content:flex-end;flex-shrink:0;flex-wrap:wrap;}
 
@@ -128,6 +141,38 @@
 .at-sub{font-size:10px;color:var(--text3);}
 .at-date{font-size:10px;color:var(--text3);font-family:'IBM Plex Mono',monospace;}
 
+/* IT / Finance resignation clearance */
+.clearance-card{background:var(--surface2);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.clearance-tabs{display:flex;border-bottom:1px solid var(--border);padding:6px;gap:5px;
+  button{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:8px;
+    background:transparent;color:var(--text3);padding:8px;font-size:11px;font-weight:700;cursor:pointer;
+    mat-icon{font-size:16px!important;width:16px!important;height:16px!important;}
+    span{min-width:19px;padding:1px 5px;border-radius:10px;background:var(--border2);font-size:10px;}
+    &.active{background:var(--surface);color:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.12);}}}
+.clearance-panel{padding:12px;}
+.clearance-heading{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:8px;}
+.clearance-list{display:flex;flex-direction:column;gap:7px;}
+.clearance-row{display:flex;align-items:center;gap:9px;padding:9px;border:1px solid var(--border);border-radius:9px;background:var(--surface);}
+.clearance-icon{color:var(--accent);font-size:19px!important;width:19px!important;height:19px!important;flex-shrink:0;}
+.clearance-main{display:flex;flex:1;min-width:0;flex-direction:column;gap:2px;
+  strong{font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  small{font-size:10px;color:var(--text3);}}
+.clearance-meta,.loan-balance{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right;
+  span{font-size:10px;font-weight:700;color:var(--success);}
+  small{font-size:9px;color:var(--text3);}
+  strong{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--danger);}}
+.asset-return-status{display:inline-flex!important;align-items:center;gap:3px;padding:2px 6px;border-radius:6px;
+  font-size:10px!important;font-weight:800!important;white-space:nowrap;
+  mat-icon{font-size:12px!important;width:12px!important;height:12px!important;}
+  &.returned{color:#059669!important;background:rgba(16,185,129,.12);}
+  &.not-returned{color:#dc2626!important;background:rgba(239,68,68,.12);}}
+.clearance-loan{border:1px solid var(--border);border-radius:9px;overflow:hidden;
+  .clearance-row{border:0;border-radius:0;}}
+.due-list{padding:5px 9px 8px;background:var(--surface);border-top:1px solid var(--border);
+  div{display:flex;justify-content:space-between;gap:8px;padding:4px 0;font-size:10px;color:var(--text3);}
+  strong{font-family:'IBM Plex Mono',monospace;color:var(--text2);}}
+.clearance-empty{padding:18px 8px;text-align:center;font-size:11px;color:var(--text3);}
+
 /* Settlement card */
 .settlement-card{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;}
 .sc-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px;
@@ -152,6 +197,7 @@
 /* Checklist */
 .checklist-section{background:var(--surface2);border:1px solid var(--border);border-radius:12px;overflow:hidden;
   flex:0 0 auto;margin:0 16px 14px;max-height:42vh;display:flex;flex-direction:column;}
+.checklist-section.checklist-tab-view{flex:1;min-height:0;max-height:none;margin:14px 16px;}
 .cl-header{display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid var(--border);}
 .cl-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--text);
   mat-icon{font-size:17px!important;width:17px!important;height:17px!important;color:var(--accent);}}
@@ -258,3 +304,5 @@
 @keyframes slideUp{from{opacity:0;transform:translate(-50%,-48%)}to{opacity:1;transform:translate(-50%,-50%)}}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.4)}50%{box-shadow:0 0 0 6px rgba(245,158,11,0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes taskAttention{0%,100%{box-shadow:inset 0 0 0 1px rgba(245,158,11,.4),0 0 0 0 rgba(245,158,11,.25)}50%{box-shadow:inset 0 0 0 1px rgba(245,158,11,.8),0 0 0 5px rgba(245,158,11,0)}}
+@media (prefers-reduced-motion:reduce){.detail-top-tabs button.needs-attention{animation:none;}}

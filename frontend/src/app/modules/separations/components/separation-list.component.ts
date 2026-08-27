@@ -46,6 +46,7 @@ export class SeparationListComponent implements OnInit {
   showComplete     = false;
   showTemplateForm = false;
   selectedSep: any = null;
+  detailTab: 'overview' | 'it' | 'finance' | 'tasks' = 'overview';
   rejectTarget:any = null;
   rejectReason     = '';
   checklistError   = '';
@@ -207,14 +208,29 @@ export class SeparationListComponent implements OnInit {
   viewSep(sep: any) {
     this.http.get<any>(`/api/v1/separations/${sep.id}`).subscribe({ next: r => {
       this.selectedSep = r.separation;
+      this.ensureAvailableDetailTab();
       this.showDetail  = true;
     }});
   }
 
   reloadDetail() {
     if (this.selectedSep) {
-      this.http.get<any>(`/api/v1/separations/${this.selectedSep.id}`).subscribe({ next: r => this.selectedSep = r.separation });
+      this.http.get<any>(`/api/v1/separations/${this.selectedSep.id}`).subscribe({ next: r => {
+        this.selectedSep = r.separation;
+        this.ensureAvailableDetailTab();
+      }});
     }
+  }
+
+  private ensureAvailableDetailTab(): void {
+    if (this.detailTab === 'it' && !this.selectedSep?.clearance_access?.it) this.detailTab = 'overview';
+    if (this.detailTab === 'finance' && !this.selectedSep?.clearance_access?.finance) this.detailTab = 'overview';
+    if (this.detailTab === 'tasks' && !this.canViewOffboardingTasks(this.selectedSep)) this.detailTab = 'overview';
+  }
+
+  hasClearanceTabs(sep: any): boolean {
+    return sep?.type === 'resignation'
+      && (sep?.clearance_access?.it || sep?.clearance_access?.finance);
   }
 
   // ── New separation ──────────────────────────────────────────────────────
@@ -327,6 +343,10 @@ export class SeparationListComponent implements OnInit {
     if (!sep?.checklist_items?.length) return 0;
     const done = sep.checklist_items.filter((i: any) => ['completed','skipped','na'].includes(i.status)).length;
     return Math.round((done / sep.checklist_items.length) * 100);
+  }
+
+  pendingChecklistCount(sep: any): number {
+    return sep?.checklist_items?.filter((item: any) => item.status === 'pending').length || 0;
   }
 
   checklistByCategory(items: any[]): any[] {

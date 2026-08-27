@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Mail\ApplicantRejectedMail;
 use App\Mail\LoanInstallmentSkippedMail;
+use App\Mail\RecruitmentCreatedNotificationMail;
 use App\Models\Employee;
 use App\Models\JobApplication;
 use App\Models\JobPosting;
@@ -191,6 +192,42 @@ class PerformanceRecruitmentLoanApiTest extends TestCase
     }
 
     /** @test */
+    public function job_created_by_non_hr_manager_notifies_hr_manager(): void
+    {
+        Mail::fake();
+        $hrStaff = User::factory()->create();
+        $hrStaff->assignRole('hr_staff');
+
+        $this->actingAs($hrStaff, 'sanctum')
+            ->postJson('/api/v1/recruitment/jobs', [
+                'title' => 'Payroll Specialist',
+                'employment_type' => 'full_time',
+            ])
+            ->assertCreated();
+
+        Mail::assertSent(RecruitmentCreatedNotificationMail::class, fn ($mail) =>
+            $mail->type === 'job'
+            && $mail->hasTo($this->hrManager->email)
+            && $mail->record->title === 'Payroll Specialist'
+        );
+    }
+
+    /** @test */
+    public function job_created_by_hr_manager_does_not_send_notification(): void
+    {
+        Mail::fake();
+
+        $this->actingAs($this->hrManager, 'sanctum')
+            ->postJson('/api/v1/recruitment/jobs', [
+                'title' => 'HR Coordinator',
+                'employment_type' => 'full_time',
+            ])
+            ->assertCreated();
+
+        Mail::assertNotSent(RecruitmentCreatedNotificationMail::class);
+    }
+
+    /** @test */
     public function public_can_view_open_jobs(): void
     {
         JobPosting::factory()->create(['status' => 'open']);
@@ -214,6 +251,42 @@ class PerformanceRecruitmentLoanApiTest extends TestCase
         ])
         ->assertCreated()
         ->assertJson(['application' => ['job_posting_id' => $job->id]]);
+    }
+
+    /** @test */
+    public function public_application_notifies_hr_manager(): void
+    {
+        Mail::fake();
+        $job = JobPosting::factory()->create(['status' => 'open', 'title' => 'Accountant']);
+
+        $this->postJson("/api/v1/jobs/{$job->id}/apply", [
+            'applicant_name' => 'Sara Ahmed',
+            'applicant_email' => 'sara@example.com',
+            'applicant_phone' => '+966500000001',
+        ])->assertCreated();
+
+        Mail::assertSent(RecruitmentCreatedNotificationMail::class, fn ($mail) =>
+            $mail->type === 'application'
+            && $mail->hasTo($this->hrManager->email)
+            && $mail->record->applicant_email === 'sara@example.com'
+        );
+    }
+
+    /** @test */
+    public function application_added_by_hr_manager_does_not_send_notification(): void
+    {
+        Mail::fake();
+        $job = JobPosting::factory()->create(['status' => 'open']);
+
+        $this->actingAs($this->hrManager, 'sanctum')
+            ->postJson("/api/v1/recruitment/apply/{$job->id}", [
+                'applicant_name' => 'Internal Candidate',
+                'applicant_email' => 'internal@example.com',
+                'applicant_phone' => '+966500000002',
+            ])
+            ->assertCreated();
+
+        Mail::assertNotSent(RecruitmentCreatedNotificationMail::class);
     }
 
     /** @test */

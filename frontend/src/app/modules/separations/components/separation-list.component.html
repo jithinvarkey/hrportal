@@ -228,7 +228,32 @@
       <button class="row-btn" (click)="showDetail=false"><mat-icon>close</mat-icon></button>
     </div>
 
-    <div class="drawer-body">
+    <div class="detail-top-tabs">
+      <button type="button" [class.active]="detailTab==='overview'" (click)="detailTab='overview'">
+        <mat-icon>description</mat-icon><span>Overview</span>
+      </button>
+      <button type="button" *ngIf="selectedSep.clearance_access?.it"
+              [class.active]="detailTab==='it'" (click)="detailTab='it'">
+        <mat-icon>devices</mat-icon><span>IT Assets</span><b>{{ selectedSep.it_assets?.length || 0 }}</b>
+      </button>
+      <button type="button" *ngIf="selectedSep.clearance_access?.finance"
+              [class.active]="detailTab==='finance'" (click)="detailTab='finance'">
+        <mat-icon>account_balance_wallet</mat-icon><span>Finance Due</span><b>{{ selectedSep.finance_loans?.length || 0 }}</b>
+      </button>
+      <button type="button" *ngIf="canViewOffboardingTasks(selectedSep)"
+              [class.active]="detailTab==='tasks'"
+              [class.needs-attention]="pendingChecklistCount(selectedSep)>0 && detailTab!=='tasks'"
+              [attr.aria-label]="pendingChecklistCount(selectedSep) + ' pending offboarding tasks'"
+              (click)="detailTab='tasks'">
+        <mat-icon>{{ pendingChecklistCount(selectedSep)>0 ? 'notification_important' : 'task_alt' }}</mat-icon>
+        <span>Tasks</span>
+        <b *ngIf="pendingChecklistCount(selectedSep)>0" class="task-count">{{ pendingChecklistCount(selectedSep) }}</b>
+      </button>
+    </div>
+
+    <div class="drawer-body" *ngIf="detailTab!=='tasks'"
+         [class.show-overview]="detailTab==='overview'"
+         [class.show-clearance]="detailTab==='it'||detailTab==='finance'">
       <!-- Status hero -->
       <div class="status-hero" [ngClass]="'sh-'+selectedSep.status">
         <div class="sh-left">
@@ -304,6 +329,58 @@
         </div>
       </div>
 
+      <!-- Department clearance: API returns only the tabs/data authorized for this user. -->
+      <div class="clearance-card" *ngIf="hasClearanceTabs(selectedSep)">
+        <div class="clearance-panel" *ngIf="detailTab==='it' && selectedSep.clearance_access?.it">
+          <div class="clearance-heading">Assets assigned to this employee</div>
+          <div class="clearance-list" *ngIf="selectedSep.it_assets?.length; else noAssignedAssets">
+            <div class="clearance-row" *ngFor="let asset of selectedSep.it_assets">
+              <mat-icon class="clearance-icon">devices_other</mat-icon>
+              <div class="clearance-main">
+                <strong>{{ asset.name }}</strong>
+                <small>{{ asset.asset_code }}<ng-container *ngIf="asset.category?.name"> · {{ asset.category.name }}</ng-container></small>
+                <small *ngIf="asset.brand || asset.model">{{ asset.brand }} {{ asset.model }}</small>
+              </div>
+              <div class="clearance-meta">
+                <span class="asset-return-status" [class.returned]="asset.returned" [class.not-returned]="!asset.returned">
+                  <mat-icon>{{ asset.returned ? 'check_circle' : 'error' }}</mat-icon>
+                  {{ asset.returned ? 'Returned' : 'Not Returned' }}
+                </span>
+                <small *ngIf="asset.returned && asset.return_date">{{ asset.return_date | date:'dd MMM yyyy' }}</small>
+                <small *ngIf="asset.serial_number">S/N {{ asset.serial_number }}</small>
+              </div>
+            </div>
+          </div>
+          <ng-template #noAssignedAssets><div class="clearance-empty">No IT assets are assigned to this employee.</div></ng-template>
+        </div>
+
+        <div class="clearance-panel" *ngIf="detailTab==='finance' && selectedSep.clearance_access?.finance">
+          <div class="clearance-heading">Outstanding employee loans</div>
+          <div class="clearance-list" *ngIf="selectedSep.finance_loans?.length; else noOutstandingLoans">
+            <div class="clearance-loan" *ngFor="let loan of selectedSep.finance_loans">
+              <div class="clearance-row">
+                <mat-icon class="clearance-icon">payments</mat-icon>
+                <div class="clearance-main">
+                  <strong>{{ loan.loan_type?.name || 'Employee Loan' }}</strong>
+                  <small>{{ loan.reference }}</small>
+                </div>
+                <div class="loan-balance">
+                  <small>Balance Due</small>
+                  <strong>SAR {{ loan.balance_remaining | number:'1.2-2' }}</strong>
+                </div>
+              </div>
+              <div class="due-list" *ngIf="loan.installments?.length">
+                <div *ngFor="let due of loan.installments">
+                  <span>Installment {{ due.installment_no }} · {{ due.due_date | date:'dd MMM yyyy' }}</span>
+                  <strong>SAR {{ (due.amount - due.paid_amount) | number:'1.2-2' }}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+          <ng-template #noOutstandingLoans><div class="clearance-empty">No outstanding loan balance for this employee.</div></ng-template>
+        </div>
+      </div>
+
       <!-- Final Settlement -->
       <div class="settlement-card" *ngIf="canManageOffboarding() && (selectedSep.status==='approved'||selectedSep.status==='offboarding'||selectedSep.status==='completed')">
         <div class="sc-title">
@@ -356,7 +433,7 @@
     </div>
 
       <!-- Offboarding Checklist: independent scroll area below the detail content -->
-      <div class="checklist-section" *ngIf="canViewOffboardingTasks(selectedSep)">
+      <div class="checklist-section checklist-tab-view" *ngIf="detailTab==='tasks' && canViewOffboardingTasks(selectedSep)">
         <div class="cl-header">
           <div class="cl-title"><mat-icon>checklist</mat-icon> Offboarding Checklist</div>
           <div class="cl-progress">
