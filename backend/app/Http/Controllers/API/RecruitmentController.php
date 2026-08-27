@@ -74,6 +74,9 @@ class RecruitmentController extends Controller {
             'created_by' => auth()->id(),
             'status'     => $request->status ?? 'open',
         ]));
+        if (!$request->user()?->hasRole('hr_manager')) {
+            $this->service->notifyHrManagersOfNewJob($job);
+        }
         return response()->json(['job' => $job->load('department','designation')], 201);
     }
 
@@ -136,6 +139,10 @@ class RecruitmentController extends Controller {
                 'stage'          => $request->stage ?? 'applied',
             ]
         ));
+
+        if (!$request->user()?->hasRole('hr_manager')) {
+            $this->service->notifyHrManagersOfNewApplication($application, $request->user());
+        }
 
         return response()->json(['message' => 'Application submitted', 'application' => $application->load('jobPosting')], 201);
     }

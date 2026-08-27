@@ -4,7 +4,9 @@ namespace App\Services;
 use App\Mail\ApplicantRejectedMail;
 use App\Mail\InterviewInviteMail;
 use App\Mail\RecruitmentOfferMail;
+use App\Mail\RecruitmentCreatedNotificationMail;
 use App\Models\JobApplication;
+use App\Models\JobPosting;
 use App\Models\Employee;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
@@ -17,6 +19,51 @@ use Carbon\Carbon;
 class RecruitmentService
 {
     public function __construct(private RecruitmentDocumentService $documents) {}
+
+    public function notifyHrManagersOfNewJob(JobPosting $job): void
+    {
+        $job->loadMissing(['department', 'designation']);
+        $this->sendCreatedNotification('job', $job);
+    }
+
+    public function notifyHrManagersOfNewApplication(JobApplication $application, ?User $addedBy = null): void
+    {
+        $application->loadMissing('jobPosting.department');
+        $this->sendCreatedNotification('application', $application, $addedBy);
+    }
+
+    private function sendCreatedNotification(string $type, JobPosting|JobApplication $record, ?User $addedBy = null): void
+    {
+        $recipients = User::query()
+            ->whereHas('roles', fn ($query) => $query->where('name', 'hr_manager'))
+            ->pluck('email')
+            ->filter()
+            ->map(fn ($email) => strtolower(trim((string) $email)))
+            ->unique()
+            ->values()
+            ->all();
+
+        if (empty($recipients)) {
+            Log::warning("New recruitment {$type} notification skipped: no HR manager email recipients.", [
+                'record_id' => $record->id,
+            ]);
+            return;
+        }
+
+        try {
+            Mail::to($recipients)->send(new RecruitmentCreatedNotificationMail($type, $record, $addedBy));
+            Log::info("New recruitment {$type} notification sent.", [
+                'record_id' => $record->id,
+                'recipients' => $recipients,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("New recruitment {$type} notification failed.", [
+                'record_id' => $record->id,
+                'recipients' => $recipients,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
 
     public function sendInterviewInvite($interview, Collection $interviewers): void
     {

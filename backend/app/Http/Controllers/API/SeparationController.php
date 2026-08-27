@@ -6,6 +6,9 @@ use App\Models\Separation;
 use App\Models\OffboardingTemplate;
 use App\Models\OffboardingItem;
 use App\Models\Employee;
+use App\Models\Asset;
+use App\Models\AssetAssignment;
+use App\Models\Loan;
 use App\Services\SeparationService;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
@@ -74,6 +77,76 @@ class SeparationController extends Controller
         $sep->checklistItems->each(function ($item) {
             $item->setAttribute('completed_by_name', optional($item->completedBy)->name);
         });
+
+        // Clearance information is deliberately scoped here so restricted
+        // department data is never sent to an unauthorized browser.
+        $clearanceAccess = $this->clearanceAccessForUser(auth()->user());
+        $sep->setAttribute('clearance_access', $clearanceAccess);
+
+        if ($sep->type === 'resignation' && $clearanceAccess['it']) {
+            $assignmentAssets = AssetAssignment::query()
+                ->with('asset.category:id,name')
+                ->where('employee_id', $sep->employee_id)
+                ->orderByDesc('id')
+                ->get()
+                ->unique('asset_id')
+                ->map(function (AssetAssignment $assignment) {
+                    $asset = $assignment->asset;
+                    if (!$asset) return null;
+                    return [
+                        'id' => $asset->id,
+                        'asset_code' => $asset->asset_code,
+                        'name' => $asset->name,
+                        'brand' => $asset->brand,
+                        'model' => $asset->model,
+                        'serial_number' => $asset->serial_number,
+                        'category' => $asset->category,
+                        'returned' => $assignment->return_date !== null,
+                        'return_date' => optional($assignment->return_date)->toDateString(),
+                    ];
+                })
+                ->filter()
+                ->keyBy('id');
+
+            // Preserve legacy/current custodian records that pre-date assignment
+            // history, treating them as not returned.
+            Asset::query()
+                ->with('category:id,name')
+                ->where('custodian_employee_id', $sep->employee_id)
+                ->where('status', 'assigned')
+                ->get()
+                ->each(function (Asset $asset) use ($assignmentAssets) {
+                    if ($assignmentAssets->has($asset->id)) return;
+                    $assignmentAssets->put($asset->id, [
+                        'id' => $asset->id,
+                        'asset_code' => $asset->asset_code,
+                        'name' => $asset->name,
+                        'brand' => $asset->brand,
+                        'model' => $asset->model,
+                        'serial_number' => $asset->serial_number,
+                        'category' => $asset->category,
+                        'returned' => false,
+                        'return_date' => null,
+                    ]);
+                });
+
+            $sep->setAttribute('it_assets', $assignmentAssets->sortBy('name')->values());
+        }
+
+        if ($sep->type === 'resignation' && $clearanceAccess['finance']) {
+            $sep->setAttribute('finance_loans', Loan::query()
+                ->with([
+                    'loanType:id,name',
+                    'installments' => fn ($query) => $query
+                        ->whereIn('status', ['pending','overdue'])
+                        ->orderBy('due_date'),
+                ])
+                ->where('employee_id', $sep->employee_id)
+                ->whereIn('status', ['approved','disbursed'])
+                ->where('balance_remaining', '>', 0)
+                ->orderBy('created_at')
+                ->get(['id','reference','loan_type_id','approved_amount','monthly_installment','total_paid','balance_remaining','status']));
+        }
         return response()->json(['separation' => $sep]);
     }
 
@@ -454,11 +527,13 @@ class SeparationController extends Controller
         }
 
         if ($user?->hasRole('department_manager') && $user->employee) {
+            $clearanceAccess = $this->clearanceAccessForUser($user);
+            $canViewResignationsForClearance = $clearanceAccess['it'] || $clearanceAccess['finance'];
             return $query->where(function ($q) use ($user) {
                 $q->where('employee_id', $user->employee->id)
                     ->orWhereHas('employee', fn($employee) => $employee->where('manager_id', $user->employee->id))
                     ->orWhereIn('status', ['offboarding', 'completed']);
-            });
+            })->when($canViewResignationsForClearance, fn ($q) => $q->orWhere('type', 'resignation'));
         }
 
         return $query->where('employee_id', $user?->employee?->id ?: 0);
@@ -468,6 +543,8 @@ class SeparationController extends Controller
     {
         $user = auth()->user();
         if ($this->canViewAllSeparations($user)) return true;
+        $clearanceAccess = $this->clearanceAccessForUser($user);
+        if ($sep->type === 'resignation' && ($clearanceAccess['it'] || $clearanceAccess['finance'])) return true;
         if ((int) $sep->employee_id === (int) $user?->employee?->id) return true;
         if ($user?->hasRole('department_manager') && in_array($sep->status, ['offboarding', 'completed'])) return true;
         return $user?->hasRole('department_manager')
@@ -545,5 +622,18 @@ class SeparationController extends Controller
         if (preg_match('/\b(admin|administration|facilities)\b/', $identity)) return 'admin';
 
         return 'general';
+    }
+
+    private function clearanceAccessForUser($user): array
+    {
+        $canViewBoth = $user?->hasAnyRole(['super_admin', 'hr_manager']) ?? false;
+        $category = $this->offboardingCategoryForUser($user);
+
+        return [
+            'it' => $canViewBoth || ($user?->hasRole('department_manager') && $category === 'it'),
+            'finance' => $canViewBoth
+                || ($user?->hasRole('finance_manager') ?? false)
+                || ($user?->hasRole('department_manager') && $category === 'finance'),
+        ];
     }
 }
