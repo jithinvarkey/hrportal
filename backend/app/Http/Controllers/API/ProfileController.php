@@ -54,6 +54,7 @@ class ProfileController extends Controller
                 'email'                   => $employee->email,
                 'phone'                   => $employee->phone,
                 'work_phone'              => $employee->work_phone,
+                'extension'               => $employee->extension,
                 'gender'                  => $employee->gender,
                 'nationality'             => $employee->nationality,
                 'hire_date'               => $employee->hire_date?->format('Y-m-d'),

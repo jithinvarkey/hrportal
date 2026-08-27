@@ -536,6 +536,10 @@ class EmployeeController extends Controller {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
+        if ($request->has('extension') && !$this->hasAnyRoleDB(['super_admin', 'hr_manager'])) {
+            return response()->json(['message' => 'Only an HR manager or system administrator can update the telephone extension.'], 403);
+        }
+
         $data = $request->validate([
             'prefix' => 'sometimes|nullable|string|max:10',
             'first_name' => 'sometimes|required|string|max:100',
@@ -739,7 +743,7 @@ class EmployeeController extends Controller {
             ->orderBy('employee_code');
 
         $headers = [
-            'Employee ID', 'Full Name', 'Email', 'Phone', 'Department', 'Unit', 'Designation',
+            'Employee ID', 'Full Name', 'Email', 'Phone', 'Extension', 'Department', 'Unit', 'Designation',
             'Manager', 'Employment Type', 'Status', 'Hire Date', 'Date of Birth', 'Gender',
             'Marital Status', 'Nationality', 'Address', 'City', 'Country', 'ID / Iqama',
             'ID / Iqama Expiry', 'Passport Number', 'Passport Expiry', 'Bank Name',
@@ -752,6 +756,7 @@ class EmployeeController extends Controller {
             $employee->full_name,
             $employee->email,
             $employee->phone,
+            $employee->extension,
             $employee->department?->name,
             $employee->unit?->name,
             $employee->designation?->title,
