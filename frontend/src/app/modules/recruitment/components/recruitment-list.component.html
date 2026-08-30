@@ -202,8 +202,8 @@
                         (click)="openOfferForm(a, $event)">
                   <mat-icon>local_offer</mat-icon>
                 </button>
-                <button *ngIf="ns.value === 'hired' && s.value === 'offer'"
-                        class="ac-move-btn hire" [matTooltip]="'Confirm Hire'"
+                <button *ngIf="ns.value === 'hired' && (s.value === 'offer' || s.value === 'hired')"
+                        class="ac-move-btn hire" [matTooltip]="s.value === 'hired' ? 'Resend Hire Confirmation' : 'Confirm Hire'"
                         (click)="openHireForm(a, $event)">
                   <mat-icon>how_to_reg</mat-icon>
                 </button>
@@ -612,7 +612,7 @@
 <div class="modal-backdrop" *ngIf="showHireForm" (click)="showHireForm=false"></div>
 <div class="modal-panel wide-modal" *ngIf="showHireForm && selectedApp" [formGroup]="hireForm">
   <div class="modal-hdr">
-    <h3><mat-icon style="color:var(--success)">how_to_reg</mat-icon> Confirm Hire</h3>
+    <h3><mat-icon style="color:var(--success)">how_to_reg</mat-icon> {{ selectedApp.stage === 'hired' ? 'Resend Hire Confirmation' : 'Confirm Hire' }}</h3>
     <button class="icon-btn" (click)="showHireForm=false"><mat-icon>close</mat-icon></button>
   </div>
   <div class="modal-body">
@@ -635,7 +635,9 @@
 
     <div class="hire-info-box">
       <mat-icon>info_outline</mat-icon>
-      This will create an Employee record, generate login credentials, assign leave allocations, and create onboarding tasks automatically.
+      {{ selectedApp.stage === 'hired'
+        ? 'This will reuse the existing employee and user account, generate a new password, and email a fresh onboarding link.'
+        : 'This will create an Employee record, generate login credentials, assign leave allocations, and create onboarding tasks automatically.' }}
     </div>
 
     <!-- Core fields -->
@@ -697,7 +699,9 @@
     <button class="btn-outline" (click)="showHireForm=false">Cancel</button>
     <button class="btn-primary" (click)="confirmHire()" [disabled]="submitting || hireForm.invalid">
       <mat-icon>{{ submitting ? 'hourglass_empty' : 'how_to_reg' }}</mat-icon>
-      {{ submitting ? 'Creating employee record…' : 'Confirm Hire & Create Employee' }}
+      {{ submitting
+        ? (selectedApp.stage === 'hired' ? 'Sending confirmation…' : 'Creating employee record…')
+        : (selectedApp.stage === 'hired' ? 'Update Password & Resend' : 'Confirm Hire & Create Employee') }}
     </button>
   </div>
 </div>
@@ -706,7 +710,7 @@
 <div class="modal-backdrop" *ngIf="showHireSuccess" (click)="showHireSuccess=false"></div>
 <div class="modal-panel" *ngIf="showHireSuccess && hireResult" style="max-width:500px">
   <div class="modal-hdr" style="border-bottom-color:rgba(16,185,129,.3)">
-    <h3 style="color:var(--success)"><mat-icon>celebration</mat-icon> Employee Created!</h3>
+    <h3 style="color:var(--success)"><mat-icon>celebration</mat-icon> {{ hireResult.is_new_employee ? 'Employee Created!' : 'Confirmation Resent!' }}</h3>
     <button class="icon-btn" (click)="showHireSuccess=false"><mat-icon>close</mat-icon></button>
   </div>
   <div class="modal-body">
@@ -720,8 +724,8 @@
       </div>
     </div>
 
-    <!-- Login credentials (only for new accounts) -->
-    <div class="creds-box" *ngIf="hireResult.is_new_account">
+    <!-- Login credentials (new or reset by this confirmation) -->
+    <div class="creds-box" *ngIf="hireResult.temp_password">
       <div class="creds-title"><mat-icon>key</mat-icon> Login Credentials — share with employee</div>
       <div class="cred-row">
         <span class="cred-lbl">Email</span>
@@ -737,7 +741,7 @@
       </div>
     </div>
 
-    <div class="existing-account-note" *ngIf="!hireResult.is_new_account">
+    <div class="existing-account-note" *ngIf="!hireResult.is_new_account && !hireResult.temp_password">
       <mat-icon>info_outline</mat-icon>
       An account already existed for this email — employee can log in with their existing credentials.
     </div>
@@ -745,7 +749,7 @@
     <!-- Onboarding tasks -->
     <div class="onboard-summary">
       <mat-icon>assignment</mat-icon>
-      <strong>{{ hireResult.onboarding_tasks }}</strong> onboarding tasks created in the employee's profile.
+      <strong>{{ hireResult.onboarding_tasks }}</strong> onboarding tasks {{ hireResult.is_new_employee ? 'created' : 'available' }} in the employee's profile.
     </div>
 
     <!-- Document requirements to communicate -->

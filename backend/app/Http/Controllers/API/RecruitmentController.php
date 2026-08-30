@@ -290,9 +290,9 @@ class RecruitmentController extends Controller {
         $app = $this->scopeApplications(JobApplication::query(), $this->managerDepartmentScope($request))
             ->with('jobPosting')
             ->findOrFail($applicationId);
-        if ($app->stage !== 'offer') {
+        if (!in_array($app->stage, ['offer', 'hired'], true)) {
             return response()->json([
-                'message' => 'Hire confirmation is allowed only after the offer stage is complete.',
+                'message' => 'Hire confirmation is allowed only after the offer stage is complete or for an already hired applicant.',
             ], 422);
         }
 
@@ -309,13 +309,18 @@ class RecruitmentController extends Controller {
             $result['temp_password'] ?? null
         );
 
+        $isNewEmployee = (bool) ($result['is_new_employee'] ?? true);
+
         return response()->json([
-            'message'          => 'Employee record created successfully.',
+            'message'          => $isNewEmployee
+                ? 'Employee record created successfully.'
+                : 'Existing employee credentials updated and confirmation email sent.',
             'employee'         => $result['employee'],
             'employee_code'    => $result['employee_code'],
             'login_email'      => $result['login_email'],
             'temp_password'    => $result['temp_password'],
             'is_new_account'   => $result['is_new'],
+            'is_new_employee'  => $isNewEmployee,
             'onboarding_tasks' => $result['onboarding_tasks'],
             'onboarding_url'   => $onboarding['url'] ?? null,
             'onboarding_email' => [
@@ -325,7 +330,7 @@ class RecruitmentController extends Controller {
                 'attachments' => collect($onboarding['attachments'] ?? [])->pluck('path')->values(),
                 'error' => $onboarding['error'] ?? null,
             ],
-        ], 201);
+        ], $isNewEmployee ? 201 : 200);
     }
 
     // ══════════════════════════════════════════════════════════════════════
