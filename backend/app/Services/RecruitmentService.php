@@ -12,6 +12,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Collection;
 use Carbon\Carbon;
@@ -216,12 +217,15 @@ class RecruitmentService
         $nameParts = explode(' ', $app->applicant_name, 2);
         $firstName = $nameParts[0];
         $lastName  = $nameParts[1] ?? '-';
-        $tempPassword = 'Password@123';
+        $tempPassword = Str::random(8) . '@1aA';
 
         // Find or create User account
         $isNewUser = false;
         $user = User::where('email', $app->applicant_email)->first();
         if ($user) {
+            // A repeated hire confirmation must issue credentials the applicant can
+            // actually use, while continuing to reuse the existing account.
+            $user->update(['password' => Hash::make($tempPassword)]);
             if (!$user->hasRole('employee')) {
                 $user->assignRole('employee');
             }
@@ -241,8 +245,9 @@ class RecruitmentService
             return [
                 'employee'         => $existingEmployee->load('department','designation'),
                 'employee_code'    => $existingEmployee->employee_code,
-                'temp_password'    => null,
+                'temp_password'    => $tempPassword,
                 'is_new'           => false,
+                'is_new_employee'  => false,
                 'onboarding_tasks' => $existingEmployee->onboardingTasks()->count(),
                 'login_email'      => $user->email,
             ];
@@ -285,8 +290,9 @@ class RecruitmentService
         return [
             'employee'         => $employee->load('department','designation'),
             'employee_code'    => $empCode,
-            'temp_password'    => $isNewUser ? $tempPassword : null,
+            'temp_password'    => $tempPassword,
             'is_new'           => $isNewUser,
+            'is_new_employee'  => true,
             'onboarding_tasks' => count($onboardingTasks),
             'login_email'      => $app->applicant_email,
         ];
