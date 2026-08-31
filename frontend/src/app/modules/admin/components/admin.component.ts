@@ -119,13 +119,25 @@ export class AdminComponent implements OnInit {
     app_sid: '',
     sender: '',
   };
+  emailSettings = { reply_to_email: '' };
   ticketSettingsSaving = false;
   leaveReminderSaving = false;
   unifonicSaving = false;
+  emailSettingsSaving = false;
   settingsLoading = false;
   settingsSaving = false;
   settingsMessage = '';
   settingsError = '';
+  loanSettingsMessage = '';
+  loanSettingsError = '';
+  ticketSettingsMessage = '';
+  ticketSettingsError = '';
+  leaveReminderMessage = '';
+  leaveReminderError = '';
+  unifonicMessage = '';
+  unifonicError = '';
+  emailSettingsMessage = '';
+  emailSettingsError = '';
   hdfTemplate: any = { exists: false, name: null, size: null };
   hdfFile: File | null = null;
   hdfUploading = false;
@@ -282,7 +294,7 @@ export class AdminComponent implements OnInit {
     if (id === 'units')        this.loadUnits();
     if (id === 'departments')  this.loadDepartments();
     if (id === 'designations') { this.loadDesignations(); this.loadDepartments(); }
-    if (id === 'settings')     { this.loadLoanSettings(); this.loadAnnualTicketSettings(); this.loadMonthlyLeaveReminderSettings(); this.loadUnifonicSettings(); this.loadHdfTemplate(); }
+    if (id === 'settings')     { this.loadLoanSettings(); this.loadAnnualTicketSettings(); this.loadMonthlyLeaveReminderSettings(); this.loadUnifonicSettings(); this.loadEmailSettings(); this.loadHdfTemplate(); }
   }
 
   onMigrationFile(event: Event) {
@@ -340,14 +352,14 @@ export class AdminComponent implements OnInit {
 
   loadLoanSettings() {
     this.settingsLoading = true;
-    this.settingsError = '';
+    this.loanSettingsError = '';
     this.http.get<any>('/api/v1/admin/settings/loans').subscribe({
       next: r => {
         this.loanSettings.approval_levels = r?.settings?.approval_levels === 3 ? 3 : 2;
         this.settingsLoading = false;
       },
       error: err => {
-        this.settingsError = this.firstError(err) || 'Failed to load loan settings.';
+        this.loanSettingsError = this.firstError(err) || 'Failed to load loan settings.';
         this.settingsLoading = false;
       }
     });
@@ -355,16 +367,16 @@ export class AdminComponent implements OnInit {
 
   saveLoanSettings() {
     this.settingsSaving = true;
-    this.settingsMessage = '';
-    this.settingsError = '';
+    this.loanSettingsMessage = '';
+    this.loanSettingsError = '';
     this.http.put<any>('/api/v1/admin/settings/loans', this.loanSettings).subscribe({
       next: r => {
         this.loanSettings.approval_levels = r.settings.approval_levels;
-        this.settingsMessage = r.message;
+        this.loanSettingsMessage = r.message;
         this.settingsSaving = false;
       },
       error: err => {
-        this.settingsError = this.firstError(err) || 'Failed to save loan settings.';
+        this.loanSettingsError = this.firstError(err) || 'Failed to save loan settings.';
         this.settingsSaving = false;
       }
     });
@@ -373,7 +385,7 @@ export class AdminComponent implements OnInit {
   loadHdfTemplate() {
     this.http.get<any>('/api/v1/admin/settings/hdf-template').subscribe({
       next: r => this.hdfTemplate = r?.template || { exists: false, name: null, size: null },
-      error: err => this.settingsError = this.firstError(err) || 'Failed to load HDF template settings.'
+      error: err => this.hdfError = this.firstError(err) || 'Failed to load HDF template settings.'
     });
   }
 
@@ -412,35 +424,35 @@ export class AdminComponent implements OnInit {
   loadAnnualTicketSettings() {
     this.http.get<any>('/api/v1/admin/settings/annual-tickets').subscribe({
       next: r => this.annualTicketSettings = r.settings,
-      error: err => this.settingsError = this.firstError(err) || 'Failed to load annual ticket settings.'
+      error: err => this.ticketSettingsError = this.firstError(err) || 'Failed to load annual ticket settings.'
     });
   }
 
   saveAnnualTicketSettings() {
-    this.ticketSettingsSaving = true; this.settingsMessage = ''; this.settingsError = '';
+    this.ticketSettingsSaving = true; this.ticketSettingsMessage = ''; this.ticketSettingsError = '';
     this.http.put<any>('/api/v1/admin/settings/annual-tickets', this.annualTicketSettings).subscribe({
-      next: r => { this.annualTicketSettings = r.settings; this.settingsMessage = r.message; this.ticketSettingsSaving = false; },
-      error: err => { this.settingsError = this.firstError(err) || 'Failed to save annual ticket settings.'; this.ticketSettingsSaving = false; }
+      next: r => { this.annualTicketSettings = r.settings; this.ticketSettingsMessage = r.message; this.ticketSettingsSaving = false; },
+      error: err => { this.ticketSettingsError = this.firstError(err) || 'Failed to save annual ticket settings.'; this.ticketSettingsSaving = false; }
     });
   }
 
   loadMonthlyLeaveReminderSettings() {
     this.http.get<any>('/api/v1/admin/settings/monthly-leave-reminder').subscribe({
       next: r => this.monthlyLeaveReminderSettings = { ...this.monthlyLeaveReminderSettings, ...r.settings },
-      error: err => this.settingsError = this.firstError(err) || 'Failed to load monthly leave reminder settings.'
+      error: err => this.leaveReminderError = this.firstError(err) || 'Failed to load monthly leave reminder settings.'
     });
   }
 
   saveMonthlyLeaveReminderSettings() {
-    this.leaveReminderSaving = true; this.settingsMessage = ''; this.settingsError = '';
+    this.leaveReminderSaving = true; this.leaveReminderMessage = ''; this.leaveReminderError = '';
     this.http.put<any>('/api/v1/admin/settings/monthly-leave-reminder', this.monthlyLeaveReminderSettings).subscribe({
       next: r => {
         this.monthlyLeaveReminderSettings = { ...this.monthlyLeaveReminderSettings, ...r.settings };
-        this.settingsMessage = r.message;
+        this.leaveReminderMessage = r.message;
         this.leaveReminderSaving = false;
       },
       error: err => {
-        this.settingsError = this.firstError(err) || 'Failed to save monthly leave reminder settings.';
+        this.leaveReminderError = this.firstError(err) || 'Failed to save monthly leave reminder settings.';
         this.leaveReminderSaving = false;
       }
     });
@@ -449,21 +461,43 @@ export class AdminComponent implements OnInit {
   loadUnifonicSettings() {
     this.http.get<any>('/api/v1/admin/settings/unifonic').subscribe({
       next: r => this.unifonicSettings = { ...this.unifonicSettings, ...r.settings },
-      error: err => this.settingsError = this.firstError(err) || 'Failed to load Unifonic settings.'
+      error: err => this.unifonicError = this.firstError(err) || 'Failed to load Unifonic settings.'
     });
   }
 
   saveUnifonicSettings() {
-    this.unifonicSaving = true; this.settingsMessage = ''; this.settingsError = '';
+    this.unifonicSaving = true; this.unifonicMessage = ''; this.unifonicError = '';
     this.http.put<any>('/api/v1/admin/settings/unifonic', this.unifonicSettings).subscribe({
       next: r => {
         this.unifonicSettings = { ...this.unifonicSettings, ...r.settings };
-        this.settingsMessage = r.message;
+        this.unifonicMessage = r.message;
         this.unifonicSaving = false;
       },
       error: err => {
-        this.settingsError = this.firstError(err) || 'Failed to save Unifonic settings.';
+        this.unifonicError = this.firstError(err) || 'Failed to save Unifonic settings.';
         this.unifonicSaving = false;
+      }
+    });
+  }
+
+  loadEmailSettings() {
+    this.http.get<any>('/api/v1/admin/settings/email').subscribe({
+      next: r => this.emailSettings = { ...this.emailSettings, ...r.settings },
+      error: err => this.emailSettingsError = this.firstError(err) || 'Failed to load email settings.'
+    });
+  }
+
+  saveEmailSettings() {
+    this.emailSettingsSaving = true; this.emailSettingsMessage = ''; this.emailSettingsError = '';
+    this.http.put<any>('/api/v1/admin/settings/email', this.emailSettings).subscribe({
+      next: r => {
+        this.emailSettings = { ...this.emailSettings, ...r.settings };
+        this.emailSettingsMessage = r.message;
+        this.emailSettingsSaving = false;
+      },
+      error: err => {
+        this.emailSettingsError = this.firstError(err) || 'Failed to save email settings.';
+        this.emailSettingsSaving = false;
       }
     });
   }

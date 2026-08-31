@@ -22,6 +22,7 @@ use App\Services\AnnualTicketService;
 use App\Services\MonthlyLeaveReminderService;
 use App\Services\UnifonicSettingsService;
 use App\Services\HdfTemplateService;
+use App\Services\EmailSettingsService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -42,13 +43,39 @@ class AdminController extends Controller
         AnnualTicketService $annualTicketService,
         MonthlyLeaveReminderService $monthlyLeaveReminderService,
         UnifonicSettingsService $unifonicSettingsService,
-        protected HdfTemplateService $hdfTemplates
+        protected HdfTemplateService $hdfTemplates,
+        protected EmailSettingsService $emailSettings
     )
     {
         $this->loanApprovalService = $loanApprovalService;
         $this->annualTicketService = $annualTicketService;
         $this->monthlyLeaveReminderService = $monthlyLeaveReminderService;
         $this->unifonicSettingsService = $unifonicSettingsService;
+    }
+
+    public function emailSettings(): JsonResponse
+    {
+        if (!$this->isSuperAdmin()) {
+            return response()->json(['message' => 'Only a super admin can manage email settings.'], 403);
+        }
+
+        return response()->json(['settings' => $this->emailSettings->settings()]);
+    }
+
+    public function updateEmailSettings(Request $request): JsonResponse
+    {
+        if (!$this->isSuperAdmin()) {
+            return response()->json(['message' => 'Only a super admin can manage email settings.'], 403);
+        }
+
+        $data = $request->validate([
+            'reply_to_email' => 'required|email:rfc|max:255',
+        ]);
+
+        return response()->json([
+            'message' => 'Email notification settings updated.',
+            'settings' => $this->emailSettings->updateSettings($data),
+        ]);
     }
 
     public function hdfTemplate(): JsonResponse

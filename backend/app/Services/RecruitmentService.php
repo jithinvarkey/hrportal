@@ -37,6 +37,7 @@ class RecruitmentService
     {
         $recipients = User::query()
             ->whereHas('roles', fn ($query) => $query->where('name', 'hr_manager'))
+            ->whereDoesntHave('roles', fn ($query) => $query->where('name', 'super_admin'))
             ->pluck('email')
             ->filter()
             ->map(fn ($email) => strtolower(trim((string) $email)))
@@ -194,6 +195,7 @@ class RecruitmentService
     private function offerCcEmails(?string $applicantEmail, ?string $testEmail): array
     {
         $hrManagerEmails = User::whereHas('roles', fn ($query) => $query->where('name', 'hr_manager'))
+            ->whereDoesntHave('roles', fn ($query) => $query->where('name', 'super_admin'))
             ->pluck('email')
             ->filter()
             ->all();
