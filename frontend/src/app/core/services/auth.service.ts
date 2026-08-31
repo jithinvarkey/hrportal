@@ -147,15 +147,16 @@ export class AuthService {
   canAny(perms: string[]): boolean { return perms.some(p => this.can(p)); }
 
   isSuperAdmin(): boolean { return this.hasRole(ROLES.SUPER_ADMIN); }
+  isCEO(): boolean { return this.hasRole(ROLES.CEO); }
   isHRManager(): boolean { return this.hasRole(ROLES.HR_MANAGER); }
   isHRStaff(): boolean { return this.hasRole(ROLES.HR_STAFF); }
   isFinanceManager(): boolean { return this.hasRole(ROLES.FINANCE_MANAGER); }
   isDeptManager(): boolean { return this.hasRole(ROLES.DEPT_MANAGER); }
   isEmployee(): boolean { return this.hasRole(ROLES.EMPLOYEE); }
 
-  isHRRole(): boolean { return this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.HR_MANAGER, ROLES.HR_STAFF]); }
-  isAdminRole(): boolean { return this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.HR_MANAGER]); }
-  isManagerRole(): boolean { return this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.HR_MANAGER, ROLES.HR_STAFF, ROLES.DEPT_MANAGER]); }
+  isHRRole(): boolean { return this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.CEO, ROLES.HR_MANAGER, ROLES.HR_STAFF]); }
+  isAdminRole(): boolean { return this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.CEO, ROLES.HR_MANAGER]); }
+  isManagerRole(): boolean { return this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.CEO, ROLES.HR_MANAGER, ROLES.HR_STAFF, ROLES.DEPT_MANAGER]); }
 
   isITDepartmentManager(): boolean {
     const employee = this.getUser()?.employee || {};
@@ -164,7 +165,7 @@ export class AuthService {
   }
 
   canViewAllAssets(): boolean {
-    return this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.HR_MANAGER]) || this.isITDepartmentManager();
+    return this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.CEO, ROLES.HR_MANAGER]) || this.isITDepartmentManager();
   }
 
   canManageAssets(): boolean {
@@ -177,6 +178,7 @@ export class AuthService {
 
   getPortalType(): 'admin' | 'hr' | 'finance' | 'manager' | 'employee' {
     if (this.isSuperAdmin()) return 'admin';
+    if (this.isCEO()) return 'hr';
     if (this.isHRManager()) return 'hr';
     if (this.isHRStaff()) return 'hr';
     if (this.isFinanceManager()) return 'finance';

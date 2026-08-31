@@ -39,7 +39,7 @@ export class EmployeeFormComponent implements OnInit {
   ) {}
 
   get canManageExtension(): boolean {
-    return this.auth.hasAnyRole(['super_admin', 'hr_manager']);
+    return this.auth.hasAnyRole(['super_admin', 'ceo', 'hr_manager']);
   }
 
   ngOnInit() {

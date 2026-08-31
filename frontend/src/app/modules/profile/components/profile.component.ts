@@ -112,6 +112,7 @@ export class ProfileComponent implements OnInit {
   roleBadge(role: string): string {
     const labels: Record<string, string> = {
       super_admin:        'Super Admin',
+      ceo:                'CEO',
       hr_manager:         'HR Manager',
       hr_staff:           'HR Staff',
       finance_manager:    'Finance Manager',

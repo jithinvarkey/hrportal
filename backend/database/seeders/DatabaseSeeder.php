@@ -22,7 +22,7 @@ class DatabaseSeeder extends Seeder {
 
         // ── Roles (dot-notation format — matches Admin module) ─────────────
         $roleNames = [
-            'super_admin', 'hr_manager', 'hr_staff',
+            'super_admin', 'ceo', 'hr_manager', 'hr_staff',
             'it_manager', 'it_supervisor', 'cybersecurity_officer',
             'finance_manager', 'department_manager', 'employee',
         ];
@@ -102,6 +102,8 @@ class DatabaseSeeder extends Seeder {
             'admin.manage_users','admin.manage_roles', // HR Manager manages system access
             'policies.view_all','policies.view_documents','policies.manage',
         ]);
+
+        Role::findByName('ceo')->syncPermissions(Role::findByName('hr_manager')->permissions);
 
         Role::findByName('hr_staff')->syncPermissions([
             'dashboard.view',

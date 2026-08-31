@@ -102,7 +102,7 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
 
   get roleLabel(): string {
     const map: Record<string,string> = {
-      super_admin:'Super Admin',hr_manager:'HR Manager',hr_staff:'HR Staff',
+      super_admin:'Super Admin',ceo:'CEO',hr_manager:'HR Manager',hr_staff:'HR Staff',
       finance_manager:'Finance Manager',department_manager:'Dept. Manager',employee:'Employee',
     };
     return map[this.auth.getUserRole()] ?? this.auth.getUserRole();

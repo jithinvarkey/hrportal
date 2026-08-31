@@ -109,28 +109,31 @@ class RolesPermissionsSeeder extends Seeder
         }
 
         // ── Define Roles ──────────────────────────────────────────────────
+        $hrManagerPermissions = [
+            'dashboard.view',
+            'employees.view','employees.create','employees.edit','employees.view_salary','employees.view_documents',
+            'payroll.view','payroll.run','payroll.approve','payroll.export',
+            'leave.view_all','leave.approve','leave.manage_types','leave.manage_holidays',
+            'loans.view_all','loans.approve_hr','loans.manage_types',
+            'separations.view_all','separations.create','separations.approve_hr','separations.manage_offboarding',
+            'requests.view_all','requests.process',
+            'attendance.view_all','attendance.manage','attendance.manual_entry',
+            'contracts.view_all','contracts.create','requests.approve_manager','requests.manage_types',
+            'recruitment.view','recruitment.manage',
+            'performance.view','performance.manage',
+            'attendance.view_all','attendance.manage','attendance.manual_entry',
+            'contracts.view_all','contracts.create','contracts.edit','contracts.delete',
+            'orgchart.view',
+            'assets.view',
+            'policies.view_all','policies.view_documents','policies.manage',
+        ];
+
         $roles = [
 
             'super_admin' => $permissions,   // all permissions
 
-            'hr_manager' => [
-                'dashboard.view',
-                'employees.view','employees.create','employees.edit','employees.view_salary','employees.view_documents',
-                'payroll.view','payroll.run','payroll.approve','payroll.export',
-                'leave.view_all','leave.approve','leave.manage_types','leave.manage_holidays',
-                'loans.view_all','loans.approve_hr','loans.manage_types',
-                'separations.view_all','separations.create','separations.approve_hr','separations.manage_offboarding',
-                'requests.view_all','requests.process',
-                'attendance.view_all','attendance.manage','attendance.manual_entry',
-                'contracts.view_all','contracts.create','requests.approve_manager','requests.manage_types',
-                'recruitment.view','recruitment.manage',
-                'performance.view','performance.manage',
-                'attendance.view_all','attendance.manage','attendance.manual_entry',
-                'contracts.view_all','contracts.create','contracts.edit','contracts.delete',
-                'orgchart.view',
-                'assets.view',
-                'policies.view_all','policies.view_documents','policies.manage',
-            ],
+            'ceo' => $hrManagerPermissions,
+            'hr_manager' => $hrManagerPermissions,
 
             'hr_staff' => [
                 'dashboard.view',
