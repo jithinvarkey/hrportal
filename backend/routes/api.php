@@ -168,7 +168,7 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('designations', DesignationController::class);
 
         // Payroll
-        Route::prefix('payroll')->middleware('role:super_admin|hr_manager')->group(function () {
+        Route::prefix('payroll')->middleware('role:super_admin|ceo|hr_manager')->group(function () {
             // ── Static / literal routes FIRST (before any {id} wildcards) ──────
             Route::get('/stats',                               [PayrollController::class, 'stats']);
             Route::get('/components',                          [PayrollController::class, 'components']);

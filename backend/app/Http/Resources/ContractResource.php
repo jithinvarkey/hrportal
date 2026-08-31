@@ -20,7 +20,7 @@ class ContractResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $canViewSalary = $request->user()?->hasAnyRole(['super_admin', 'hr_manager']);
+        $canViewSalary = $request->user()?->hasAnyRole(['super_admin', 'ceo', 'hr_manager']);
 
         return [
             'id'            => $this->id,

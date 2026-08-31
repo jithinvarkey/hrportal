@@ -172,6 +172,7 @@ export class AdminComponent implements OnInit {
 
   roleInfo: any = {
     super_admin:        { label:'Super Admin',        color:'#ef4444', icon:'shield'             },
+    ceo:                { label:'CEO',                color:'#7c3aed', icon:'business_center'    },
     hr_manager:         { label:'HR Manager',         color:'#6366f1', icon:'manage_accounts'    },
     hr_staff:           { label:'HR Staff',           color:'#8b5cf6', icon:'badge'              },
     finance_manager:    { label:'Finance Manager',    color:'#10b981', icon:'account_balance'    },

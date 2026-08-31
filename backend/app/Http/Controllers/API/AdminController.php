@@ -549,6 +549,7 @@ class AdminController extends Controller
     {
         return [
             'super_admin'        => 'Super Admin',
+            'ceo'                => 'CEO',
             'hr_manager'         => 'HR Manager',
             'hr_staff'           => 'HR Staff',
             'it_manager'         => 'IT Manager',
@@ -576,7 +577,7 @@ class AdminController extends Controller
             ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
             ->where('model_has_roles.model_id', auth()->id())
             ->where('model_has_roles.model_type', get_class(auth()->user()))
-            ->whereIn('roles.name', ['super_admin', 'hr_manager'])
+            ->whereIn('roles.name', ['super_admin', 'ceo', 'hr_manager'])
             ->exists();
     }
 
@@ -586,7 +587,7 @@ class AdminController extends Controller
             ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
             ->where('model_has_roles.model_id', auth()->id())
             ->where('model_has_roles.model_type', get_class(auth()->user()))
-            ->whereIn('roles.name', ['super_admin', 'hr_manager'])
+            ->whereIn('roles.name', ['super_admin', 'ceo', 'hr_manager'])
             ->exists();
     }
 
@@ -594,6 +595,7 @@ class AdminController extends Controller
     {
         return [
             'super_admin'        => '#ef4444',
+            'ceo'                => '#7c3aed',
             'hr_manager'         => '#6366f1',
             'hr_staff'           => '#8b5cf6',
             'it_manager'         => '#0ea5e9',
@@ -609,6 +611,7 @@ class AdminController extends Controller
     {
         return [
             'super_admin'        => 'shield',
+            'ceo'                => 'business_center',
             'hr_manager'         => 'manage_accounts',
             'hr_staff'           => 'badge',
             'it_manager'         => 'computer',
@@ -624,6 +627,7 @@ class AdminController extends Controller
     {
         return [
             'super_admin'        => 'Full system access — all modules and admin tools',
+            'ceo'                => 'Full HR operations — employees, payroll, leave, loans, separations',
             'hr_manager'         => 'Full HR operations — employees, payroll, leave, loans, separations',
             'hr_staff'           => 'Day-to-day HR processing — requests, leave, employee records',
             'finance_manager'    => 'Financial approvals — payroll, loan finance, final settlements',
