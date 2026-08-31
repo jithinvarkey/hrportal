@@ -396,12 +396,20 @@ class LeaveService {
     public function notifyManager(LeaveRequest $leave, string $status, $remarks = null, $conflicts = null): void {
         try {
             // Notify the employee's manager (if set) and all HR managers
-            $recipients = User::whereHas('roles', fn($q) => $q->whereIn('name', ['hr_manager', 'hr_staff']))->get();
+            $recipientsQuery = User::whereHas('roles', fn($q) => $q->whereIn('name', ['hr_manager', 'hr_staff']));
+
+            if ($status === 'submitted') {
+                $recipientsQuery
+                    ->whereHas('roles', fn($q) => $q->where('name', 'hr_manager'))
+                    ->whereDoesntHave('roles', fn($q) => $q->where('name', 'hr_staff'));
+            }
+
+            $recipients = $recipientsQuery->get();
 
             // Also add direct manager. employees.manager_id points to employees.id, not users.id.
             $leave->loadMissing('employee.manager.user');
             $manager = $leave->employee?->manager?->user;
-            if ($manager) {
+            if ($manager && ($status !== 'submitted' || !$manager->roles()->where('name', 'hr_staff')->exists())) {
                 $recipients->push($manager);
             }
 

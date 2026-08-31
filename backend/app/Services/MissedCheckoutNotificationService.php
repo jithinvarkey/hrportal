@@ -45,6 +45,7 @@ class MissedCheckoutNotificationService
             $hrEmails = Employee::query()->active()->whereNotNull('email')
                 ->where('id', '<>', $employee->id)
                 ->whereHas('department', fn ($query) => $query->where('code', 'HR'))
+                ->whereDoesntHave('user.roles', fn ($query) => $query->where('name', 'hr_staff'))
                 ->pluck('email')->filter()->unique()->values()->all();
 
             Mail::to($employee->email)->cc($hrEmails)->send(new MissedCheckoutMail(

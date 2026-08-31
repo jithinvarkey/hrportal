@@ -209,7 +209,8 @@ class PublicOnboardingController extends Controller
     private function notifyHrDocumentUploaded($employee, EmployeeDocument $document): void
     {
         try {
-            $hrEmails = User::whereHas('roles', fn ($query) => $query->whereIn('name', ['super_admin', 'hr_manager', 'hr_staff']))
+            $hrEmails = User::whereHas('roles', fn ($query) => $query->whereIn('name', ['hr_manager', 'hr_staff']))
+                ->whereDoesntHave('roles', fn ($query) => $query->where('name', 'super_admin'))
                 ->whereNotNull('email')
                 ->pluck('email')
                 ->filter()

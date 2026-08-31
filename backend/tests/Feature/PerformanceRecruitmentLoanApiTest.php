@@ -197,6 +197,8 @@ class PerformanceRecruitmentLoanApiTest extends TestCase
         Mail::fake();
         $hrStaff = User::factory()->create();
         $hrStaff->assignRole('hr_staff');
+        $superAdminHrManager = User::factory()->create();
+        $superAdminHrManager->assignRole(['super_admin', 'hr_manager']);
 
         $this->actingAs($hrStaff, 'sanctum')
             ->postJson('/api/v1/recruitment/jobs', [
@@ -208,6 +210,7 @@ class PerformanceRecruitmentLoanApiTest extends TestCase
         Mail::assertSent(RecruitmentCreatedNotificationMail::class, fn ($mail) =>
             $mail->type === 'job'
             && $mail->hasTo($this->hrManager->email)
+            && !$mail->hasTo($superAdminHrManager->email)
             && $mail->record->title === 'Payroll Specialist'
         );
     }

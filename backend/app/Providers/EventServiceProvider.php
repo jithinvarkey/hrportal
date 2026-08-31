@@ -2,7 +2,7 @@
 
 namespace App\Providers;
 
-use App\Listeners\SetHrManagerReplyTo;
+use App\Listeners\SetNotificationReplyTo;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Listeners\SendEmailVerificationNotification;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
@@ -21,7 +21,7 @@ class EventServiceProvider extends ServiceProvider
             SendEmailVerificationNotification::class,
         ],
         MessageSending::class => [
-            SetHrManagerReplyTo::class,
+            SetNotificationReplyTo::class,
         ],
     ];
 

@@ -694,13 +694,13 @@
       <div class="approval-options" *ngIf="!settingsLoading; else settingsLoader">
         <button type="button" class="approval-option"
           [class.selected]="loanSettings.approval_levels===2"
-          (click)="loanSettings.approval_levels=2; settingsMessage=''">
+          (click)="loanSettings.approval_levels=2; loanSettingsMessage=''">
           <span class="option-check"><mat-icon>{{ loanSettings.approval_levels===2 ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon></span>
           <span><strong>2 Levels</strong><small>HR Manager → Finance Manager</small></span>
         </button>
         <button type="button" class="approval-option"
           [class.selected]="loanSettings.approval_levels===3"
-          (click)="loanSettings.approval_levels=3; settingsMessage=''">
+          (click)="loanSettings.approval_levels=3; loanSettingsMessage=''">
           <span class="option-check"><mat-icon>{{ loanSettings.approval_levels===3 ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon></span>
           <span><strong>3 Levels</strong><small>Direct Manager → HR Manager → Finance Manager</small></span>
         </button>
@@ -710,8 +710,8 @@
         <div class="settings-loader"><mat-spinner diameter="26"></mat-spinner></div>
       </ng-template>
 
-      <div class="settings-feedback success" *ngIf="settingsMessage"><mat-icon>check_circle</mat-icon>{{ settingsMessage }}</div>
-      <div class="settings-feedback error" *ngIf="settingsError"><mat-icon>error_outline</mat-icon>{{ settingsError }}</div>
+      <div class="settings-feedback success" *ngIf="loanSettingsMessage"><mat-icon>check_circle</mat-icon>{{ loanSettingsMessage }}</div>
+      <div class="settings-feedback error" *ngIf="loanSettingsError"><mat-icon>error_outline</mat-icon>{{ loanSettingsError }}</div>
 
       <div class="settings-actions">
         <button class="btn-primary" (click)="saveLoanSettings()" [disabled]="settingsSaving || settingsLoading">
@@ -730,7 +730,35 @@
         <div class="policy-group"><strong>Saudi employees</strong><span>Ticket request is optional.</span><label>Employee tickets <input type="number" min="1" max="1" [(ngModel)]="annualTicketSettings.saudi_employee_tickets"></label></div>
         <div class="policy-group"><strong>Non-Saudi employees</strong><span>Employee ticket is mandatory when tickets are requested.</span><label>Employee tickets <input type="number" min="1" max="1" [(ngModel)]="annualTicketSettings.non_saudi_employee_tickets"></label><label>Maximum dependent tickets <input type="number" min="0" max="3" [(ngModel)]="annualTicketSettings.non_saudi_max_dependents"></label></div>
       </div>
+      <div class="settings-feedback success" *ngIf="ticketSettingsMessage"><mat-icon>check_circle</mat-icon>{{ ticketSettingsMessage }}</div>
+      <div class="settings-feedback error" *ngIf="ticketSettingsError"><mat-icon>error_outline</mat-icon>{{ ticketSettingsError }}</div>
       <div class="settings-actions"><button class="btn-primary" (click)="saveAnnualTicketSettings()" [disabled]="ticketSettingsSaving"><mat-icon>{{ ticketSettingsSaving ? 'hourglass_empty' : 'save' }}</mat-icon>{{ ticketSettingsSaving ? 'Saving...' : 'Save Ticket Policy' }}</button></div>
+    </div>
+
+    <div class="settings-panel">
+      <div class="settings-heading">
+        <div class="settings-icon"><mat-icon>alternate_email</mat-icon></div>
+        <div>
+          <div class="settings-title">Email Notification Replies</div>
+          <div class="settings-sub">Replies to all outgoing HR portal notifications will be sent to this address.</div>
+        </div>
+      </div>
+      <div class="ticket-policy-grid">
+        <div class="policy-group">
+          <strong>Reply-to address</strong>
+          <label>Email
+            <input type="email" autocomplete="email" [(ngModel)]="emailSettings.reply_to_email" placeholder="hr@example.com">
+          </label>
+        </div>
+      </div>
+      <div class="settings-feedback success" *ngIf="emailSettingsMessage"><mat-icon>check_circle</mat-icon>{{ emailSettingsMessage }}</div>
+      <div class="settings-feedback error" *ngIf="emailSettingsError"><mat-icon>error_outline</mat-icon>{{ emailSettingsError }}</div>
+      <div class="settings-actions">
+        <button class="btn-primary" (click)="saveEmailSettings()" [disabled]="emailSettingsSaving || !emailSettings.reply_to_email">
+          <mat-icon>{{ emailSettingsSaving ? 'hourglass_empty' : 'save' }}</mat-icon>
+          {{ emailSettingsSaving ? 'Saving...' : 'Save Email Settings' }}
+        </button>
+      </div>
     </div>
 
     <div class="settings-panel unifonic-panel">
@@ -766,6 +794,8 @@
         </div>
       </div>
 
+      <div class="settings-feedback success" *ngIf="unifonicMessage"><mat-icon>check_circle</mat-icon>{{ unifonicMessage }}</div>
+      <div class="settings-feedback error" *ngIf="unifonicError"><mat-icon>error_outline</mat-icon>{{ unifonicError }}</div>
       <div class="settings-actions">
         <button class="btn-primary" (click)="saveUnifonicSettings()" [disabled]="unifonicSaving">
           <mat-icon>{{ unifonicSaving ? 'hourglass_empty' : 'save' }}</mat-icon>
@@ -807,6 +837,8 @@
         </div>
       </div>
 
+      <div class="settings-feedback success" *ngIf="leaveReminderMessage"><mat-icon>check_circle</mat-icon>{{ leaveReminderMessage }}</div>
+      <div class="settings-feedback error" *ngIf="leaveReminderError"><mat-icon>error_outline</mat-icon>{{ leaveReminderError }}</div>
       <div class="settings-actions">
         <button class="btn-primary" (click)="saveMonthlyLeaveReminderSettings()" [disabled]="leaveReminderSaving">
           <mat-icon>{{ leaveReminderSaving ? 'hourglass_empty' : 'save' }}</mat-icon>
