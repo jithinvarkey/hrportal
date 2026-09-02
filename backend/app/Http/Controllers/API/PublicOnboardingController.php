@@ -7,8 +7,8 @@ use App\Mail\EmployeeDocumentUploadedMail;
 use App\Models\EmployeeDocument;
 use App\Models\EmployeeOnboardingLink;
 use App\Models\User;
-use App\Services\NewHireNotificationService;
 use App\Services\HdfTemplateService;
+use App\Services\OnboardingTaskNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Mail;
 class PublicOnboardingController extends Controller
 {
     public function __construct(
-        private NewHireNotificationService $newHireNotifications,
+        private OnboardingTaskNotificationService $onboardingNotifications,
         private HdfTemplateService $hdfTemplates
     )
     {
@@ -104,7 +104,7 @@ class PublicOnboardingController extends Controller
 
         $data = $request->validate($rules);
         $employee = $link->employee;
-        $shouldNotifyIt = $link->submitted_at === null;
+        $shouldNotifyDepartments = $link->submitted_at === null;
 
         $response = DB::transaction(function () use ($request, $data, $employee, $link): JsonResponse {
             $employee->update(collect($data)->only([
@@ -173,8 +173,8 @@ class PublicOnboardingController extends Controller
             ]);
         });
 
-        if ($shouldNotifyIt) {
-            $this->newHireNotifications->notifyItManagers($employee);
+        if ($shouldNotifyDepartments) {
+            $this->onboardingNotifications->notifyResponsibleDepartments($employee);
         }
 
         return $response;

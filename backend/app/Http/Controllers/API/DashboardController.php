@@ -28,7 +28,7 @@ class DashboardController extends Controller
             ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
             ->where('model_has_roles.model_id', $user->id)
             ->where('model_has_roles.model_type', get_class($user))
-            ->whereIn('roles.name', ['super_admin', 'hr_manager'])
+            ->whereIn('roles.name', ['super_admin', 'ceo', 'hr_manager'])
             ->exists();
     }
 
@@ -42,7 +42,7 @@ class DashboardController extends Controller
             ->pluck('roles.name')
             ->all();
 
-        $isGlobal = (bool) array_intersect($roles, ['super_admin', 'hr_manager', 'hr_staff']);
+        $isGlobal = (bool) array_intersect($roles, ['super_admin', 'ceo', 'hr_manager', 'hr_staff']);
         $employee = Employee::where('user_id', $user->id)->first();
 
         if ($isGlobal) {

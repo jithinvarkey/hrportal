@@ -563,7 +563,7 @@ class SeparationController extends Controller
 
     private function canApproveManagerStage(Separation $sep, $user): bool
     {
-        if ($user?->hasAnyRole(['super_admin', 'hr_manager'])) return true;
+        if ($user?->hasAnyRole(['super_admin', 'ceo', 'hr_manager'])) return true;
         return $user?->hasRole('department_manager')
             && (int) $sep->employee?->manager_id === (int) $user?->employee?->id;
     }
@@ -571,9 +571,9 @@ class SeparationController extends Controller
     private function canApproveHrStage($user, ?Separation $sep = null): bool
     {
         if (in_array($sep?->type, ['termination', 'resignation'], true)) {
-            return $user?->hasAnyRole(['super_admin', 'hr_manager']);
+            return $user?->hasAnyRole(['super_admin', 'ceo', 'hr_manager']);
         }
-        return $user?->hasAnyRole(['super_admin', 'hr_manager', 'finance_manager']);
+        return $user?->hasAnyRole(['super_admin', 'ceo', 'hr_manager', 'finance_manager']);
     }
 
     private function canCancelApprovedSeparation(Separation $sep, $user): bool
@@ -591,7 +591,7 @@ class SeparationController extends Controller
 
     private function canCompleteSeparation($user): bool
     {
-        return $user?->hasAnyRole(['super_admin', 'hr_manager']);
+        return $user?->hasAnyRole(['super_admin', 'ceo', 'hr_manager']);
     }
 
     private function canViewAllChecklistItems($user): bool
@@ -626,7 +626,7 @@ class SeparationController extends Controller
 
     private function clearanceAccessForUser($user): array
     {
-        $canViewBoth = $user?->hasAnyRole(['super_admin', 'hr_manager']) ?? false;
+        $canViewBoth = $user?->hasAnyRole(['super_admin', 'ceo', 'hr_manager']) ?? false;
         $category = $this->offboardingCategoryForUser($user);
 
         return [

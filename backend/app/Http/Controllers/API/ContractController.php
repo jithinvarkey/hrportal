@@ -56,7 +56,7 @@ class ContractController extends Controller {
                         ->where('model_has_roles.model_id', $user->id)
                         ->pluck('roles.name')->toArray(), [], false);
 
-        $isHRAdmin = (bool) array_intersect($userRoles, ['super_admin', 'hr_manager', 'hr_staff']);
+        $isHRAdmin = (bool) array_intersect($userRoles, ['super_admin', 'ceo', 'hr_manager', 'hr_staff']);
         $isMgr = in_array('department_manager', $userRoles);
 
         $query = Contract::with(['employee.department', 'department', 'createdBy'])

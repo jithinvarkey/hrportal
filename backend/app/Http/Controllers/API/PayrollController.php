@@ -97,7 +97,7 @@ class PayrollController extends Controller {
             ->where('model_has_roles.model_id', auth()->id())
             ->pluck('roles.name')->toArray(), [], false);
 
-        if (!array_intersect($roles, ['super_admin','hr_manager','finance_manager'])) {
+        if (!array_intersect($roles, ['super_admin','ceo','hr_manager','finance_manager'])) {
             return response()->json(['message' => 'Only Finance or HR managers can approve payroll.'], 403);
         }
 
@@ -124,7 +124,7 @@ class PayrollController extends Controller {
             ->where('model_has_roles.model_id', auth()->id())
             ->pluck('roles.name')->toArray(), [], false);
 
-        if (!array_intersect($roles, ['super_admin','hr_manager','finance_manager'])) {
+        if (!array_intersect($roles, ['super_admin','ceo','hr_manager','finance_manager'])) {
             return response()->json(['message' => 'Only Finance or HR managers can mark payroll as paid.'], 403);
         }
 
