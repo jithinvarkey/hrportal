@@ -17,7 +17,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 /**
  * Manages the 3-level contract renewal approval workflow.
  *
- * Approval chain: Manager (level 1) → HR Manager (level 2) → CEO/Super Admin (level 3)
+ * Approval chain: Manager (level 1) → HR Manager (level 2) → CEO (level 3)
  *
  * Endpoints:
  *   GET  /api/v1/contracts/renewals              — paginated list with filters
@@ -43,7 +43,7 @@ class ContractRenewalController extends Controller {
                         ->where('model_has_roles.model_id', $user->id)
                         ->pluck('roles.name')->toArray(), [], false);
 
-        $isHRAdmin = (bool) array_intersect($userRoles, ['super_admin', 'hr_manager', 'hr_staff']);
+        $isHRAdmin = (bool) array_intersect($userRoles, ['super_admin', 'ceo', 'hr_manager', 'hr_staff']);
         $isMgr = in_array('department_manager', $userRoles);
 
         $query = ContractRenewalRequest::with([
@@ -250,7 +250,7 @@ class ContractRenewalController extends Controller {
      * Stage routing:
      *   pending          → manager_approved  (requires: department_manager or hr_manager or super_admin)
      *   manager_approved → hr_approved       (requires: hr_manager or hr_staff or super_admin)
-     *   hr_approved      → approved          (requires: super_admin — CEO)
+     *   hr_approved      → approved          (requires: ceo or super_admin)
      *
      * When fully approved, a new contract is automatically created.
      *
@@ -293,8 +293,8 @@ class ContractRenewalController extends Controller {
                 break;
 
             case 'hr_approved':
-                if (!$user->hasRole('super_admin')) {
-                    return response()->json(['message' => 'Only the CEO (Super Admin) can give final approval.'], 403);
+                if (!$user->hasAnyRole(['ceo', 'super_admin'])) {
+                    return response()->json(['message' => 'Only the CEO can give final approval.'], 403);
                 }
                 // Final approval — create the new contract
                 $newContract = $this->createRenewedContract($renewal);
@@ -337,6 +337,17 @@ class ContractRenewalController extends Controller {
 
         if (!in_array($renewal->status, ['pending', 'manager_approved', 'hr_approved'])) {
             return response()->json(['message' => "Cannot reject a request with status '{$renewal->status}'."], 422);
+        }
+
+        $canReject = match ($renewal->status) {
+            'pending' => $user->hasAnyRole(['department_manager', 'hr_manager', 'hr_staff', 'super_admin']),
+            'manager_approved' => $user->hasAnyRole(['hr_manager', 'hr_staff', 'super_admin']),
+            'hr_approved' => $user->hasAnyRole(['ceo', 'super_admin']),
+            default => false,
+        };
+
+        if (!$canReject) {
+            return response()->json(['message' => 'You are not authorized to reject at this approval stage.'], 403);
         }
 
         $stage = $renewal->current_stage;

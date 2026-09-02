@@ -118,7 +118,7 @@ class AttendanceController extends Controller
             ->join('roles','roles.id','=','model_has_roles.role_id')
             ->where('model_has_roles.model_id', $user->id)
             ->pluck('roles.name')->toArray(), [], false);
-        $isHR  = (bool) array_intersect($roles, ['super_admin','hr_manager','hr_staff']);
+        $isHR  = (bool) array_intersect($roles, ['super_admin','ceo','hr_manager','hr_staff']);
         $isMgr = in_array('department_manager', $roles);
 
         $employeeId = $user->employee?->id;
@@ -523,6 +523,10 @@ class AttendanceController extends Controller
             ->where('model_has_roles.model_type', get_class($user))
             ->pluck('roles.name')
             ->toArray(), [], false);
+
+        if (in_array('ceo', $userRoles, true) && !in_array('hr_manager', $userRoles, true)) {
+            $userRoles[] = 'hr_manager';
+        }
 
         return (bool) array_intersect($roles, $userRoles);
     }

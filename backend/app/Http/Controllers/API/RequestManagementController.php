@@ -162,7 +162,7 @@ class RequestManagementController extends Controller {
                         ->where('model_has_roles.model_id', $user->id)
                         ->pluck('roles.name')->toArray(), [], false);
 
-        $isHRAdmin = (bool) array_intersect($userRoles, ['super_admin', 'hr_manager', 'hr_staff']);
+        $isHRAdmin = (bool) array_intersect($userRoles, ['super_admin', 'ceo', 'hr_manager', 'hr_staff']);
         $isMgr = in_array('department_manager', $userRoles);
 
         // If not HR/admin and not explicitly requesting own, restrict to own
@@ -420,7 +420,7 @@ class RequestManagementController extends Controller {
                         ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
                         ->where('model_has_roles.model_id', auth()->id())
                         ->pluck('roles.name')->toArray(), [], false);
-        $isHRAdmin = (bool) array_intersect($userRoles, ['super_admin', 'hr_manager', 'hr_staff']);
+        $isHRAdmin = (bool) array_intersect($userRoles, ['super_admin', 'ceo', 'hr_manager', 'hr_staff']);
         $isAssignee = (int) $req->assigned_to === (int) auth()->id();
 
         if (!$isHRAdmin && !$isAssignee) {
@@ -588,7 +588,7 @@ class RequestManagementController extends Controller {
             ->pluck('roles.name')
             ->toArray(), [], false);
 
-        if ((bool) array_intersect($roles, ['super_admin', 'hr_manager', 'hr_staff'])) {
+        if ((bool) array_intersect($roles, ['super_admin', 'ceo', 'hr_manager', 'hr_staff'])) {
             return true;
         }
 

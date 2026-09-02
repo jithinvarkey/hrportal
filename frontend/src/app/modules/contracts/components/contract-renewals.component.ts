@@ -112,9 +112,9 @@ export class ContractRenewalsComponent implements OnInit, OnDestroy {
     const roles      = toArr(user?.roles);
     const raw        = JSON.stringify(user ?? {});
 
-    this.isHR  = ['super_admin','hr_manager','hr_staff'].some(r => roles.includes(r) || raw.includes(r));
-    this.isCEO = roles.includes('super_admin') || raw.includes('super_admin');
-    this.isMgr = ['super_admin','hr_manager','hr_staff','department_manager'].some(r => roles.includes(r) || raw.includes(r));
+    this.isHR  = ['super_admin','ceo','hr_manager','hr_staff'].some(r => roles.includes(r) || raw.includes(r));
+    this.isCEO = ['ceo', 'super_admin'].some(r => roles.includes(r) || raw.includes(r));
+    this.isMgr = ['super_admin','ceo','hr_manager','hr_staff','department_manager'].some(r => roles.includes(r) || raw.includes(r));
 
     this.createForm = this.fb.group({
       contract_id:         ['', Validators.required],

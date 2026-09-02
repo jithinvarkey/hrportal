@@ -10,7 +10,10 @@ use Illuminate\Validation\ValidationException;
 
 class RecruitmentController extends Controller {
     protected $service;
-    public function __construct(RecruitmentService $service, private NewHireOnboardingService $onboardingLinks) { $this->service = $service; }
+    public function __construct(
+        RecruitmentService $service,
+        private NewHireOnboardingService $onboardingLinks,
+    ) { $this->service = $service; }
 
     public function jobs(Request $request) {
         $departmentScope = $this->managerDepartmentScope($request);

@@ -141,7 +141,11 @@ export class AuthService {
   getUserRole(): string { return this.getRoles()[0] || ''; }
   getPermissions(): string[] { return this.getUser()?.permissions || []; }
 
-  hasRole(role: string): boolean { return this.getRoles().includes(role); }
+  hasRole(role: string): boolean {
+    const roles = this.getRoles();
+    return roles.includes(role)
+      || (role === ROLES.HR_MANAGER && roles.includes(ROLES.CEO));
+  }
   hasAnyRole(roles: string[]): boolean { return roles.some(r => this.hasRole(r)); }
   can(permission: string): boolean { return this.getPermissions().includes(permission); }
   canAny(perms: string[]): boolean { return perms.some(p => this.can(p)); }

@@ -42,12 +42,18 @@ class AssetController extends Controller
     {
         $user = auth()->user();
         return rescue(function () use ($user) {
-            return DB::table('model_has_roles')
+            $roles = DB::table('model_has_roles')
                 ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
                 ->where('model_has_roles.model_id', $user->id)
                 ->where('model_has_roles.model_type', get_class($user))
                 ->pluck('roles.name')
                 ->toArray();
+
+            if (in_array('ceo', $roles, true) && !in_array('hr_manager', $roles, true)) {
+                $roles[] = 'hr_manager';
+            }
+
+            return $roles;
         }, [], false);
     }
 

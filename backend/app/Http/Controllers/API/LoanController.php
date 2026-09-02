@@ -141,12 +141,18 @@ class LoanController extends Controller {
      * @return string[]
      */
     private function userRoles(): array {
-        return DB::table('model_has_roles')
+        $roles = DB::table('model_has_roles')
                         ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
                         ->where('model_has_roles.model_id', auth()->id())
                         ->where('model_has_roles.model_type', get_class(auth()->user()))
                         ->pluck('roles.name')
                         ->toArray();
+
+        if (in_array('ceo', $roles, true) && !in_array('hr_manager', $roles, true)) {
+            $roles[] = 'hr_manager';
+        }
+
+        return $roles;
     }
 
     /**
