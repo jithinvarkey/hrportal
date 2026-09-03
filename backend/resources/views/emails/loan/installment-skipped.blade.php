@@ -22,6 +22,7 @@
       </table>
 
       <p style="margin:24px 0 0;text-align:center"><a href="{{ $loanUrl }}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:7px">View Loan Schedule</a></p>
+      <p style="margin:20px 0 0;color:#6b7280;font-size:13px">Questions? Contact HR: <a href="mailto:diamond-hr@dbroker.com.sa" style="color:#1e3a5f">diamond-hr@dbroker.com.sa</a></p>
     </td></tr>
     <tr><td style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:11px;text-align:center">This is an automated message. Please do not reply.</td></tr>
   </table>

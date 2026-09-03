@@ -20,4 +20,5 @@ class JobApplication extends Model {
     public function jobPosting()  { return $this->belongsTo(JobPosting::class); }
     public function department()  { return $this->belongsTo(Department::class); }
     public function interviews()  { return $this->hasMany(Interview::class,'application_id'); }
+    public function latestInterview() { return $this->hasOne(Interview::class, 'application_id')->ofMany('scheduled_at', 'max'); }
 }

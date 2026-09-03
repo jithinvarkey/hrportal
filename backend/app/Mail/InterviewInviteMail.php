@@ -19,9 +19,13 @@ class InterviewInviteMail extends Mailable
 
     public function envelope(): Envelope
     {
+        $application = $this->interview->application;
         $posting = $this->interview->application?->jobPosting;
         return new Envelope(
-            subject: 'Interview Invitation — ' . ($posting?->title ?? 'Position at Diamond Insurance Broker')
+            subject: 'Interview Invitation — '
+                . ($application?->applicant_name ?? 'Candidate')
+                . ' — '
+                . ($posting?->title ?? 'Position at Diamond Insurance Broker')
         );
     }
 
@@ -44,7 +48,10 @@ class InterviewInviteMail extends Mailable
         $posting = $application?->jobPosting;
         $start = $this->interview->scheduled_at;
         $end = $start?->copy()->addMinutes((int) ($this->interview->duration_minutes ?: 60));
-        $summary = 'Interview: ' . ($posting?->title ?? 'Candidate Interview');
+        $summary = 'Interview: '
+            . ($application?->applicant_name ?? 'Candidate')
+            . ' — '
+            . ($posting?->title ?? 'Candidate Interview');
         $description = trim('Interview with ' . ($application?->applicant_name ?? 'candidate') . ' for ' . ($posting?->title ?? 'the applied position') . '.');
         $uid = 'interview-' . $this->interview->id . '@' . parse_url(config('app.url'), PHP_URL_HOST);
 

@@ -51,6 +51,7 @@ class RecruitmentController extends Controller {
     }
 
     public function storeJob(Request $request) {
+        $this->ensureCanManageRecruitment($request);
         $data = $request->validate([
             'title'           => 'required|string|max:150',
             'employment_type' => 'required|in:full_time,part_time,contract,intern',
@@ -84,6 +85,7 @@ class RecruitmentController extends Controller {
     }
 
     public function updateJob(Request $request, $id) {
+        $this->ensureCanManageRecruitment($request);
         $departmentScope = $this->managerDepartmentScope($request);
         $job = $this->scopeJobs(JobPosting::query(), $departmentScope)->findOrFail($id);
         $data = $request->all();
@@ -100,6 +102,7 @@ class RecruitmentController extends Controller {
     }
 
     public function deleteJob(Request $request, $id) {
+        $this->ensureCanManageRecruitment($request);
         $departmentScope = $this->managerDepartmentScope($request);
         $this->scopeJobs(JobPosting::query(), $departmentScope)->findOrFail($id)->delete();
         return response()->json(['message' => 'Job posting deleted']);
@@ -160,18 +163,29 @@ class RecruitmentController extends Controller {
             ->when($request->job_posting_id, fn($q) => $q->where('job_posting_id', $request->job_posting_id))
             ->when($request->stage, fn($q) => $q->where('stage', $request->stage))
             ->orderBy('created_at','desc')->paginate(20);
+        $this->hideExpectedSalary($apps->getCollection(), $request);
         return response()->json($apps);
     }
 
     public function showApplication(Request $request, $id) {
         $departmentScope = $this->managerDepartmentScope($request);
         $app = $this->scopeApplications(JobApplication::query(), $departmentScope)
-            ->with(['jobPosting','interviews'])
+            ->with(['jobPosting','latestInterview'])
             ->findOrFail($id);
+        $employeeId = $request->user()?->employee?->id;
+        $applicationDepartmentId = $app->department_id ?: $app->jobPosting?->department_id;
+        if ($employeeId && $departmentScope !== null && (int) $departmentScope !== (int) $applicationDepartmentId) {
+            $app->setRelation('latestInterview', $app->interviews()
+                ->whereJsonContains('interviewer_employee_ids', (int) $employeeId)
+                ->orderByDesc('scheduled_at')
+                ->first());
+        }
+        $this->hideExpectedSalary(collect([$app]), $request);
         return response()->json(['application' => $app]);
     }
 
     public function updateStage(Request $request, $id) {
+        $this->ensureCanManageRecruitment($request);
         $request->validate(['stage'=>'required|in:applied,screening,interview,offer,hired,rejected']);
         $departmentScope = $this->managerDepartmentScope($request);
         $app = $this->scopeApplications(JobApplication::query(), $departmentScope)->findOrFail($id);
@@ -205,6 +219,7 @@ class RecruitmentController extends Controller {
     }
 
     public function scheduleInterview(Request $request) {
+        $this->ensureCanManageRecruitment($request);
         $data = $request->validate([
             'application_id' => 'required|exists:job_applications,id',
             'round' => 'required|string|max:100',
@@ -239,7 +254,7 @@ class RecruitmentController extends Controller {
             ->filter()
             ->values()
             ->all();
-        unset($data['interviewer_employee_ids']);
+        $data['interviewer_employee_ids'] = array_values(array_unique(array_map('intval', $data['interviewer_employee_ids'])));
 
         $departmentScope = $this->managerDepartmentScope($request);
         $this->scopeApplications(JobApplication::query(), $departmentScope)->findOrFail($data['application_id']);
@@ -254,12 +269,14 @@ class RecruitmentController extends Controller {
     }
 
     public function updateInterview(Request $request, $id) {
+        $this->ensureCanManageRecruitment($request);
         $interview = Interview::findOrFail($id);
         $interview->update($request->all());
         return response()->json(['interview' => $interview]);
     }
 
     public function sendOffer(Request $request, $applicationId) {
+        $this->ensureCanManageRecruitment($request);
         $data = $request->validate([
             'basic_salary' => 'required|numeric|min:0',
             'housing_allowance' => 'nullable|numeric|min:0',
@@ -285,6 +302,7 @@ class RecruitmentController extends Controller {
     }
 
     public function hire(Request $request, $applicationId) {
+        $this->ensureCanManageRecruitment($request);
         $request->validate([
             'joining_date'    => 'required|date',
             'salary'          => 'required|numeric|min:0',
@@ -384,6 +402,7 @@ class RecruitmentController extends Controller {
 
     /** Add a CV to the bank (no specific job) */
     public function storeCv(Request $request) {
+        $this->ensureCanManageRecruitment($request);
         $data = $request->validate([
             'applicant_name'    => 'required|string|max:150',
             'applicant_email'   => 'required|email|max:191',
@@ -425,6 +444,7 @@ class RecruitmentController extends Controller {
 
     /** Update rating/notes for a CV bank entry */
     public function updateCv(Request $request, $id) {
+        $this->ensureCanManageRecruitment($request);
         $departmentScope = $this->managerDepartmentScope($request);
         $cv = $this->scopeApplications(JobApplication::query(), $departmentScope)->where('is_cv_bank', true)->findOrFail($id);
         $data = $request->only(['rating', 'notes', 'skills', 'department_id', 'position_applied',
@@ -439,6 +459,7 @@ class RecruitmentController extends Controller {
 
     /** Delete a CV bank entry */
     public function deleteCv(Request $request, $id) {
+        $this->ensureCanManageRecruitment($request);
         $departmentScope = $this->managerDepartmentScope($request);
         $cv = $this->scopeApplications(JobApplication::query(), $departmentScope)->where('is_cv_bank', true)->findOrFail($id);
         if ($cv->cv_path) {
@@ -450,6 +471,7 @@ class RecruitmentController extends Controller {
 
     /** Move a CV bank entry to a job application */
     public function linkCvToJob(Request $request, $id) {
+        $this->ensureCanManageRecruitment($request);
         $request->validate(['job_posting_id' => 'required|exists:job_postings,id']);
         $departmentScope = $this->managerDepartmentScope($request);
         $cv = $this->scopeApplications(JobApplication::query(), $departmentScope)->where('is_cv_bank', true)->findOrFail($id);
@@ -471,7 +493,9 @@ class RecruitmentController extends Controller {
         }
 
         if (!$user->hasRole('department_manager')) {
-            return null;
+            // Authenticated non-recruitment users are restricted to interviews
+            // where they were explicitly selected as an interviewer.
+            return -1;
         }
 
         $departmentId = $user->employee?->department_id;
@@ -482,7 +506,18 @@ class RecruitmentController extends Controller {
 
     private function scopeJobs($query, ?int $departmentId)
     {
-        return $departmentId === null ? $query : $query->where('department_id', $departmentId);
+        if ($departmentId === null) return $query;
+
+        $employeeId = request()->user()?->employee?->id;
+        return $query->where(function ($scope) use ($departmentId, $employeeId) {
+            if ($departmentId > 0) $scope->where('department_id', $departmentId);
+            if ($employeeId) {
+                $method = $departmentId > 0 ? 'orWhereHas' : 'whereHas';
+                $scope->{$method}('applications.interviews', fn ($interview) =>
+                    $interview->whereJsonContains('interviewer_employee_ids', (int) $employeeId)
+                );
+            }
+        });
     }
 
     private function scopeApplications($query, ?int $departmentId)
@@ -491,10 +526,34 @@ class RecruitmentController extends Controller {
             return $query;
         }
 
-        return $query->where(function ($scope) use ($departmentId) {
-            $scope->where('department_id', $departmentId)
-                ->orWhereHas('jobPosting', fn ($job) => $job->where('department_id', $departmentId));
+        $employeeId = request()->user()?->employee?->id;
+        return $query->where(function ($scope) use ($departmentId, $employeeId) {
+            if ($departmentId > 0) {
+                $scope->where('department_id', $departmentId)
+                    ->orWhereHas('jobPosting', fn ($job) => $job->where('department_id', $departmentId));
+            }
+            if ($employeeId) {
+                $method = $departmentId > 0 ? 'orWhereHas' : 'whereHas';
+                $scope->{$method}('interviews', fn ($interview) =>
+                    $interview->whereJsonContains('interviewer_employee_ids', (int) $employeeId)
+                );
+            }
         });
+    }
+
+    private function hideExpectedSalary($applications, Request $request): void
+    {
+        if ($request->user()?->hasAnyRole(['super_admin', 'hr_manager', 'hr_staff'])) return;
+        $applications->each(fn (JobApplication $application) => $application->makeHidden('expected_salary'));
+    }
+
+    private function ensureCanManageRecruitment(Request $request): void
+    {
+        abort_unless(
+            $request->user()?->hasAnyRole(['super_admin', 'hr_manager', 'hr_staff', 'department_manager']),
+            403,
+            'You have read-only access to assigned interviews.'
+        );
     }
 
     private function validateDesignationDepartment($designationId, $departmentId): void

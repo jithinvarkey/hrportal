@@ -27,6 +27,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   editJobId: number | null = null; selectedApp: any = null;
   selectedJobFilter: number | null = null; isHR = false;
   isDeptManager = false;
+  isInterviewOnly = false;
   canManageRecruitment = false;
   managerDepartmentId: number | null = null;
 
@@ -107,6 +108,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     format: 'video', location_or_link: '', interviewer_employee_ids: [],
   };
   interviewSubmitting = false;
+  interviewerSearch = '';
   editingNotes = false;
   hrNotesText  = '';
 
@@ -141,6 +143,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     const user = this.auth.getUser();
     this.isHR = this.auth.isHRRole();
     this.isDeptManager = this.auth.isDeptManager();
+    this.isInterviewOnly = !this.isHR && !this.isDeptManager;
     this.canManageRecruitment = this.isHR || this.isDeptManager;
     this.managerDepartmentId = this.isDeptManager && !this.isHR
       ? Number(user?.employee?.departmentId ?? user?.employee?.department_id ?? 0) || null
@@ -170,7 +173,10 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
       probation_period: [90],
       custom_tasks:     [''],
     });
-    this.loadStats(); this.loadJobs(); this.loadDepartments(); this.loadDesignations(); this.loadEmployees();
+    if (this.isInterviewOnly) this.activeTab = 'pipeline';
+    this.loadStats();
+    if (!this.isInterviewOnly) { this.loadJobs(); this.loadDepartments(); this.loadDesignations(); this.loadEmployees(); }
+    this.loadApplications();
     this.searchControl.valueChanges.pipe(debounceTime(400), distinctUntilChanged(), takeUntil(this.destroy$))
       .subscribe(() => this.loadJobs(1));
   }
@@ -243,7 +249,20 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     this.loadApplications(job.id);
   }
 
-  viewApp(app: any): void { this.selectedApp = app; this.showAppDetail = true; this.cdr.markForCheck(); }
+  viewApp(app: any): void {
+    this.selectedApp = app;
+    this.showAppDetail = true;
+    this.cdr.markForCheck();
+
+    const requestedId = app.id;
+    this.http.get<any>(`${this.api}/applications/${requestedId}`).pipe(takeUntil(this.destroy$)).subscribe({
+      next: response => {
+        if (this.selectedApp?.id === requestedId) this.selectedApp = response?.application ?? app;
+        this.cdr.markForCheck();
+      },
+      error: () => this.cdr.markForCheck(),
+    });
+  }
 
   moveStage(app: any, stage: string, event: Event): void {
     event.stopPropagation();
@@ -348,13 +367,14 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   openInterviewForm(app: any): void {
     this.selectedApp = app;
     const now = new Date();
-    now.setHours(10, 0, 0, 0);
+    now.setHours(9, 0, 0, 0);
     this.interviewForm = {
       round: 'HR', duration_minutes: 60, format: 'in_person',
       location_or_link: this.defaultInterviewMapLink, interviewer_employee_ids: [],
-      scheduled_at: now.toISOString().slice(0, 16),
+      scheduled_at: this.toLocalDateTimeInput(now),
     };
     this.interviewSubmitting = false;
+    this.interviewerSearch = '';
     this.showInterviewForm = true;
     this.cdr.markForCheck();
   }
@@ -393,6 +413,24 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
       .filter(e => ids.has(Number(e.id)))
       .map(e => `${e.first_name} ${e.last_name}`)
       .join(', ');
+  }
+
+  private toLocalDateTimeInput(date: Date): string {
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  filteredInterviewers(): any[] {
+    const search = this.interviewerSearch.trim().toLocaleLowerCase();
+    if (!search) return this.employees;
+    return this.employees.filter(employee => [
+      employee.first_name,
+      employee.last_name,
+      `${employee.first_name ?? ''} ${employee.last_name ?? ''}`,
+      employee.employee_code,
+      employee.email,
+      employee.department?.name,
+    ].some(value => String(value ?? '').toLocaleLowerCase().includes(search)));
   }
 
   submitInterview(): void {
@@ -748,6 +786,19 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   avatarColor(name?: string|null): string { const p=['#3b82f6','#10b981','#f59e0b','#ef4444','#6366f1','#0ea5e9','#f97316','#a78bfa']; return p[(name?.charCodeAt(0)??0)%p.length]; }
   initial(name?: string|null): string { return name?.charAt(0)?.toUpperCase() ?? '?'; }
   formatDate(d: string|null): string { if(!d) return '—'; return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
+  formatDateTime(d: string|null): string {
+    if (!d) return '—';
+    return new Date(d).toLocaleString('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+  }
+
+  interviewFormat(format: string|null): string {
+    const labels: Record<string, string> = { video: 'Video', in_person: 'In person', phone: 'Phone' };
+    return labels[format ?? ''] ?? '—';
+  }
+
+  isWebLink(value: string|null): boolean { return /^https?:\/\//i.test(value ?? ''); }
   get pages(): number[] { if(!this.pagination?.last_page) return []; return Array.from({length:Math.min(this.pagination.last_page,8)},(_,i)=>i+1); }
   get f() { return this.jobForm.controls; }
 
