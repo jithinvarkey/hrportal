@@ -81,7 +81,7 @@
     </p>
 
     <p style="color:#6b7280;font-size:13px;margin:0">
-      If you have questions, please contact HR at <a href="mailto:hr@diamond-insurance.com.sa" style="color:#1e3a5f">hr@diamond-insurance.com.sa</a>.
+      If you have questions, please contact HR at <a href="mailto:diamond-hr@dbroker.com.sa" style="color:#1e3a5f">diamond-hr@dbroker.com.sa</a>.
     </p>
   </td></tr>
 

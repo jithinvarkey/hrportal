@@ -16,7 +16,7 @@
   <div class="alert alert-error"   *ngIf="errorMsg">  <mat-icon>error_outline</mat-icon> {{ errorMsg }}</div>
 
   <!-- ── Stat strip ──────────────────────────────────────────────────── -->
-  <div class="stat-strip">
+  <div class="stat-strip" *ngIf="!isInterviewOnly">
     <div class="stat-tile" *ngFor="let t of statTiles" [style.--tile-color]="t.color">
       <div class="tile-icon-wrap"><mat-icon>{{ t.icon }}</mat-icon></div>
       <div class="tile-body">
@@ -28,14 +28,14 @@
 
   <!-- ── Tabs ────────────────────────────────────────────────────────── -->
   <div class="mod-tabs">
-    <button class="mod-tab" [class.active]="activeTab==='jobs'"     (click)="switchTab('jobs')">
+    <button class="mod-tab" *ngIf="!isInterviewOnly" [class.active]="activeTab==='jobs'"     (click)="switchTab('jobs')">
       <mat-icon>work</mat-icon> Job Postings
     </button>
     <button class="mod-tab" [class.active]="activeTab==='pipeline'" (click)="switchTab('pipeline')">
       <mat-icon>view_kanban</mat-icon> Applicant Pipeline
       <span class="tab-badge" *ngIf="stats.total_applicants > 0">{{ stats.total_applicants }}</span>
     </button>
-    <button class="mod-tab" [class.active]="activeTab==='cv_bank'" (click)="switchTab('cv_bank')">
+    <button class="mod-tab" *ngIf="!isInterviewOnly" [class.active]="activeTab==='cv_bank'" (click)="switchTab('cv_bank')">
       <mat-icon>folder_shared</mat-icon> CV Bank
     </button>
   </div>
@@ -352,7 +352,7 @@
           </div>
           <div class="ig-item"><span class="ig-lbl">Applied</span><span class="ig-val">{{ formatDate(selectedApp.created_at) }}</span></div>
           <div class="ig-item"><span class="ig-lbl">Phone</span><span class="ig-val">{{ selectedApp.applicant_phone || '—' }}</span></div>
-          <div class="ig-item" *ngIf="selectedApp.expected_salary">
+          <div class="ig-item" *ngIf="isHR && selectedApp.expected_salary">
             <span class="ig-lbl">Expected Salary</span>
             <span class="ig-val">{{ selectedApp.expected_salary | number }} SAR</span>
           </div>
@@ -367,6 +367,23 @@
       <div class="detail-section" *ngIf="selectedApp.cover_letter_text">
         <div class="ds-title">Cover Letter</div>
         <div class="terms-body">{{ selectedApp.cover_letter_text }}</div>
+      </div>
+      <div class="detail-section interview-detail" *ngIf="selectedApp.latest_interview as interview">
+        <div class="ds-title">Latest Scheduled Interview</div>
+        <div class="info-grid">
+          <div class="ig-item"><span class="ig-lbl">Date &amp; Time</span><span class="ig-val">{{ formatDateTime(interview.scheduled_at) }}</span></div>
+          <div class="ig-item"><span class="ig-lbl">Round</span><span class="ig-val">{{ interview.round || '—' }}</span></div>
+          <div class="ig-item"><span class="ig-lbl">Format</span><span class="ig-val">{{ interviewFormat(interview.format) }}</span></div>
+          <div class="ig-item"><span class="ig-lbl">Duration</span><span class="ig-val">{{ interview.duration_minutes ? interview.duration_minutes + ' minutes' : '—' }}</span></div>
+          <div class="ig-item interview-wide"><span class="ig-lbl">Interviewer(s)</span><span class="ig-val">{{ interview.interviewers?.join(', ') || '—' }}</span></div>
+          <div class="ig-item interview-wide"><span class="ig-lbl">Location / Meeting Link</span>
+            <a *ngIf="isWebLink(interview.location_or_link); else locationText" class="interview-link"
+               [href]="interview.location_or_link" target="_blank" rel="noopener noreferrer">
+              {{ interview.location_or_link }} <mat-icon>open_in_new</mat-icon>
+            </a>
+            <ng-template #locationText><span class="ig-val">{{ interview.location_or_link || '—' }}</span></ng-template>
+          </div>
+        </div>
       </div>
       <div class="detail-section" *ngIf="isHR">
         <div class="ds-title" style="display:flex;align-items:center;justify-content:space-between">
@@ -999,8 +1016,17 @@
     </div>
     <div class="field-group">
       <label class="field-label">Interviewers <span class="req">*</span></label>
+      <div class="interviewer-search-wrap">
+        <mat-icon>search</mat-icon>
+        <input class="field-input" [(ngModel)]="interviewerSearch"
+               placeholder="Search by name, code, department, or email">
+        <button type="button" class="interviewer-search-clear" *ngIf="interviewerSearch"
+                (click)="interviewerSearch=''" aria-label="Clear interviewer search">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
       <div class="employee-checkbox-list">
-        <label class="employee-check-row" *ngFor="let e of employees">
+        <label class="employee-check-row" *ngFor="let e of filteredInterviewers()">
           <input type="checkbox"
                  [checked]="isInterviewerSelected(e.id)"
                  (change)="toggleInterviewer(e.id, $any($event.target).checked)">
@@ -1009,6 +1035,9 @@
             <small>{{ e.employee_code }}{{ e.department?.name ? ' - ' + e.department.name : '' }}</small>
           </span>
         </label>
+        <div class="interviewer-empty" *ngIf="!filteredInterviewers().length">
+          No matching interviewers
+        </div>
       </div>
       <span class="field-hint" *ngIf="interviewForm.interviewer_employee_ids?.length">
         Selected: {{ selectedInterviewersText() }}

@@ -8,7 +8,7 @@
     <tr><td style="padding:32px;color:#374151;font-size:15px;line-height:1.7">
       <p style="margin:0 0 18px">Dear {{ $employeeName }},</p>
       <p style="margin:0 0 18px">Our attendance records show that you checked in on <strong>{{ $attendanceDate }}</strong> at <strong>{{ $checkInTime }}</strong>, but no checkout was recorded.</p>
-      <p style="margin:0">Please contact Human Resources to correct your attendance record.</p>
+      <p style="margin:0">Please contact Human Resources at <a href="mailto:diamond-hr@dbroker.com.sa" style="color:#1e3a5f">diamond-hr@dbroker.com.sa</a> to correct your attendance record.</p>
     </td></tr>
     <tr><td style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:11px;text-align:center">This is an automated attendance reminder.</td></tr>
   </table>

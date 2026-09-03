@@ -245,7 +245,7 @@ export class AuthService {
       },
       {
         path: '/recruitment', label: 'Recruitment', icon: 'work',
-        roles: [ROLES.SUPER_ADMIN, ROLES.HR_MANAGER, ROLES.HR_STAFF, ROLES.DEPT_MANAGER]
+        roles: [ROLES.SUPER_ADMIN, ROLES.HR_MANAGER, ROLES.HR_STAFF, ROLES.DEPT_MANAGER, ROLES.EMPLOYEE]
       },
       {
         path: '/performance', label: 'Performance', icon: 'leaderboard',

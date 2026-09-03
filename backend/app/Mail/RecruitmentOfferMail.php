@@ -20,7 +20,8 @@ class RecruitmentOfferMail extends Mailable
 
     public function build(): self
     {
-        $mail = $this->subject('Job Offer - Diamond Insurance Broker')
+        $position = $this->application->jobPosting?->title ?? 'Position at Diamond Insurance Broker';
+        $mail = $this->subject('Job Offer — ' . ($this->application->applicant_name ?: 'Candidate') . ' — ' . $position)
             ->view('emails.recruitment-offer');
 
         foreach ($this->attachmentsMeta as $attachment) {

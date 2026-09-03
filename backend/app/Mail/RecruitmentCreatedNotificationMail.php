@@ -25,7 +25,10 @@ class RecruitmentCreatedNotificationMail extends Mailable
     {
         $subject = $this->type === 'job'
             ? 'New job posting: ' . $this->record->title
-            : 'New applicant: ' . $this->record->applicant_name;
+            : 'New Applicant — '
+                . ($this->record->applicant_name ?: 'Candidate')
+                . ' — '
+                . ($this->record->jobPosting?->title ?? 'Position at Diamond Insurance Broker');
 
         return new Envelope(subject: $subject);
     }

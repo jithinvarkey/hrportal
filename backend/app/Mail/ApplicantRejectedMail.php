@@ -19,7 +19,7 @@ class ApplicantRejectedMail extends Mailable
     {
         $position = $this->application->jobPosting?->title ?? 'your application';
 
-        return $this->subject('Update on your application - ' . $position)
+        return $this->subject('Application Update — ' . ($this->application->applicant_name ?: 'Candidate') . ' — ' . $position)
             ->view('emails.applicant-rejected');
     }
 }
