@@ -218,12 +218,19 @@ class RecruitmentController extends Controller {
 
         $interviewers = Employee::query()
             ->whereIn('id', $data['interviewer_employee_ids'])
-            ->where('status', 'active')
+            ->where(function ($eligibilityQuery) {
+                $eligibilityQuery->where('status', 'active')
+                    ->orWhere(function ($probationQuery) {
+                        $probationQuery->where('status', 'probation')
+                            ->whereRaw('LOWER(email) LIKE ?', ['%@dbroker.com.sa']);
+                    });
+            })
+            ->whereRaw('LOWER(COALESCE(email, ?)) <> ?', ['', 'admin@hrms.com'])
             ->get(['id', 'first_name', 'last_name', 'email', 'employee_code']);
 
         if ($interviewers->count() !== count(array_unique($data['interviewer_employee_ids']))) {
             return response()->json([
-                'message' => 'Please select active employees only as interviewers.',
+                'message' => 'Select an eligible employee as interviewer; admin@hrms.com cannot be selected.',
             ], 422);
         }
 

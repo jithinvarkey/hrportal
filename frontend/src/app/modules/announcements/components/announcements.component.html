@@ -242,6 +242,7 @@
         <option value="all">Everyone</option>
         <option value="departments">Specific departments</option>
         <option value="roles">Specific roles</option>
+        <option value="employees">Selected employees</option>
       </select>
     </div>
     <div class="target-box" *ngIf="form.audience_type === 'departments'">
@@ -258,6 +259,14 @@
              [class.on]="form.target_roles.includes(r)">
         <input type="checkbox" [checked]="form.target_roles.includes(r)" (change)="toggleRole(r)">
         {{ r }}
+      </label>
+    </div>
+    <div class="target-box" *ngIf="form.audience_type === 'employees'">
+      <span class="target-hint">Select employees:</span>
+      <label class="chip-check" *ngFor="let e of employees"
+             [class.on]="form.target_employee_ids.includes(e.id)">
+        <input type="checkbox" [checked]="form.target_employee_ids.includes(e.id)" (change)="toggleEmployee(e.id)">
+        {{ employeeLabel(e) }}
       </label>
     </div>
 

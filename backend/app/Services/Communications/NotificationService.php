@@ -19,16 +19,33 @@ use Illuminate\Support\Facades\Mail;
 class NotificationService
 {
     /**
-     * Resolve the set of active employee ids an announcement targets.
+     * Resolve the employee ids a communication targets.
      *
      * @param string     $audienceType 'all' | 'departments' | 'roles'
      * @param array|null $departmentIds
      * @param array|null $roles        role names
+     * @param bool       $includeEligibleProbation Include probation employees
+     *                    only when they have a company-domain email address.
      * @return Collection<int>
      */
-    public function resolveAudience(string $audienceType, ?array $departmentIds, ?array $roles): Collection
+    public function resolveAudience(
+        string $audienceType,
+        ?array $departmentIds,
+        ?array $roles,
+        bool $includeEligibleProbation = false,
+        ?array $employeeIds = null,
+    ): Collection
     {
-        $query = Employee::query()->where('status', 'active');
+        $query = Employee::query()->where(function ($statusQuery) use ($includeEligibleProbation) {
+            $statusQuery->where('status', 'active');
+
+            if ($includeEligibleProbation) {
+                $statusQuery->orWhere(function ($probationQuery) {
+                    $probationQuery->where('status', 'probation')
+                        ->whereRaw('LOWER(email) LIKE ?', ['%@dbroker.com.sa']);
+                });
+            }
+        });
 
         if ($audienceType === 'departments' && !empty($departmentIds)) {
             $query->whereIn('department_id', $departmentIds);
@@ -39,6 +56,8 @@ class NotificationService
                 ->whereIn('roles.name', $roles)
                 ->pluck('model_has_roles.model_id');
             $query->whereIn('user_id', $userIds);
+        } elseif ($audienceType === 'employees') {
+            $query->whereIn('id', $employeeIds ?? []);
         }
 
         return $query->pluck('id');

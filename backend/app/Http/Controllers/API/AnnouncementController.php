@@ -279,6 +279,8 @@ class AnnouncementController extends Controller
             $announcement->audience_type ?? 'all',
             $announcement->target_department_ids,
             $announcement->target_roles,
+            true,
+            $announcement->target_employee_ids,
         );
         $reach = $audienceIds->count();
 
@@ -324,9 +326,10 @@ class AnnouncementController extends Controller
             'body'         => 'required|string',
             'body_ar'      => 'nullable|string',
             'priority'     => 'nullable|in:normal,high,urgent',
-            'audience_type'=> 'nullable|in:all,departments,roles',
+            'audience_type'=> 'nullable|in:all,departments,roles,employees',
             'target_department_ids'   => 'nullable',
             'target_roles'            => 'nullable',
+            'target_employee_ids'     => 'nullable',
             'is_pinned'    => 'nullable|boolean',
             'is_published' => 'nullable|boolean',
             'scheduled_at' => 'nullable|date|after:now',
@@ -336,6 +339,12 @@ class AnnouncementController extends Controller
 
         $scheduled = $data['scheduled_at'] ?? null;
         $publishNow = $request->has('is_published') ? $request->boolean('is_published') : true;
+        $targetEmployeeIds = $this->arr($request->input('target_employee_ids'));
+        if (($data['audience_type'] ?? 'all') === 'employees' && empty($targetEmployeeIds)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'target_employee_ids' => ['Select at least one employee.'],
+            ]);
+        }
         // A scheduled announcement starts unpublished; the cron flips it on.
         if ($scheduled) $publishNow = false;
 
@@ -349,6 +358,7 @@ class AnnouncementController extends Controller
             'audience_type' => $data['audience_type'] ?? 'all',
             'target_department_ids' => $this->arr($request->input('target_department_ids')),
             'target_roles'          => $this->arr($request->input('target_roles')),
+            'target_employee_ids'   => $targetEmployeeIds,
             'is_pinned'     => $request->boolean('is_pinned'),
             'is_published'  => $publishNow,
             'scheduled_at'  => $scheduled,
@@ -381,6 +391,8 @@ class AnnouncementController extends Controller
             $a->audience_type ?? 'all',
             $a->target_department_ids,
             $a->target_roles,
+            true,
+            $a->target_employee_ids,
         );
         $summary = \Illuminate\Support\Str::limit(strip_tags($a->body), 120);
         $this->notifications->notifyMany(
@@ -421,9 +433,10 @@ class AnnouncementController extends Controller
             'body'         => 'sometimes|string',
             'body_ar'      => 'nullable|string',
             'priority'     => 'nullable|in:normal,high,urgent',
-            'audience_type'=> 'nullable|in:all,departments,roles',
+            'audience_type'=> 'nullable|in:all,departments,roles,employees',
             'target_department_ids' => 'nullable',
             'target_roles'          => 'nullable',
+            'target_employee_ids'   => 'nullable',
             'is_pinned'    => 'nullable|boolean',
             'is_published' => 'nullable|boolean',
             'scheduled_at' => 'nullable|date',
@@ -437,8 +450,15 @@ class AnnouncementController extends Controller
         if ($request->has('audience_type'))         $announcement->audience_type = $data['audience_type'] ?? 'all';
         if ($request->has('target_department_ids')) $announcement->target_department_ids = $this->arr($request->input('target_department_ids'));
         if ($request->has('target_roles'))          $announcement->target_roles = $this->arr($request->input('target_roles'));
+        if ($request->has('target_employee_ids'))   $announcement->target_employee_ids = $this->arr($request->input('target_employee_ids'));
         if ($request->has('is_pinned'))    $announcement->is_pinned = $request->boolean('is_pinned');
         if ($request->has('is_published')) $announcement->is_published = $request->boolean('is_published');
+
+        if ($announcement->audience_type === 'employees' && empty($announcement->target_employee_ids)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'target_employee_ids' => ['Select at least one employee.'],
+            ]);
+        }
 
         // Stamp published_at the first time it goes live.
         if (!$wasPublished && $announcement->is_published && !$announcement->published_at) {
@@ -551,6 +571,11 @@ class AnnouncementController extends Controller
         if ($audienceType === 'roles') {
             $targetRoles = array_map('strval', $announcement->target_roles ?? []);
             return count(array_intersect(array_map('strval', $roleNames), $targetRoles)) > 0;
+        }
+
+        if ($audienceType === 'employees') {
+            $targetEmployeeIds = array_map('intval', $announcement->target_employee_ids ?? []);
+            return $employee && in_array((int) $employee->id, $targetEmployeeIds, true);
         }
 
         return false;

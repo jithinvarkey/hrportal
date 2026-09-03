@@ -9,7 +9,7 @@ interface Announcement {
   body: string;
   body_ar?: string | null;
   priority: 'normal' | 'high' | 'urgent';
-  audience_type?: 'all' | 'departments' | 'roles';
+  audience_type?: 'all' | 'departments' | 'roles' | 'employees';
   is_pinned: boolean;
   is_published: boolean;
   published_at: string | null;
@@ -64,6 +64,7 @@ export class AnnouncementsComponent implements OnInit {
 
   // Targeting data
   departments: any[] = [];
+  employees: any[] = [];
   readonly roleOptions = ['employee', 'department_manager', 'hr_staff', 'hr_manager', 'finance', 'super_admin'];
 
   // Engagement stats drawer
@@ -100,19 +101,29 @@ export class AnnouncementsComponent implements OnInit {
   ngOnInit(): void {
     this.isManager = this.auth.hasAnyRole(['super_admin', 'hr_manager', 'hr_staff']);
     this.loadCategories();
-    if (this.isManager) this.loadDepartments();
+    if (this.isManager) {
+      this.loadDepartments();
+      this.loadEmployees();
+    }
     this.load();
   }
 
   private blankForm(): any {
     return { category_id: null, title: '', title_ar: '', body: '', body_ar: '', priority: 'normal',
-             audience_type: 'all', target_department_ids: [], target_roles: [],
+             audience_type: 'all', target_department_ids: [], target_roles: [], target_employee_ids: [],
              is_pinned: false, is_published: true, scheduled_at: '', expires_at: '' };
   }
 
   loadDepartments(): void {
     this.http.get<any>('/api/v1/departments').subscribe({
       next: r => { this.departments = Array.isArray(r) ? r : (r?.data || []); this.cdr.markForCheck(); },
+      error: () => {},
+    });
+  }
+
+  loadEmployees(): void {
+    this.http.get<any>('/api/v1/employees', { params: { per_page: 1000 } }).subscribe({
+      next: r => { this.employees = Array.isArray(r) ? r : (r?.data || []); this.cdr.markForCheck(); },
       error: () => {},
     });
   }
@@ -151,6 +162,7 @@ export class AnnouncementsComponent implements OnInit {
         priority: a.priority, audience_type: a.audience_type ?? 'all',
         target_department_ids: (a as any).target_department_ids ?? [],
         target_roles: (a as any).target_roles ?? [],
+        target_employee_ids: (a as any).target_employee_ids ?? [],
         is_pinned: a.is_pinned, is_published: a.is_published,
         scheduled_at: a.scheduled_at ? a.scheduled_at.substring(0, 16) : '',
         expires_at: a.expires_at ?? '',
@@ -200,6 +212,9 @@ export class AnnouncementsComponent implements OnInit {
     }
     if (this.form.audience_type === 'roles' && this.form.target_roles?.length) {
       fd.append('target_roles', JSON.stringify(this.form.target_roles));
+    }
+    if (this.form.audience_type === 'employees' && this.form.target_employee_ids?.length) {
+      fd.append('target_employee_ids', JSON.stringify(this.form.target_employee_ids));
     }
     if (this.form.scheduled_at) fd.append('scheduled_at', this.form.scheduled_at);
     if (this.form.expires_at) fd.append('expires_at', this.form.expires_at);
@@ -311,6 +326,20 @@ export class AnnouncementsComponent implements OnInit {
     const i = arr.indexOf(role);
     if (i >= 0) arr.splice(i, 1); else arr.push(role);
     this.cdr.markForCheck();
+  }
+
+  toggleEmployee(id: number): void {
+    const arr = this.form.target_employee_ids as number[];
+    const i = arr.indexOf(id);
+    if (i >= 0) arr.splice(i, 1); else arr.push(id);
+    this.cdr.markForCheck();
+  }
+
+  employeeLabel(employee: any): string {
+    return employee.full_name
+      || `${employee.first_name || ''} ${employee.last_name || ''}`.trim()
+      || employee.email
+      || `Employee #${employee.id}`;
   }
 
   // ── Category manager ────────────────────────────────────────────────────

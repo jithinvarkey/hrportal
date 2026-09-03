@@ -19,7 +19,15 @@ class MissedCheckoutNotificationService
             ->whereNotNull('check_in')
             ->whereNull('check_out')
             ->whereNull('missed_checkout_notified_at')
-            ->whereHas('employee', fn ($query) => $query->where('status', 'active'))
+            ->whereHas('employee', function ($query) {
+                $query->where(function ($statusQuery) {
+                    $statusQuery->where('status', 'active')
+                        ->orWhere(function ($probationQuery) {
+                            $probationQuery->where('status', 'probation')
+                                ->whereRaw('LOWER(email) LIKE ?', ['%@dbroker.com.sa']);
+                        });
+                });
+            })
             ->get();
 
         foreach ($logs as $log) {
@@ -44,7 +52,7 @@ class MissedCheckoutNotificationService
         if ($employee->email) {
             $hrEmails = Employee::query()->active()->whereNotNull('email')
                 ->where('id', '<>', $employee->id)
-                ->whereHas('department', fn ($query) => $query->where('code', 'HR'))
+                ->whereHas('user.roles', fn ($query) => $query->where('name', 'hr_manager'))
                 ->whereDoesntHave('user.roles', fn ($query) => $query->where('name', 'hr_staff'))
                 ->pluck('email')->filter()->unique()->values()->all();
 
