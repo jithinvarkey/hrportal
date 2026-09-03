@@ -116,16 +116,6 @@
         </div>
       </div>
 
-      <!-- Financial -->
-      <div class="detail-card" *ngIf="canViewSalary">
-        <div class="dc-title"><mat-icon>account_balance_wallet</mat-icon> Financial</div>
-        <div class="info-rows">
-          <div class="info-row"><span class="ir-label">Total Monthly Salary</span><span class="ir-val" style="color:var(--success);font-family:'Syne',sans-serif;font-size:16px;font-weight:700">SAR {{ totalMonthlySalary | number:'1.2-2' }}</span></div>
-          <div class="info-row"><span class="ir-label">Bank Name</span>    <span class="ir-val">{{ displayText(employee.bank_name) }}</span></div>
-          <div class="info-row"><span class="ir-label">Bank Account</span> <span class="ir-val" style="color:var(--text3)">{{ maskedBankAccount() }}</span></div>
-        </div>
-      </div>
-
       <!-- Emergency Contact -->
       <div class="detail-card">
         <div class="dc-title"><mat-icon>emergency</mat-icon> Emergency Contact</div>
@@ -141,6 +131,30 @@
     <div class="notes-card" *ngIf="employee.notes">
       <div class="dc-title"><mat-icon>notes</mat-icon> Notes</div>
       <p class="notes-text">{{ employee.notes }}</p>
+    </div>
+  </div>
+
+  <!-- Salary Details Tab — restricted to super_admin and hr_manager -->
+  <div *ngIf="activeTab === 'salary' && canViewSalary && employee" class="salary-layout">
+    <div class="detail-card salary-card">
+      <div class="dc-title"><mat-icon>payments</mat-icon> Monthly Salary Breakdown</div>
+      <div class="info-rows">
+        <div class="info-row"><span class="ir-label">Basic Salary</span><span class="ir-val salary-value">SAR {{ basicSalary | number:'1.2-2' }}</span></div>
+        <div class="info-row"><span class="ir-label">Housing Allowance</span><span class="ir-val">SAR {{ housingAllowance | number:'1.2-2' }}</span></div>
+        <div class="info-row"><span class="ir-label">Transport Allowance</span><span class="ir-val">SAR {{ transportAllowance | number:'1.2-2' }}</span></div>
+        <div class="info-row"><span class="ir-label">Mobile Allowance</span><span class="ir-val">SAR {{ mobileAllowance | number:'1.2-2' }}</span></div>
+        <div class="info-row"><span class="ir-label">Food Allowance</span><span class="ir-val">SAR {{ foodAllowance | number:'1.2-2' }}</span></div>
+        <div class="info-row"><span class="ir-label">Other Allowances</span><span class="ir-val">SAR {{ otherAllowances | number:'1.2-2' }}</span></div>
+        <div class="info-row salary-total"><span class="ir-label">Total Monthly Salary</span><span class="ir-val salary-value">SAR {{ totalMonthlySalary | number:'1.2-2' }}</span></div>
+      </div>
+    </div>
+
+    <div class="detail-card salary-card">
+      <div class="dc-title"><mat-icon>account_balance</mat-icon> Bank Details</div>
+      <div class="info-rows">
+        <div class="info-row"><span class="ir-label">Bank Name</span><span class="ir-val">{{ displayText(employee.bank_name) }}</span></div>
+        <div class="info-row"><span class="ir-label">Bank Account</span><span class="ir-val bank-account">{{ maskedBankAccount() }}</span></div>
+      </div>
     </div>
   </div>
 

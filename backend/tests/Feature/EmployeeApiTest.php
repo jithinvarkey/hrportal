@@ -31,6 +31,7 @@ class EmployeeApiTest extends TestCase
         Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
         Role::firstOrCreate(['name' => 'hr_manager',  'guard_name' => 'web']);
         Role::firstOrCreate(['name' => 'hr_staff',    'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'ceo',         'guard_name' => 'web']);
         Role::firstOrCreate(['name' => 'employee',    'guard_name' => 'web']);
 
         $this->hrManager = User::factory()->create();
@@ -305,14 +306,10 @@ class EmployeeApiTest extends TestCase
 
         Sanctum::actingAs($this->employee);
 
-        // NOTE: Salary visibility based on role requires the Employee model
-        // to conditionally hide the salary field for non-HR users.
-        // This test verifies the endpoint is accessible; salary-hiding
-        // requires a model-level guard (makeHidden) or API Resource.
-        $response = $this->getJson("/api/v1/employees/{$empModel->id}")->assertOk();
-
-        // For now, verify the employee record is returned correctly
-        $this->assertEquals($empModel->id, $response->json('employee.id'));
+        $this->getJson("/api/v1/employees/{$empModel->id}")
+            ->assertOk()
+            ->assertJsonMissingPath('employee.salary')
+            ->assertJsonMissingPath('employee.bank_account');
     }
 
     /** @test */
@@ -324,6 +321,33 @@ class EmployeeApiTest extends TestCase
         $this->getJson("/api/v1/employees/{$emp->id}")
             ->assertOk()
             ->assertJsonPath('employee.salary', '15000.00');
+    }
+
+    /** @test */
+    public function salary_is_visible_to_super_admin(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('super_admin');
+        $emp = Employee::factory()->create(['salary' => 17500]);
+        Sanctum::actingAs($admin);
+
+        $this->getJson("/api/v1/employees/{$emp->id}")
+            ->assertOk()
+            ->assertJsonPath('employee.salary', '17500.00');
+    }
+
+    /** @test */
+    public function salary_is_hidden_from_ceo(): void
+    {
+        $ceo = User::factory()->create();
+        $ceo->assignRole('ceo');
+        $emp = Employee::factory()->create(['salary' => 20000, 'bank_account' => 'SA001234']);
+        Sanctum::actingAs($ceo);
+
+        $this->getJson("/api/v1/employees/{$emp->id}")
+            ->assertOk()
+            ->assertJsonMissingPath('employee.salary')
+            ->assertJsonMissingPath('employee.bank_account');
     }
 
     // ── Rate limiting (skipped — throttle not active in test env) ─────────

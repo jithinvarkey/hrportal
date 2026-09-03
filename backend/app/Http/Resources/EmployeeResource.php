@@ -27,7 +27,7 @@ class EmployeeResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $canViewSensitive = $request->user()?->hasAnyRole(['super_admin', 'ceo', 'hr_manager']);
+        $canViewSensitive = $request->user()?->hasAnyRole(['super_admin', 'hr_manager']);
 
         return [
             'id'                  => $this->id,

@@ -49,6 +49,16 @@ class EmployeeController extends Controller {
         return (bool) array_intersect($this->userRoles(), $roles);
     }
 
+    /** Check assigned roles without the CEO-to-HR compatibility alias. */
+    private function hasExactRoleDB(array $roles): bool {
+        return DB::table('model_has_roles')
+            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('model_has_roles.model_id', auth()->id())
+            ->where('model_has_roles.model_type', get_class(auth()->user()))
+            ->whereIn('roles.name', $roles)
+            ->exists();
+    }
+
     public function managerOptions(Request $request): JsonResponse {
         if (!$this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff'])) {
             return response()->json(['message' => 'Unauthorized.'], 403);
@@ -338,7 +348,7 @@ class EmployeeController extends Controller {
                 $employee->makeVisible(['national_id', 'bank_account']);
             }
 
-            if (!$this->hasAnyRoleDB(['super_admin', 'hr_manager'])) {
+            if (!$this->hasExactRoleDB(['super_admin', 'hr_manager'])) {
                 $employee->makeHidden([
                     'salary', 'housing_allowance', 'transport_allowance',
                     'other_allowances', 'mobile_allowance', 'food_allowance',

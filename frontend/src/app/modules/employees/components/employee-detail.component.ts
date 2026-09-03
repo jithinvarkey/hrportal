@@ -112,7 +112,14 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
     const id = this.route.snapshot.paramMap.get('id');
     this.employeeId = id;
     this.isHR = this.auth.isHRRole();
-    this.canViewSalary = this.auth.hasAnyRole(['super_admin', 'ceo', 'hr_manager']);
+    // Salary visibility is deliberately stricter than the general HR role
+    // helpers, where CEO may inherit HR-manager capabilities.
+    this.canViewSalary = this.auth.getRoles().some(role =>
+      role === 'super_admin' || role === 'hr_manager'
+    );
+    if (this.canViewSalary) {
+      this.tabs.splice(1, 0, { id: 'salary', label: 'Salary Details', icon: 'payments' });
+    }
     this.http.get<any>(`/api/v1/employees/${id}`)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
@@ -381,6 +388,13 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
     const code = String(balance?.leave_type?.code || '').toLowerCase();
     return balance?.leave_type?.is_annual === true || code === 'al' || name.includes('annual');
   }
+
+  get basicSalary(): number { return this.amount(this.employee?.salary); }
+  get housingAllowance(): number { return this.allowanceOrDefault(this.employee?.housing_allowance, this.basicSalary * 0.25); }
+  get transportAllowance(): number { return this.allowanceOrDefault(this.employee?.transport_allowance, this.basicSalary * 0.10); }
+  get mobileAllowance(): number { return this.amount(this.employee?.mobile_allowance); }
+  get foodAllowance(): number { return this.amount(this.employee?.food_allowance); }
+  get otherAllowances(): number { return this.amount(this.employee?.other_allowances); }
 
   annualLeavePeriodLabel(balance: any): string {
     const start = balance?.accrual_year_start ? new Date(`${balance.accrual_year_start}T00:00:00`) : null;
