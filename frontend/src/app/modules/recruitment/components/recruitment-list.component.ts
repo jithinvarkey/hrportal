@@ -220,7 +220,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
 
   loadEmployees(): void {
     this.http.get<any>('/api/v1/employees', {
-      params: { per_page: 500, status: 'active', dashboard_scope: 1 },
+      params: { per_page: 500, interviewer_eligible: 1, dashboard_scope: 1 },
     }).pipe(takeUntil(this.destroy$)).subscribe({
       next: r => { this.employees = r?.data ?? []; this.cdr.markForCheck(); },
       error: () => {},

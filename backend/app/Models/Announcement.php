@@ -16,7 +16,7 @@ class Announcement extends Model
 {
     protected $fillable = [
         'category_id', 'title', 'title_ar', 'body', 'body_ar', 'priority',
-        'audience_type', 'target_department_ids', 'target_roles',
+        'audience_type', 'target_department_ids', 'target_roles', 'target_employee_ids',
         'is_pinned', 'is_published', 'published_at', 'scheduled_at', 'expires_at',
         'attachment_path', 'attachment_name', 'attachment_mime', 'attachment_size',
         'created_by',
@@ -30,6 +30,7 @@ class Announcement extends Model
         'expires_at'            => 'date',
         'target_department_ids' => 'array',
         'target_roles'          => 'array',
+        'target_employee_ids'   => 'array',
     ];
 
     protected $appends = ['attachment_url', 'has_attachment'];
@@ -111,6 +112,13 @@ class Announcement extends Model
                               $rr->orWhereJsonContains('target_roles', $role);
                           }
                       });
+                });
+            }
+
+            if ($employee) {
+                $w->orWhere(function ($e) use ($employee) {
+                    $e->where('audience_type', 'employees')
+                      ->whereJsonContains('target_employee_ids', (int) $employee->id);
                 });
             }
         });

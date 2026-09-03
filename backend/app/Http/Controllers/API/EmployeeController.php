@@ -128,7 +128,15 @@ class EmployeeController extends Controller {
                 })
                 ->when($request->department_id, fn($q) => $q->where('department_id', $request->department_id))
                 ->when($request->unit_id, fn($q) => $q->where('unit_id', $request->unit_id))
-                ->when($request->status, fn($q) => $q->where('status', $request->status))
+                ->when($request->boolean('interviewer_eligible'), function ($q) {
+                    $q->where(function ($eligibilityQuery) {
+                        $eligibilityQuery->where('status', 'active')
+                            ->orWhere(function ($probationQuery) {
+                                $probationQuery->where('status', 'probation')
+                                    ->whereRaw('LOWER(email) LIKE ?', ['%@dbroker.com.sa']);
+                            });
+                    })->whereRaw('LOWER(COALESCE(email, ?)) <> ?', ['', 'admin@hrms.com']);
+                }, fn ($q) => $q->when($request->status, fn ($statusQuery) => $statusQuery->where('status', $request->status)))
                 ->when($request->employment_type, fn($q) => $q->where('employment_type', $request->employment_type))
                 ->when($request->search, fn($q) => $q->where(function ($sub) use ($request) {
                             $sub->where('first_name', 'like', "%{$request->search}%")

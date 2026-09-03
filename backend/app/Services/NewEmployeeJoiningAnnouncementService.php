@@ -35,7 +35,7 @@ class NewEmployeeJoiningAnnouncementService
                         return;
                     }
 
-                    $recipientIds = $this->notifications->resolveAudience('all', null, null);
+                    $recipientIds = $this->notifications->resolveAudience('all', null, null, true);
                     $title = 'Welcome ' . $newEmployee->full_name;
                     $body = trim(implode(' - ', array_filter([
                         $newEmployee->designation?->title,

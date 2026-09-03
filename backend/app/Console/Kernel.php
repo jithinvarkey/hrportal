@@ -56,6 +56,14 @@ class Kernel extends ConsoleKernel
                  ->withoutOverlapping()
                  ->appendOutputTo(storage_path('logs/new-employee-joining-announcements.log'));
 
+        // Publish due announcements and fan out their in-app/email notifications.
+        // The host must run `php artisan schedule:run` every minute.
+        $schedule->command('communications:process')
+                 ->everyMinute()
+                 ->timezone('Asia/Riyadh')
+                 ->withoutOverlapping()
+                 ->appendOutputTo(storage_path('logs/communications.log'));
+
         $schedule->command('attendance:notify-missed-checkouts')
                  ->dailyAt('12:01')
                  ->timezone('Asia/Riyadh')
