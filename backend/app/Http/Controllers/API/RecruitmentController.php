@@ -184,8 +184,33 @@ class RecruitmentController extends Controller {
         return response()->json(['application' => $app]);
     }
 
+    public function updateApplication(Request $request, $id) {
+        abort_unless($request->user()?->hasAnyRole(['super_admin', 'hr_manager']), 403, 'Only HR Manager and System Admin can edit applicant details.');
+        $app = JobApplication::findOrFail($id);
+        $data = $request->validate([
+            'job_posting_id' => 'sometimes|required|integer|exists:job_postings,id,deleted_at,NULL',
+            'applicant_name' => 'sometimes|required|string|max:255',
+            'applicant_email' => 'sometimes|required|email|max:255',
+            'applicant_phone' => 'sometimes|required|string|max:30',
+            'expected_salary' => 'sometimes|nullable|numeric|min:0|max:99999999.99',
+            'available_from' => 'sometimes|nullable|date_format:Y-m-d',
+            'cover_letter_text' => 'sometimes|nullable|string|max:20000',
+            'hr_notes' => 'sometimes|nullable|string|max:20000',
+        ]);
+        if (isset($data['job_posting_id']) && (int) $data['job_posting_id'] !== (int) $app->job_posting_id) {
+            $job = JobPosting::findOrFail($data['job_posting_id']);
+            $data['department_id'] = $job->department_id;
+            $data['position_applied'] = $job->title;
+        }
+        $app->update($data);
+        return response()->json(['application' => $app->fresh(['jobPosting.department', 'jobPosting.designation']), 'message' => 'Applicant details updated.']);
+    }
+
     public function updateStage(Request $request, $id) {
         $this->ensureCanManageRecruitment($request);
+        if ($request->exists('hr_notes')) {
+            abort_unless($request->user()?->hasAnyRole(['super_admin', 'hr_manager']), 403, 'Only HR Manager and System Admin can edit applicant notes.');
+        }
         $request->validate(['stage'=>'required|in:applied,screening,interview,offer,hired,rejected']);
         $departmentScope = $this->managerDepartmentScope($request);
         $app = $this->scopeApplications(JobApplication::query(), $departmentScope)->findOrFail($id);
@@ -208,7 +233,7 @@ class RecruitmentController extends Controller {
             $this->service->sendApplicantRejection($app);
         }
 
-        $app->update(['stage' => $request->stage, 'hr_notes' => $request->hr_notes]);
+        $app->update($request->only(['stage', 'hr_notes']));
         return response()->json([
             'application' => $app,
             'email_sent' => $isNewRejection,

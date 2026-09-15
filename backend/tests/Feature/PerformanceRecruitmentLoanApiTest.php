@@ -293,6 +293,62 @@ class PerformanceRecruitmentLoanApiTest extends TestCase
     }
 
     /** @test */
+    public function hr_can_edit_applicant_details_without_changing_stage(): void
+    {
+        Mail::fake();
+        $newJob = JobPosting::factory()->create(['title' => 'Accountant']);
+        $app = JobApplication::factory()->create([
+            'job_posting_id' => JobPosting::factory()->create()->id,
+            'stage' => 'offer', 'expected_salary' => 8000, 'hr_notes' => 'Keep notes',
+        ]);
+        $this->actingAs($this->hrManager, 'sanctum')
+            ->putJson("/api/v1/recruitment/applications/{$app->id}", [
+                'applicant_name' => 'Updated Applicant', 'applicant_email' => 'updated@example.com',
+                'applicant_phone' => '0501234567', 'expected_salary' => null,
+                'available_from' => '2026-10-01', 'stage' => 'hired',
+                'job_posting_id' => $newJob->id,
+            ])->assertOk()->assertJsonPath('application.stage', 'offer')
+                ->assertJsonPath('application.job_posting.title', 'Accountant');
+        $this->assertDatabaseHas('job_applications', [
+            'id' => $app->id, 'applicant_name' => 'Updated Applicant',
+            'applicant_email' => 'updated@example.com', 'applicant_phone' => '0501234567',
+            'expected_salary' => null, 'hr_notes' => 'Keep notes', 'stage' => 'offer',
+            'job_posting_id' => $newJob->id, 'department_id' => $newJob->department_id,
+            'position_applied' => 'Accountant',
+        ]);
+        $this->putJson("/api/v1/recruitment/applications/{$app->id}", ['hr_notes' => 'Updated notes'])
+            ->assertOk()->assertJsonPath('application.hr_notes', 'Updated notes');
+        Mail::assertNothingSent();
+    }
+
+    /** @test */
+    public function applicant_details_require_hr_and_valid_data(): void
+    {
+        $app = JobApplication::factory()->create(['job_posting_id' => JobPosting::factory()->create()->id]);
+        $url = "/api/v1/recruitment/applications/{$app->id}";
+        foreach (['hr_staff', 'ceo', 'finance_manager'] as $role) {
+            $user = User::factory()->create();
+            $user->assignRole($role);
+            $this->actingAs($user, 'sanctum')->putJson($url, ['job_posting_id' => $app->job_posting_id])->assertForbidden();
+            $this->putJson($url, ['hr_notes' => 'Changed'])->assertForbidden();
+        }
+        $admin = User::factory()->create();
+        $admin->assignRole('super_admin');
+        $this->actingAs($admin, 'sanctum')->putJson($url, ['applicant_name' => 'Admin updated'])
+            ->assertOk()->assertJsonPath('application.applicant_name', 'Admin updated');
+        $this->actingAs($this->employeeUser, 'sanctum')->putJson($url, ['applicant_name' => 'Changed'])->assertForbidden();
+        $this->actingAs($this->deptManager, 'sanctum')->putJson($url, ['expected_salary' => 100])->assertForbidden();
+        $this->actingAs($this->hrManager, 'sanctum')->putJson($url, [
+            'applicant_name' => '', 'applicant_email' => 'invalid', 'applicant_phone' => '',
+            'expected_salary' => -1, 'available_from' => 'invalid',
+            'job_posting_id' => 999999999,
+        ])->assertUnprocessable()->assertJsonValidationErrors([
+            'applicant_name', 'applicant_email', 'applicant_phone', 'expected_salary', 'available_from',
+            'job_posting_id',
+        ]);
+    }
+
+    /** @test */
     public function hr_can_update_application_stage(): void
     {
         $job = JobPosting::factory()->create(['status' => 'open']);

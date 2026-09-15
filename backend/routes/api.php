@@ -274,6 +274,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/apply/{jobId}',              [RecruitmentController::class, 'apply']);
             Route::get('/applications',                [RecruitmentController::class, 'applications']);
             Route::get('/applications/{id}',           [RecruitmentController::class, 'showApplication']);
+            Route::put('/applications/{id}',           [RecruitmentController::class, 'updateApplication']);
             Route::put('/applications/{id}/stage',     [RecruitmentController::class, 'updateStage']);
             Route::post('/interviews',                 [RecruitmentController::class, 'scheduleInterview']);
             Route::put('/interviews/{id}',             [RecruitmentController::class, 'updateInterview']);

@@ -26,6 +26,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   hireResult: any = null;
   editJobId: number | null = null; selectedApp: any = null;
   selectedJobFilter: number | null = null; isHR = false;
+  canEditApplicant = false;
   isDeptManager = false;
   isInterviewOnly = false;
   canManageRecruitment = false;
@@ -111,6 +112,12 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   interviewerSearch = '';
   editingNotes = false;
   hrNotesText  = '';
+  editingApplicant = false;
+  applicantEditBusy = false;
+  applicantEditError = '';
+  applicantEditForm!: FormGroup;
+  applicantJobOptions: any[] = [];
+  applicantJobsLoading = false;
 
   cvForm: any = {
     applicant_name: '', applicant_email: '', applicant_phone: '',
@@ -142,6 +149,7 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     const user = this.auth.getUser();
     this.isHR = this.auth.isHRRole();
+    this.canEditApplicant = this.auth.isHRManager() || this.auth.isSuperAdmin();
     this.isDeptManager = this.auth.isDeptManager();
     this.isInterviewOnly = !this.isHR && !this.isDeptManager;
     this.canManageRecruitment = this.isHR || this.isDeptManager;
@@ -250,6 +258,9 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   }
 
   viewApp(app: any): void {
+    this.editingApplicant = false;
+    this.editingNotes = false;
+    this.applicantEditError = '';
     this.selectedApp = app;
     this.showAppDetail = true;
     this.cdr.markForCheck();
@@ -257,10 +268,86 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     const requestedId = app.id;
     this.http.get<any>(`${this.api}/applications/${requestedId}`).pipe(takeUntil(this.destroy$)).subscribe({
       next: response => {
-        if (this.selectedApp?.id === requestedId) this.selectedApp = response?.application ?? app;
+        if (this.selectedApp === app && !this.editingApplicant && !this.applicantEditBusy) this.selectedApp = response?.application ?? app;
         this.cdr.markForCheck();
       },
       error: () => this.cdr.markForCheck(),
+    });
+  }
+
+  editApplicant(): void {
+    if (!this.canEditApplicant || this.applicantEditBusy) return;
+    const app = this.selectedApp;
+    this.applicantEditForm = this.fb.group({
+      job_posting_id: [app.job_posting_id, Validators.required],
+      applicant_name: [app.applicant_name, [Validators.required, Validators.maxLength(255)]],
+      applicant_email: [app.applicant_email, [Validators.required, Validators.email, Validators.maxLength(255)]],
+      applicant_phone: [app.applicant_phone, [Validators.required, Validators.maxLength(30)]],
+      expected_salary: [app.expected_salary ?? null, [Validators.min(0), Validators.max(99999999.99)]],
+      available_from: [app.available_from?.slice(0, 10) ?? ''],
+      cover_letter_text: [app.cover_letter_text ?? '', Validators.maxLength(20000)],
+    });
+    this.applicantEditError = '';
+    this.editingApplicant = true;
+    this.applicantJobOptions = app.job_posting ? [app.job_posting] : [];
+    this.loadApplicantJobOptions();
+  }
+
+  private loadApplicantJobOptions(page = 1): void {
+    this.applicantJobsLoading = true;
+    this.http.get<any>(`${this.api}/jobs`, { params: { page, per_page: 100 } })
+      .pipe(takeUntil(this.destroy$)).subscribe({
+        next: response => {
+          const options = new Map(this.applicantJobOptions.map(job => [job.id, job]));
+          (response.data ?? []).forEach((job: any) => options.set(job.id, job));
+          this.applicantJobOptions = Array.from(options.values());
+          if (page < (response.last_page ?? response.meta?.last_page ?? 1)) {
+            this.loadApplicantJobOptions(page + 1);
+          } else {
+            this.applicantJobsLoading = false;
+          }
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.applicantJobsLoading = false;
+          this.applicantEditError = 'Could not load job positions. Close and reopen Edit details to retry.';
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  saveApplicantDetails(): void {
+    if (!this.canEditApplicant || this.applicantEditBusy) return;
+    const body = { ...this.applicantEditForm.value };
+    ['applicant_name', 'applicant_email', 'applicant_phone'].forEach(key => body[key] = String(body[key] ?? '').trim());
+    this.applicantEditForm.patchValue(body);
+    if (this.applicantEditForm.invalid) {
+      this.applicantEditForm.markAllAsTouched();
+      this.applicantEditError = 'Select a position and enter a name, valid email and phone. Salary must be between 0 and 99,999,999.99 SAR.';
+      return;
+    }
+    ['expected_salary', 'available_from', 'cover_letter_text'].forEach(key => { if (body[key] === '') body[key] = null; });
+    const id = this.selectedApp.id;
+    this.applicantEditBusy = true;
+    this.applicantEditError = '';
+    this.http.put<any>(`${this.api}/applications/${id}`, body).pipe(takeUntil(this.destroy$)).subscribe({
+      next: response => {
+        this.applicantEditBusy = false;
+        this.applications = this.applications.map(app => app.id === id ? { ...app, ...response.application } : app);
+        if (this.selectedApp?.id === id) {
+          this.selectedApp = { ...this.selectedApp, ...response.application };
+          this.editingApplicant = false;
+        }
+        this.successMsg = 'Applicant details updated.';
+        this.loadApplications(this.selectedJobFilter ?? undefined);
+        this.loadJobs(this.currentPage);
+        this.cdr.markForCheck();
+      },
+      error: err => {
+        this.applicantEditBusy = false;
+        this.applicantEditError = this.firstError(err) || 'Failed to save applicant details.';
+        this.cdr.markForCheck();
+      },
     });
   }
 
@@ -458,9 +545,11 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
   }
 
   saveHrNotes(app: any): void {
-    this.http.put(`${this.api}/applications/${app.id}/stage`, { stage: app.stage, hr_notes: this.hrNotesText })
+    if (!this.canEditApplicant) return;
+    this.http.put(`${this.api}/applications/${app.id}`, { hr_notes: this.hrNotesText })
       .pipe(takeUntil(this.destroy$)).subscribe({
         next: () => { app.hr_notes = this.hrNotesText; this.editingNotes = false; this.cdr.markForCheck(); },
+        error: err => { this.applicantEditError = this.firstError(err) || 'Failed to save notes.'; this.cdr.markForCheck(); },
       });
   }
 
