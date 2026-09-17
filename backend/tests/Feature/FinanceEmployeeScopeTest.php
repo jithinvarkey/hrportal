@@ -59,6 +59,27 @@ class FinanceEmployeeScopeTest extends TestCase
         $this->actingAs($user);
     }
 
+    public function test_list_and_counts_only_include_active_and_probation_employees(): void
+    {
+        foreach (['probation', 'inactive', 'terminated', 'on_leave'] as $status) {
+            DB::table('employees')->insert([
+                'department_id' => 10, 'first_name' => $status,
+                'last_name' => 'Test', 'status' => $status,
+            ]);
+        }
+        $this->signIn(Employee::findOrFail(1));
+        $controller = app(EmployeeController::class);
+        $request = Request::create('/api/v1/employees');
+        $data = $controller->index($request)->getData(true);
+        $this->assertSame(2, $data['meta']['total']);
+        $this->assertEqualsCanonicalizing(['active', 'probation'], array_column($data['data'], 'status'));
+        $this->assertSame(2, $controller->stats($request)->getData(true)['total']);
+        foreach (['inactive', 'terminated', 'on_leave'] as $status) {
+            $filtered = Request::create('/api/v1/employees', 'GET', ['status' => $status]);
+            $this->assertSame([], $controller->index($filtered)->getData(true)['data']);
+        }
+    }
+
     public function test_finance_list_and_counts_are_limited_to_own_department(): void
     {
         $this->signIn(Employee::findOrFail(1));
@@ -71,6 +92,29 @@ class FinanceEmployeeScopeTest extends TestCase
         $dashboard = Request::create('/api/v1/employees', 'GET', ['dashboard_scope' => '1']);
         $this->assertSame(2, $controller->index($dashboard)->getData(true)['meta']['total']);
         $this->assertSame(2, $controller->stats($dashboard)->getData(true)['total']);
+    }
+
+    public function test_hr_roles_can_list_and_filter_every_employee_status(): void
+    {
+        foreach (['probation', 'inactive', 'resigned', 'terminated', 'on_leave'] as $status) {
+            DB::table('employees')->insert([
+                'department_id' => 20, 'first_name' => $status,
+                'last_name' => 'Test', 'status' => $status,
+            ]);
+        }
+        $this->signIn(Employee::findOrFail(1));
+        $controller = app(EmployeeController::class);
+        foreach (['hr_manager', 'hr_staff', 'super_admin'] as $role) {
+            DB::table('roles')->where('id', 1)->update(['name' => $role]);
+            $request = Request::create('/api/v1/employees');
+            $this->assertSame(9, $controller->index($request)->getData(true)['meta']['total']);
+            $this->assertSame(9, $controller->stats($request)->getData(true)['total']);
+            foreach (['probation', 'inactive', 'resigned', 'terminated', 'on_leave'] as $status) {
+                $filtered = Request::create('/api/v1/employees', 'GET', ['status' => $status]);
+                $data = $controller->index($filtered)->getData(true);
+                $this->assertSame([$status], array_column($data['data'], 'status'));
+            }
+        }
     }
 
     public function test_missing_employee_or_department_does_not_expose_other_employees(): void

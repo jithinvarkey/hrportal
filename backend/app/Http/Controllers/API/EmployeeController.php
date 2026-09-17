@@ -103,6 +103,7 @@ class EmployeeController extends Controller {
         $isMgr = (bool) array_intersect($userRoles, ['department_manager', 'finance_manager']);
 
         $query = Employee::with(['department', 'unit', 'designation', 'manager', 'user'])
+                ->when(!$isHRAdmin, fn ($q) => $q->whereIn('status', ['active', 'probation']))
                 // ── Role-based filtering ──────────────────────────────
                 ->when(!$isHRAdmin, function ($q) use ($user, $isMgr, $request) {
 
@@ -190,6 +191,7 @@ class EmployeeController extends Controller {
 
         $isHRAdmin = (bool) array_intersect($userRoles, [
                     'super_admin',
+                    'ceo',
                     'hr_manager',
                     'hr_staff'
         ]);
@@ -197,6 +199,7 @@ class EmployeeController extends Controller {
         $isMgr = (bool) array_intersect($userRoles, ['department_manager', 'finance_manager']);
 
         $baseQuery = DB::table('employees')
+                ->when(!$isHRAdmin, fn ($q) => $q->whereIn('status', ['active', 'probation']))
                 ->whereNull('deleted_at');
 
         if (!$isHRAdmin) {

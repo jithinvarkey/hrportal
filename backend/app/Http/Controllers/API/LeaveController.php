@@ -166,7 +166,7 @@ class LeaveController extends Controller {
 
     private function shouldLimitApprovalViewsToActiveEmployees(array $userRoles): bool {
         return !in_array('super_admin', $userRoles, true)
-            && (in_array('department_manager', $userRoles, true) || in_array('hr_manager', $userRoles, true));
+            && ((bool) array_intersect($userRoles, ['department_manager', 'finance_manager', 'hr_manager']));
     }
 
     private function activeEmployeeApprovalScope($query, array $userRoles) {
@@ -305,7 +305,7 @@ class LeaveController extends Controller {
                         ->pluck('roles.name')->toArray(), [], false);
 
         $isHRAdmin = (bool) array_intersect($userRoles, ['super_admin', 'hr_manager', 'hr_staff']);
-        $isMgr = in_array('department_manager', $userRoles);
+        $isMgr = (bool) array_intersect($userRoles, ['department_manager', 'finance_manager']);
 
         $ownOnly = $request->boolean('own');
 
@@ -781,12 +781,12 @@ class LeaveController extends Controller {
         // ── Stage 1: Manager approval ──────────────────────────────────
         if ($leave->status === 'pending') {
             // Only managers / HR / super_admin can approve at this stage
-            if (!$this->hasAnyRoleDB(['department_manager', 'hr_manager', 'hr_staff', 'super_admin'])) {
+            if (!$this->hasAnyRoleDB(['department_manager', 'finance_manager', 'hr_manager', 'hr_staff', 'super_admin'])) {
                 return response()->json(['message' => 'Only a manager can approve at this stage.'], 403);
             }
 
             if (
-                $this->hasAnyRoleDB(['department_manager']) &&
+                $this->hasAnyRoleDB(['department_manager', 'finance_manager']) &&
                 !$this->hasAnyRoleDB(['hr_manager', 'hr_staff', 'super_admin']) &&
                 (!$user->employee || (int) $leave->employee?->manager_id !== (int) $user->employee->id)
             ) {
@@ -879,12 +879,12 @@ class LeaveController extends Controller {
             default => 'unknown',
         };
         if ($leave->status === 'pending') {
-            if (!$this->hasAnyRoleDB(['department_manager', 'hr_manager', 'hr_staff', 'super_admin'])) {
+            if (!$this->hasAnyRoleDB(['department_manager', 'finance_manager', 'hr_manager', 'hr_staff', 'super_admin'])) {
                 return response()->json(['message' => 'Only a manager can reject at this stage.'], 403);
             }
 
             if (
-                $this->hasAnyRoleDB(['department_manager']) &&
+                $this->hasAnyRoleDB(['department_manager', 'finance_manager']) &&
                 !$this->hasAnyRoleDB(['hr_manager', 'hr_staff', 'super_admin']) &&
                 (!$user->employee || (int) $leave->employee?->manager_id !== (int) $user->employee->id)
             ) {
@@ -1376,7 +1376,7 @@ class LeaveController extends Controller {
         $user = auth()->user();
         $userRoles = rescue(fn() => $this->userRoles(), [], false);
         $isAdmin = (bool) array_intersect($userRoles, ['super_admin', 'hr_manager', 'hr_staff']);
-        $isMgr = in_array('department_manager', $userRoles);
+        $isMgr = (bool) array_intersect($userRoles, ['department_manager', 'finance_manager']);
         $today = now()->toDateString();
 
         $baseQ = $this->leaveRequestScope($user, $isAdmin, $isMgr);
@@ -1412,7 +1412,7 @@ class LeaveController extends Controller {
     public function allBalances(Request $request) {
         $user = auth()->user();
         $isHRAdmin = $this->hasAnyRoleDB(['super_admin', 'hr_manager', 'hr_staff']);
-        $isMgr = $this->hasAnyRoleDB(['department_manager']);
+        $isMgr = $this->hasAnyRoleDB(['department_manager', 'finance_manager']);
         $year = $request->year ?? now()->year;
         $visibleEmployeeIds = collect();
 

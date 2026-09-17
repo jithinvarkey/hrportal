@@ -185,7 +185,7 @@ export class LeaveListComponent implements OnInit {
     // Role detection
     this.isHR = this.auth.isHRRole();
     this.canManageHolidays = this.auth.hasAnyRole(['super_admin', 'hr_manager', 'hr_staff']);
-    this.isMgr = this.auth.isManagerRole();
+    this.isMgr = this.auth.isManagerRole() || this.auth.isFinanceManager();
     const user = this.auth.getUser();
     this.userId = user?.id ?? '';
     this.employeeId = user?.employee?.id ?? user?.employee_id ?? null;
