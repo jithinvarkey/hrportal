@@ -36,6 +36,12 @@ class Loan extends Model {
     public function hrApprover()      { return $this->belongsTo(User::class,'hr_approved_by'); }
     public function financeApprover() { return $this->belongsTo(User::class,'finance_approved_by'); }
     public function rejectedBy()      { return $this->belongsTo(User::class,'rejected_by'); }
+    public function canDeleteRequest(): bool {
+        return in_array($this->status, ['pending_manager', 'pending_hr'], true)
+            && $this->manager_approved_by === null && $this->manager_approved_at === null
+            && $this->hr_approved_by === null && $this->hr_approved_at === null
+            && $this->finance_approved_by === null && $this->finance_approved_at === null;
+    }
     public function nextPendingInstallment() {
         return $this->installments()->where('status','pending')->first();
     }

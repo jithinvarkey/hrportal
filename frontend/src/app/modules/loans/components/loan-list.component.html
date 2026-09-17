@@ -478,6 +478,10 @@
 
     <div class="drawer-footer">
       <button class="btn-outline" (click)="showDetail=false">Close</button>
+      <button class="btn-outline" style="color:var(--danger)" *ngIf="selectedLoan.can_delete"
+        [disabled]="deletingLoan" (click)="deleteLoan(selectedLoan)">
+        <mat-icon>delete</mat-icon> {{ deletingLoan ? 'Deleting...' : 'Delete Request' }}
+      </button>
       <button class="btn-outline" *ngIf="selectedLoan.status==='approved'||selectedLoan.status==='disbursed'"
         (click)="openInstallments(selectedLoan); showDetail=false">
         <mat-icon>calendar_today</mat-icon> Schedule

@@ -30,6 +30,7 @@
     <!-- Tiles -->
     <button class="stat-tile"
             *ngFor="let t of statTiles"
+            [disabled]="!canFilterEmployees"
             (click)="filterByStatus(t)"
             [class.active]="statusFilter.value === t.status && t.status !== ''"
             [style.--tile-color]="t.color">
@@ -51,26 +52,27 @@
       <input class="search-input" placeholder="Search name, email or ID…" [formControl]="searchControl">
     </div>
 
-    <select class="filter-select" [formControl]="statusFilter" (change)="loadEmployees()">
-      <option value="">All Status</option>
+    <select *ngIf="canFilterEmployees" class="filter-select" [formControl]="statusFilter" (change)="loadEmployees()">
+      <option value="">All Statuses</option>
       <option value="active">Active</option>
       <option value="probation">Probation</option>
-      <option value="on_leave">On Leave</option>
       <option value="inactive">Inactive</option>
+      <option value="on_leave">On Leave</option>
+      <option value="resigned">Resigned</option>
       <option value="terminated">Terminated</option>
     </select>
 
-    <select class="filter-select" [formControl]="deptFilter" (change)="loadEmployees()">
+    <select *ngIf="canFilterEmployees" class="filter-select" [formControl]="deptFilter" (change)="loadEmployees()">
       <option value="">All Departments</option>
       <option *ngFor="let d of departments" [value]="d.id">{{ d.name }}</option>
     </select>
 
-    <select class="filter-select" [formControl]="unitFilter" (change)="loadEmployees()">
+    <select *ngIf="canFilterEmployees" class="filter-select" [formControl]="unitFilter" (change)="loadEmployees()">
       <option value="">All Units</option>
       <option *ngFor="let u of units" [value]="u.id">{{ u.name }}</option>
     </select>
 
-    <select class="filter-select" [formControl]="typeFilter" (change)="loadEmployees()">
+    <select *ngIf="canFilterEmployees" class="filter-select" [formControl]="typeFilter" (change)="loadEmployees()">
       <option value="">All Types</option>
       <option value="full_time">Full Time</option>
       <option value="part_time">Part Time</option>

@@ -11,11 +11,13 @@ class LeaveRequest extends Model {
         'requires_exit_reentry','requires_ticket','ticket_year','ticket_count','destination_country',
         'status','reason','rejection_reason',
         'approved_by','approved_at','document_path',
+        'manager_approved_by','manager_approved_at','manager_notes','hr_notes','rejected_stage',
     ];
     protected $casts = [
         'start_date'  => 'date',
         'end_date'    => 'date',
         'approved_at' => 'datetime',
+        'manager_approved_at' => 'datetime',
         'total_days'  => 'decimal:1',
         'is_half_day'           => 'boolean',
         'requires_exit_reentry' => 'boolean',

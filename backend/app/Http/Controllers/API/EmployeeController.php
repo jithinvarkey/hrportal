@@ -100,18 +100,20 @@ class EmployeeController extends Controller {
                         ->pluck('roles.name')->toArray(), [], false);
 
         $isHRAdmin = (bool) array_intersect($userRoles, ['super_admin', 'ceo', 'hr_manager', 'hr_staff']);
-        $isMgr = in_array('department_manager', $userRoles);
+        $isMgr = (bool) array_intersect($userRoles, ['department_manager', 'finance_manager']);
 
         $query = Employee::with(['department', 'unit', 'designation', 'manager', 'user'])
+                ->when(!$isHRAdmin, fn ($q) => $q->whereIn('status', ['active', 'probation']))
                 // ── Role-based filtering ──────────────────────────────
                 ->when(!$isHRAdmin, function ($q) use ($user, $isMgr, $request) {
 
                     if (!$user->employee) {
+                        $q->whereRaw('1 = 0');
                         return;
                     }
 
-                    // Department Manager → own department
-                    if ($isMgr) {
+                    // Department and Finance Managers → own department
+                    if ($isMgr && $user->employee->department_id) {
 
                         $q->where('department_id', $user->employee->department_id);
                         if (!$request->boolean('dashboard_scope')) {
@@ -189,18 +191,20 @@ class EmployeeController extends Controller {
 
         $isHRAdmin = (bool) array_intersect($userRoles, [
                     'super_admin',
+                    'ceo',
                     'hr_manager',
                     'hr_staff'
         ]);
 
-        $isMgr = in_array('department_manager', $userRoles);
+        $isMgr = (bool) array_intersect($userRoles, ['department_manager', 'finance_manager']);
 
         $baseQuery = DB::table('employees')
+                ->when(!$isHRAdmin, fn ($q) => $q->whereIn('status', ['active', 'probation']))
                 ->whereNull('deleted_at');
 
         if (!$isHRAdmin) {
 
-            if ($isMgr && $user->employee) {
+            if ($isMgr && $user->employee?->department_id) {
 
                 // Manager: employees in same department except himself
                 $baseQuery->where('department_id', $user->employee->department_id);
@@ -211,6 +215,8 @@ class EmployeeController extends Controller {
 
                 // Normal employee: only himself
                 $baseQuery->where('id', $user->employee->id);
+            } else {
+                $baseQuery->whereRaw('1 = 0');
             }
         }
 

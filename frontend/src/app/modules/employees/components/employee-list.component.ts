@@ -114,6 +114,7 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
     'employment_type', 'status', 'actions',
   ];
   isHR = false;
+  canFilterEmployees = false;
   fromDashboard = false;
 
   private readonly destroy$ = new Subject<void>();
@@ -133,11 +134,15 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
 
   /** @inheritdoc */
   ngOnInit(): void {
+    this.canFilterEmployees = this.auth.getRoles().some(role =>
+      ['super_admin', 'hr_manager', 'hr_staff'].includes(role));
     this.fromDashboard = this.route.snapshot.queryParamMap.get('dashboard_scope') === '1';
     this.loadEmployees();
     this.loadStats();
-    this.loadDepartments();
-    this.loadUnits();
+    if (this.canFilterEmployees) {
+      this.loadDepartments();
+      this.loadUnits();
+    }
     this.isHR = this.auth.isHRRole();
 
     // Re-fetch on search input after debounce
@@ -201,8 +206,6 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
       { label: 'Total',          value: s.total,          color: '#3b82f6', icon: 'people',          status: '' },
       { label: 'Active',         value: s.active,          color: '#10b981', icon: 'how_to_reg',      status: 'active' },
       { label: 'Probation',      value: s.probation,       color: '#f59e0b', icon: 'hourglass_top',   status: 'probation' },
-      { label: 'On Leave',       value: s.on_leave,        color: '#6366f1', icon: 'event_busy',      status: 'on_leave' },
-      { label: 'Terminated',     value: s.terminated,      color: '#ef4444', icon: 'person_remove',   status: 'terminated' },
       { label: 'New This Month', value: s.new_this_month,  color: '#0ea5e9', icon: 'person_add_alt_1', status: '' },
     ];
   }
@@ -212,6 +215,7 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
    * Clicking "Total" or "New This Month" (no status filter) clears the filter.
    */
   filterByStatus(tile: typeof this.statTiles[0]): void {
+    if (!this.canFilterEmployees) return;
     this.statusFilter.setValue(tile.status as EmployeeStatus | '');
     this.loadEmployees();
   }
@@ -359,9 +363,7 @@ export class EmployeeListComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (res) => {
-          // Mutate in place so the row updates without a full store reload
-          employee.status = res.employee?.status ?? status;
-          this.cdr.markForCheck();
+          this.loadEmployees();
           // Reload stats strip to reflect the change
           this.loadStats();
         },

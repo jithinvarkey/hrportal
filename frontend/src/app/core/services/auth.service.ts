@@ -231,6 +231,7 @@ export class AuthService {
       },
       {
         path: '/leave', label: 'Leave', icon: 'event_available',
+        roles: [ROLES.FINANCE_MANAGER],
         perms: ['leave.view_all', 'leave.view_own', 'leave.request']
       },
       {
