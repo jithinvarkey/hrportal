@@ -171,6 +171,7 @@ class RolesPermissionsSeeder extends Seeder
             'finance_manager' => [
                 'dashboard.view',
                 'employees.view','employees.view_salary',
+                'leave.view_own','leave.request',
                 'payroll.view','payroll.approve','payroll.export',
                 'loans.view_all','loans.approve_finance','loans.disburse',
                 'separations.view_all',

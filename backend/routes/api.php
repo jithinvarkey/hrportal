@@ -355,6 +355,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/{id}/approve',                    [LoanController::class, 'approve'])->whereNumber('id');
             Route::post('/{id}/reject',                     [LoanController::class, 'reject'])->whereNumber('id');
             Route::post('/{id}/cancel',                     [LoanController::class, 'cancel'])->whereNumber('id');
+            Route::delete('/{id}',                          [LoanController::class, 'destroy'])->whereNumber('id');
             Route::post('/{id}/disburse',                   [LoanController::class, 'disburse'])->whereNumber('id');
             Route::post('/{loanId}/installments/{instId}/pay',  [LoanController::class, 'payInstallment'])->whereNumber('loanId')->whereNumber('instId');
             Route::post('/{loanId}/installments/{instId}/skip', [LoanController::class, 'skipInstallment'])->whereNumber('loanId')->whereNumber('instId');

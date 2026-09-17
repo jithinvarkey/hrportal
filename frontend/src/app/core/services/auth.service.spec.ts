@@ -54,6 +54,14 @@ describe('AuthService', () => {
 
   // ── Login ──────────────────────────────────────────────────────────────
 
+  it('shows Leave for finance managers with existing permission data', () => {
+    sessionStorage.setItem('hrms_user', JSON.stringify({
+      ...mockUserHR, roles: ['finance_manager'], permissions: ['employees.view']
+    }));
+    expect(service.getVisibleNavItems().some(item => item.path === '/leave')).toBeTrue();
+    expect(service.isHRRole()).toBeFalse();
+  });
+
   it('should store token and user on successful login', fakeAsync(() => {
     service.login('hr@example.com', 'password').subscribe();
 

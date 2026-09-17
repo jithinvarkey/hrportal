@@ -516,6 +516,7 @@ class LoanController extends Controller {
         $data['approval_levels'] = $this->approvalLevels();
         $data['can_approve'] = !$this->isOwnLoan($loan, auth()->user());
         $data['can_reject'] = $data['can_approve'];
+        $data['can_delete'] = $this->isOwnLoan($loan, auth()->user()) && $loan->canDeleteRequest();
 
         return response()->json(['loan' => $data]);
     }
@@ -533,7 +534,11 @@ class LoanController extends Controller {
      * @return JsonResponse
      */
     public function approve(Request $request, int $id): JsonResponse {
-        $loan = Loan::findOrFail($id);
+        return DB::transaction(fn () => $this->approveLocked($request, $id));
+    }
+
+    private function approveLocked(Request $request, int $id): JsonResponse {
+        $loan = Loan::lockForUpdate()->findOrFail($id);
         $user = auth()->user();
 
         if (!$this->canApproveStage($loan->status)) {
@@ -716,6 +721,28 @@ class LoanController extends Controller {
         ]);
 
         return response()->json(['message' => 'Loan request cancelled.']);
+    }
+
+    public function destroy(int $id): JsonResponse {
+        return DB::transaction(function () use ($id) {
+            $loan = Loan::lockForUpdate()->findOrFail($id);
+
+            if (!$this->isOwnLoan($loan, auth()->user())) {
+                return response()->json(['message' => 'You can only delete your own loan request.'], 403);
+            }
+
+            if (!$loan->canDeleteRequest()) {
+                return response()->json(['message' => 'Only pending loan requests with no approvals can be deleted.'], 422);
+            }
+
+            $this->logLoanActivity($loan, 'deleted', 'Loan request deleted before any approval.', [
+                'reference' => $loan->reference,
+                'from_status' => $loan->status,
+            ]);
+            $loan->delete();
+
+            return response()->json(['message' => 'Loan request deleted.']);
+        });
     }
 
     // ── Disburse ──────────────────────────────────────────────────────────

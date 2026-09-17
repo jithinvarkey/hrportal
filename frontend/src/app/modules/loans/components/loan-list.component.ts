@@ -41,6 +41,7 @@ export class LoanListComponent implements OnInit {
   showInstPanel = false;   // installment schedule drawer
 
   selectedLoan: any = null;
+  deletingLoan = false;
   rejectTarget: any = null;
   rejectReason = '';
   approveTarget: any = null;
@@ -296,6 +297,26 @@ export class LoanListComponent implements OnInit {
     if (!confirm('Cancel this loan request?')) return;
     this.http.post(`/api/v1/loans/${loan.id}/cancel`, {}).subscribe({
       next: () => { this.load(this.currentPage); this.loadStats(); if (this.showDetail) this.showDetail = false; }
+    });
+  }
+
+  deleteLoan(loan: any) {
+    if (!loan?.can_delete || this.deletingLoan) return;
+    if (!confirm(`Delete loan request ${loan.reference}? This cannot be undone.`)) return;
+    this.deletingLoan = true;
+    this.http.delete(`/api/v1/loans/${loan.id}`).subscribe({
+      next: () => {
+        this.deletingLoan = false;
+        this.showDetail = false;
+        this.selectedLoan = null;
+        this.load(1);
+        this.loadStats();
+      },
+      error: err => {
+        this.deletingLoan = false;
+        alert(err.error?.message || 'Unable to delete the loan request. Please try again.');
+        this.reloadDetail();
+      }
     });
   }
 
