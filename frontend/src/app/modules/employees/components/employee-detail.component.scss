@@ -101,10 +101,13 @@
 .lc-header  { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; min-width:0; }
 .lc-name    { font-size:13px; font-weight:700; color:var(--text); }
 .lc-period  { flex-shrink:0; padding:3px 7px; border-radius:999px; background:rgba(59,130,246,.10); color:var(--accent); font-size:9px; font-weight:700; white-space:nowrap; }
-.lc-numbers { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
-.lc-numbers.has-carry-forward { grid-template-columns:repeat(5,1fr); }
-.lc-stat    { text-align:center; }
-.lc-big     { font-family:'IBM Plex Sans',sans-serif; font-size:20px; font-weight:800; display:block; }
+.lc-numbers { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+.lc-numbers.has-carry-forward { grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px;
+  .lc-big { font-size:17px; }
+  .lc-lbl { font-size:9px; } }
+.lc-stat    { text-align:center; min-width:0; }
+.lc-big     { font-family:'IBM Plex Sans',sans-serif; font-size:20px; font-weight:800; display:block;
+              overflow-wrap:anywhere; }
 .lc-lbl     { font-size:10px; color:var(--text3); margin-top:2px; }
 .lc-bar-wrap { display:flex; align-items:center; gap:8px; }
 .lc-bar-track { flex:1; height:4px; background:var(--border); border-radius:3px; overflow:hidden; }
@@ -476,3 +479,22 @@
     mat-icon{font-size:13px!important;width:13px!important;height:13px!important;}}}
 @media(max-width:650px){.dependent-grid{grid-template-columns:1fr;}}
 
+
+/* Carry forward (HR manager / system admin) */
+.cf-set-note { display: flex; align-items: flex-start; gap: 6px; font-size: 11px; line-height: 1.45;
+  color: var(--text2);
+  mat-icon { flex: 0 0 auto; font-size: 15px; width: 15px; height: 15px; line-height: 15px; margin-top: 1px; } }
+.leave-card .cf-set-note { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border2); }
+.modal-mini .cf-set-note { margin-bottom: 12px; }
+.cf-link { background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent); font-size: 12px;
+  display: inline-flex; align-items: center; gap: 4px;
+  &:disabled { opacity: .6; cursor: default; } }
+.cf-reset { align-self: flex-start; margin-top: 4px; }
+.cf-modal-loading { color: var(--text2); font-size: 13px; margin: 0; }
+.cf-modal-period { margin-bottom: 12px; }
+.cf-modal-emp { font-weight: 600; }
+.cf-modal-sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.cf-modal-current { display: flex; align-items: baseline; gap: 8px; padding: 12px 14px; margin-bottom: 12px;
+  border-radius: 10px; background: var(--surface2); }
+.cf-modal-big { font-size: 26px; font-weight: 700; color: var(--info, #0ea5e9); }
+.cf-modal-lbl { font-size: 12px; color: var(--text2); }

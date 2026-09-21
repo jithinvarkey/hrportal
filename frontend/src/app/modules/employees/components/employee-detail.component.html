@@ -71,6 +71,9 @@
     </div>
     <div class="hero-actions">
       <button class="btn-outline" (click)="back()"><mat-icon>arrow_back</mat-icon> Back</button>
+      <button class="btn-outline" *ngIf="canEditCarryForward" (click)="openCarryForwardModal()">
+        <mat-icon>event_repeat</mat-icon> Carry Forward
+      </button>
       <button class="btn-primary" *ngIf="isHR" (click)="edit()"><mat-icon>edit</mat-icon> Edit</button>
     </div>
   </div>
@@ -365,6 +368,14 @@
           </div>
           <span class="lc-pct">{{ pctLeave(lb) }}% used</span>
         </div>
+
+        <div class="cf-set-note" *ngIf="isAnnualLeaveBalance(lb) && lb.carry_forward_overridden">
+          <mat-icon>edit_note</mat-icon>
+          <span>
+            Carry forward set by hand<span *ngIf="lb.carry_forward_overridden_by_name"> by {{ lb.carry_forward_overridden_by_name }}</span>
+            <span *ngIf="lb.carry_forward_overridden_at"> on {{ lb.carry_forward_overridden_at | date:'dd MMM yyyy' }}</span>
+          </span>
+        </div>
       </div>
       <div class="empty-state" *ngIf="!leaveBalance.length" style="grid-column:1/-1">
         <mat-icon>event_available</mat-icon><p>No leave allocations found for this contract year</p>
@@ -443,6 +454,62 @@
 
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- â”€â”€ Carry Forward Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+  <div class="modal-backdrop" *ngIf="showCarryForwardModal" (click)="closeCarryForwardModal()"></div>
+  <div class="modal-mini" *ngIf="showCarryForwardModal">
+    <div class="modal-hdr">
+      <h4><mat-icon>event_repeat</mat-icon> Annual Leave Carry Forward</h4>
+      <button class="icon-btn-sm" (click)="closeCarryForwardModal()"><mat-icon>close</mat-icon></button>
+    </div>
+    <div class="modal-body-mini">
+      <p class="cf-modal-loading" *ngIf="cfLoading">Loading the current value...</p>
+
+      <ng-container *ngIf="!cfLoading">
+        <div class="cf-modal-period">
+          <div class="cf-modal-emp">{{ employee?.full_name }}</div>
+          <div class="cf-modal-sub" *ngIf="cfPeriodLabel">Current contract period: {{ cfPeriodLabel }}</div>
+        </div>
+
+        <div class="cf-modal-current" *ngIf="cfCurrentValue !== null">
+          <span class="cf-modal-big">{{ cfCurrentValue | number:'1.0-1' }}</span>
+          <span class="cf-modal-lbl">days carried forward now</span>
+        </div>
+
+        <div class="cf-set-note" *ngIf="cfOverridden">
+          <mat-icon>edit_note</mat-icon>
+          <span>
+            Set by hand<span *ngIf="cfOverriddenBy"> by {{ cfOverriddenBy }}</span>
+            <span *ngIf="cfOverriddenAt"> on {{ cfOverriddenAt | date:'dd MMM yyyy' }}</span>
+          </span>
+        </div>
+
+        <div class="form-err" *ngIf="cfNotice"><mat-icon>info</mat-icon> {{ cfNotice }}</div>
+
+        <div class="mini-field" *ngIf="canSetCarryForward && cfCurrentValue !== null">
+          <label for="cfValueInput">New carry forward days</label>
+          <input id="cfValueInput" type="number" min="0" max="999.9" step="0.5"
+                 [(ngModel)]="cfValue" [disabled]="cfSaving">
+          <small>Remaining, used and pending days are recalculated from this value.</small>
+        </div>
+
+        <button class="cf-link cf-reset" *ngIf="canSetCarryForward && cfOverridden"
+                (click)="saveCarryForward(true)" [disabled]="cfSaving">
+          Use the calculated value instead
+        </button>
+
+        <div class="form-err" *ngIf="cfError" role="alert"><mat-icon>error_outline</mat-icon> {{ cfError }}</div>
+      </ng-container>
+    </div>
+    <div class="modal-footer-mini">
+      <button class="btn-cancel" (click)="closeCarryForwardModal()" [disabled]="cfSaving">Cancel</button>
+      <button class="btn-save" (click)="saveCarryForward()"
+              [disabled]="cfSaving || cfLoading || !canSetCarryForward || cfCurrentValue === null">
+        <mat-icon>{{ cfSaving ? 'hourglass_empty' : 'save' }}</mat-icon>
+        {{ cfSaving ? 'Saving...' : 'Save' }}
+      </button>
     </div>
   </div>
 

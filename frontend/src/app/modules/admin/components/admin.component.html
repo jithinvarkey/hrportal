@@ -647,7 +647,7 @@
     <div class="section-head">
       <div>
         <h2 class="section-title">Workflow Settings</h2>
-        <p class="section-sub">System-wide approval routing for new requests.</p>
+        <p class="section-sub">Manage leave policies, approval routing, and notifications.</p>
       </div>
     </div>
 
@@ -844,6 +844,44 @@
           <mat-icon>{{ leaveReminderSaving ? 'hourglass_empty' : 'save' }}</mat-icon>
           {{ leaveReminderSaving ? 'Saving...' : 'Save Leave Reminder' }}
         </button>
+      </div>
+    </div>
+
+    <div class="settings-panel">
+      <div class="settings-heading">
+        <div class="settings-icon"><mat-icon>event_repeat</mat-icon></div>
+        <div>
+          <div class="settings-title">Annual Leave Carryforward</div>
+          <div class="settings-sub">Choose how much remaining annual leave can carry forward to the next year. Carried days do not expire during that year and are used before the new entitlement, but they do not carry a second time.</div>
+        </div>
+      </div>
+      <p *ngIf="carryForwardLoading" role="status">Loading carryforward rule...</p>
+      <fieldset class="carryforward-fields" [disabled]="carryForwardLoading || carryForwardSaving || !carryForwardTypeId">
+        <legend>Carryforward rule</legend>
+        <div class="approval-options">
+          <label class="approval-option" [class.selected]="carryForwardSettings.all">
+            <input type="radio" name="carryForwardRule" [value]="true" [(ngModel)]="carryForwardSettings.all" (ngModelChange)="carryForwardMessage=''">
+            <span><strong>All</strong><small>Carry forward all remaining annual leave.</small></span>
+          </label>
+          <label class="approval-option" [class.selected]="!carryForwardSettings.all">
+            <input type="radio" name="carryForwardRule" [value]="false" [(ngModel)]="carryForwardSettings.all" (ngModelChange)="carryForwardMessage=''">
+            <span><strong>Number</strong><small>Set the maximum days to carry forward.</small></span>
+          </label>
+        </div>
+        <div class="policy-group" *ngIf="!carryForwardSettings.all">
+          <label for="carryForwardMaximum">Maximum carryforward days</label>
+          <input id="carryForwardMaximum" type="number" inputmode="numeric" min="0" max="65535" step="1" required [(ngModel)]="carryForwardSettings.maximum" (ngModelChange)="carryForwardMessage=''" aria-describedby="carryForwardHelp">
+          <span id="carryForwardHelp">Enter a whole number. Use 0 to carry forward no leave.</span>
+        </div>
+      </fieldset>
+      <div class="settings-feedback success" *ngIf="carryForwardMessage" role="status"><mat-icon>check_circle</mat-icon>{{ carryForwardMessage }}</div>
+      <div class="settings-feedback error" *ngIf="carryForwardError" role="alert"><mat-icon>error_outline</mat-icon>{{ carryForwardError }}</div>
+      <div class="settings-actions">
+        <button class="btn-primary" (click)="saveCarryForwardSettings()" [disabled]="carryForwardLoading || carryForwardSaving || !carryForwardTypeId">
+          <mat-icon>{{ carryForwardSaving ? 'hourglass_empty' : 'save' }}</mat-icon>
+          {{ carryForwardSaving ? 'Saving...' : 'Save Carryforward Rule' }}
+        </button>
+        <button class="btn-outline" *ngIf="carryForwardError && !carryForwardTypeId" (click)="loadCarryForwardSettings()" [disabled]="carryForwardLoading">Retry</button>
       </div>
     </div>
   </ng-container>

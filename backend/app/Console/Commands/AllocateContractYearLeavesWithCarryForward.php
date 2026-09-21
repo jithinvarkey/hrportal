@@ -7,6 +7,7 @@ use App\Models\LeaveAllocation;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Services\AnnualLeaveCarryForwardPolicy;
+use App\Services\LeaveService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 
@@ -33,12 +34,7 @@ class AllocateContractYearLeavesWithCarryForward extends Command
             return self::FAILURE;
         }
 
-        $annualType = LeaveType::query()
-            ->where('is_annual', true)
-            ->orWhere('code', 'AL')
-            ->orWhere('name', 'like', '%Annual%')
-            ->orderByDesc('is_annual')
-            ->first();
+        $annualType = LeaveType::annualPolicyType();
 
         if (! $annualType) {
             $this->error('Annual Leave type not found.');
@@ -91,11 +87,14 @@ class AllocateContractYearLeavesWithCarryForward extends Command
                 $pendingDays = $this->pendingDays($employee->id, $annualType, $startDate, $endDate);
                 $allocation = $this->existingAllocation($employee->id, $annualType->id, $startDate);
                 $existingCarryForward = (float) ($allocation?->carried_forward_days ?? 0);
-                $carryForward = $this->carryForwardPolicy->preserveExisting(
-                    $existingCarryForward,
-                    $carryForward
+                if ($allocation) {
+                    $carryForward = $existingCarryForward;
+                }
+                $usageAllocation = $allocation ?: new LeaveAllocation(['employee_id' => $employee->id]);
+                $usage = app(LeaveService::class)->annualUsageWithCarryForward(
+                    $usageAllocation, $startDate, $endDate, $carryForward
                 );
-                $remaining = max(0, round($entitlement + $carryForward - $usedDays - $pendingDays, 2));
+                $remaining = max(0, round($entitlement + $usage['active_carry_forward_remaining'] - $usage['annual_used_days'] - $pendingDays, 2));
                 $nextCarryForward = $this->eligibleCarryForward($annualType, $remaining);
 
                 $values = [
@@ -111,7 +110,7 @@ class AllocateContractYearLeavesWithCarryForward extends Command
                     'last_accrual_date' => $asOf->toDateString(),
                 ];
 
-                if ($existingCarryForward <= 0) {
+                if (!$allocation) {
                     $values['carried_forward_days'] = $carryForward;
                 }
 
@@ -211,7 +210,7 @@ class AllocateContractYearLeavesWithCarryForward extends Command
     private function usedDays(int $employeeId, LeaveType $annualType, Carbon $startDate, Carbon $endDate): float
     {
         return (float) $this->annualLeaveRequestQuery($employeeId, $annualType, $startDate, $endDate)
-            ->where('status', 'approved')
+            ->approvedForBalance()
             ->sum('total_days');
     }
 
@@ -231,7 +230,7 @@ class AllocateContractYearLeavesWithCarryForward extends Command
     private function pendingDays(int $employeeId, LeaveType $annualType, Carbon $startDate, Carbon $endDate): float
     {
         return (float) $this->annualLeaveRequestQuery($employeeId, $annualType, $startDate, $endDate)
-            ->whereIn('status', ['pending', 'manager_approved'])
+            ->pendingForBalance()
             ->sum('total_days');
     }
 
@@ -249,7 +248,8 @@ class AllocateContractYearLeavesWithCarryForward extends Command
         return $this->carryForwardPolicy->calculate(
             (bool) $annualType->carry_forward,
             $remaining,
-            $annualType->max_carry_forward
+            $annualType->max_carry_forward,
+            (bool) $annualType->carry_forward_all
         );
     }
 }

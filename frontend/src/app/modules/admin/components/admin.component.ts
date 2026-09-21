@@ -105,6 +105,14 @@ export class AdminComponent implements OnInit {
   migrationMessage = '';
   migrationError = '';
 
+  carryForwardSettings = { all: false, maximum: 10 as number | null };
+  carryForwardTypeId: number | null = null;
+  carryForwardLoading = false;
+  carryForwardSaving = false;
+  carryForwardMessage = '';
+  carryForwardError = '';
+
+
   loanSettings = { approval_levels: 2 };
   annualTicketSettings = { saudi_employee_tickets: 1, non_saudi_employee_tickets: 1, non_saudi_max_dependents: 3 };
   monthlyLeaveReminderSettings = {
@@ -295,7 +303,7 @@ export class AdminComponent implements OnInit {
     if (id === 'units')        this.loadUnits();
     if (id === 'departments')  this.loadDepartments();
     if (id === 'designations') { this.loadDesignations(); this.loadDepartments(); }
-    if (id === 'settings')     { this.loadLoanSettings(); this.loadAnnualTicketSettings(); this.loadMonthlyLeaveReminderSettings(); this.loadUnifonicSettings(); this.loadEmailSettings(); this.loadHdfTemplate(); }
+    if (id === 'settings')     { this.loadCarryForwardSettings(); this.loadLoanSettings(); this.loadAnnualTicketSettings(); this.loadMonthlyLeaveReminderSettings(); this.loadUnifonicSettings(); this.loadEmailSettings(); this.loadHdfTemplate(); }
   }
 
   onMigrationFile(event: Event) {
@@ -347,6 +355,64 @@ export class AdminComponent implements OnInit {
           || err?.message
           || 'Migration failed. Please check the file and try again.';
         this.migrationRunning = false;
+      }
+    });
+  }
+
+  loadCarryForwardSettings() {
+    this.carryForwardLoading = true;
+    this.carryForwardTypeId = null;
+    this.carryForwardError = '';
+    this.carryForwardMessage = '';
+    this.http.get<any>('/api/v1/leave/types').subscribe({
+      next: r => {
+        const types: any[] = r?.types || [];
+        const type = types.find(t => String(t.code).toUpperCase() === 'AL')
+          || types.find(t => t.is_annual)
+          || types.find(t => String(t.name).toLowerCase().includes('annual'));
+        if (type) {
+          this.carryForwardTypeId = type.id;
+          this.carryForwardSettings = {
+            all: !!type.carry_forward_all,
+            maximum: type.carry_forward ? Number(type.max_carry_forward ?? 10) : 0,
+          };
+        } else {
+          this.carryForwardError = 'Create an Annual Leave type in Leave Management before setting this rule.';
+        }
+        this.carryForwardLoading = false;
+      },
+      error: err => {
+        this.carryForwardError = this.firstError(err) || 'Failed to load carryforward settings.';
+        this.carryForwardLoading = false;
+      }
+    });
+  }
+
+  saveCarryForwardSettings() {
+    if (!this.carryForwardTypeId || this.carryForwardSaving) return;
+    this.carryForwardMessage = '';
+    this.carryForwardError = '';
+    const maximum = this.carryForwardSettings.maximum;
+    if (!this.carryForwardSettings.all &&
+        (maximum == null || !Number.isInteger(maximum) || maximum < 0 || maximum > 65535)) {
+      this.carryForwardError = 'Enter a whole number from 0 to 65535.';
+      return;
+    }
+    this.carryForwardSaving = true;
+    this.http.put<any>(`/api/v1/leave/types/${this.carryForwardTypeId}`, {
+      carry_forward: true,
+      carry_forward_all: this.carryForwardSettings.all,
+      max_carry_forward: this.carryForwardSettings.all ? 0 : maximum,
+    }).subscribe({
+      next: r => {
+        this.carryForwardSettings.all = !!r.type.carry_forward_all;
+        this.carryForwardSettings.maximum = Number(r.type.max_carry_forward);
+        this.carryForwardMessage = 'Annual leave carryforward rule saved.';
+        this.carryForwardSaving = false;
+      },
+      error: err => {
+        this.carryForwardError = this.firstError(err) || 'Failed to save carryforward settings.';
+        this.carryForwardSaving = false;
       }
     });
   }

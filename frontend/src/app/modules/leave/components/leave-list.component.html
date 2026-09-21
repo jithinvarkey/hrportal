@@ -493,9 +493,6 @@
               <div class="name-sub">
                 Active {{ b.active_carried_forward_days || 0 }} · Used {{ b.carry_forward_used_days || 0 }}
               </div>
-              <div class="name-sub" *ngIf="(b.expired_carried_forward_days || 0) > 0" style="color:var(--danger)">
-                Expired {{ b.expired_carried_forward_days }} after {{ b.carry_forward_expiry_date | date:'dd MMM yyyy' }}
-              </div>
             </ng-container>
             <ng-template #noCarryForward>
               <span class="status-badge badge-gray">No</span>
@@ -582,7 +579,7 @@
         <ng-container matColumnDef="carry">
           <th mat-header-cell *matHeaderCellDef>Carry Forward</th>
           <td mat-cell *matCellDef="let t">
-            <span *ngIf="t.carry_forward" class="status-badge badge-blue">{{ t.max_carry_forward }} days</span>
+            <span *ngIf="t.carry_forward" class="status-badge badge-blue">{{ t.carry_forward_all ? 'All' : t.max_carry_forward + ' days' }}</span>
             <span *ngIf="!t.carry_forward" class="status-badge badge-gray">No</span>
             <span *ngIf="t.skip_manager_approval" class="status-badge badge-orange"
                   matTooltip="Sick leave policy: goes directly to HR">
@@ -1196,8 +1193,13 @@
         <input class="field-input" type="number" [(ngModel)]="typeForm.days_allowed" min="0">
       </div>
       <div class="field-group">
-        <label class="field-label">Max Carry Forward</label>
-        <input class="field-input" type="number" [(ngModel)]="typeForm.max_carry_forward" min="0">
+        <label class="field-label">Carry Forward Rule</label>
+        <select class="field-input" [(ngModel)]="typeForm.carry_forward_all" [disabled]="!typeForm.carry_forward">
+          <option [ngValue]="true">All</option>
+          <option [ngValue]="false">Number</option>
+        </select>
+        <input *ngIf="!typeForm.carry_forward_all" class="field-input" type="number" aria-label="Maximum carry forward days" [(ngModel)]="typeForm.max_carry_forward" min="0" max="65535" step="1" [disabled]="!typeForm.carry_forward">
+        <small>Carried forward days are added to next year's allowance and are used before it.</small>
       </div>
     </div>
     <div class="checkbox-row">

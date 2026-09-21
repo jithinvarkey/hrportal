@@ -398,3 +398,15 @@
   &.on{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success);}
   &.off{background:color-mix(in srgb,var(--text3) 16%,transparent);color:var(--text3);}}
 .row-btn.danger:hover{background:color-mix(in srgb,var(--danger) 14%,transparent);color:var(--danger);}
+
+.carryforward-fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  legend { font-weight: 600; margin-bottom: 12px; }
+  .approval-option { cursor: pointer; }
+  input[type="radio"] { accent-color: #2563eb; }
+  .policy-group { margin-top: 16px; max-width: 400px; }
+  &:disabled { opacity: .65; }
+}

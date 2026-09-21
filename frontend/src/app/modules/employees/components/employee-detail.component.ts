@@ -376,6 +376,103 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
     return Math.min(100, Math.round((alloc.used_days / alloc.allocated_days) * 100));
   }
 
+  // ── Carry forward (HR manager / system admin, active employees, current period) ──
+  canSetCarryForward = false;
+  showCarryForwardModal = false;
+  cfLoading = false;
+  cfSaving = false;
+  cfError = '';
+  cfNotice = '';
+  cfPeriodLabel = '';
+  cfPeriodStart = '';
+  cfCurrentValue: number | null = null;
+  cfValue: number | null = null;
+  cfOverridden = false;
+  cfOverriddenBy = '';
+  cfOverriddenAt = '';
+
+  /** Button visibility. The server re-checks both conditions before it writes anything. */
+  get canEditCarryForward(): boolean {
+    return this.employee?.status === 'active'
+      && this.auth.hasAnyRole(['super_admin', 'ceo', 'hr_manager']);
+  }
+
+  openCarryForwardModal(): void {
+    this.showCarryForwardModal = true;
+    this.cfLoading = true;
+    this.cfError = '';
+    this.cfNotice = '';
+    this.cfValue = null;
+    this.cfCurrentValue = null;
+    this.cfOverridden = false;
+    this.cfOverriddenBy = '';
+    this.cfOverriddenAt = '';
+
+    // No period_start, so the API answers for the employee's current contract period.
+    this.http.get<any>(`/api/v1/employees/${this.employeeId}/leave-balances`).subscribe({
+      next: r => {
+        const annual = (r?.balances || []).find((b: any) => this.isAnnualLeaveBalance(b));
+        this.canSetCarryForward = !!r?.can_set_carry_forward;
+        this.cfPeriodLabel = r?.selected_period?.label || '';
+        this.cfPeriodStart = r?.selected_period?.start_date || '';
+
+        if (!annual) {
+          this.cfNotice = 'This employee has no annual leave allocation for the current contract period yet.';
+        } else {
+          this.cfCurrentValue = Number(annual.carried_forward_days || 0);
+          this.cfValue = this.cfCurrentValue;
+          this.cfOverridden = !!annual.carry_forward_overridden;
+          this.cfOverriddenBy = annual.carry_forward_overridden_by_name || '';
+          this.cfOverriddenAt = annual.carry_forward_overridden_at || '';
+        }
+
+        if (!this.canSetCarryForward) {
+          this.cfNotice = 'Only an HR manager or system admin can change this, and only for active employees.';
+        }
+        this.cfLoading = false;
+      },
+      error: err => {
+        this.cfError = err?.error?.message || 'Could not load the current carry forward value.';
+        this.cfLoading = false;
+      }
+    });
+  }
+
+  closeCarryForwardModal(): void {
+    if (this.cfSaving) return;
+    this.showCarryForwardModal = false;
+  }
+
+  saveCarryForward(clear = false): void {
+    if (this.cfSaving || !this.canSetCarryForward || !this.cfPeriodStart) return;
+    if (!clear && (this.cfValue === null || isNaN(Number(this.cfValue))
+        || Number(this.cfValue) < 0 || Number(this.cfValue) > 999.9)) {
+      this.cfError = 'Enter a number of days from 0 to 999.9.';
+      return;
+    }
+    if (clear && !confirm('Discard the value set by hand and go back to the calculated carry forward?')) return;
+
+    this.cfSaving = true;
+    this.cfError = '';
+    this.http.put<any>(`/api/v1/employees/${this.employeeId}/leave-balances/carry-forward`, {
+      period_start: this.cfPeriodStart,
+      carried_forward_days: clear ? null : Number(this.cfValue),
+    }).subscribe({
+      next: () => {
+        this.cfSaving = false;
+        this.showCarryForwardModal = false;
+        this.loadAnnualBalanceToday();
+        if (this.activeTab === 'leave') this.loadLeaveBalances(this.selectedLeavePeriod);
+      },
+      error: err => {
+        this.cfError = err?.error?.message
+          || err?.error?.errors?.carried_forward_days?.[0]
+          || 'Could not update carry forward.';
+        this.cfSaving = false;
+      }
+    });
+  }
+
   isAnnualLeaveBalance(balance: any): boolean {
     const name = String(balance?.leave_type?.name || '').toLowerCase();
     const code = String(balance?.leave_type?.code || '').toLowerCase();
@@ -424,6 +521,7 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
         next: r => {
           this.leaveBalance = r?.balances || [];
           this.leaveBalancePeriods = r?.periods || [];
+          this.canSetCarryForward = !!r?.can_set_carry_forward;
           const fallbackPeriod = this.leaveBalancePeriods[0] || null;
           this.selectedLeavePeriod = r?.selected_period?.start_date || selected || fallbackPeriod?.start_date || '';
           this.selectedLeavePeriodLabel = r?.selected_period?.label || fallbackPeriod?.label || '';
@@ -434,6 +532,7 @@ export class EmployeeDetailComponent implements OnInit, OnDestroy {
         error: () => {
           this.leaveBalance = [];
           this.leaveBalancePeriods = [];
+          this.canSetCarryForward = false;
           this.selectedLeavePeriod = '';
           this.selectedLeavePeriodLabel = '';
           this.selectedLeavePeriodIsCurrent = false;

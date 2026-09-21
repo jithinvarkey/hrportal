@@ -249,6 +249,28 @@ class LeaveService {
 
     // ── Leave balance update ──────────────────────────────────────────────
     public function updateLeaveBalance(LeaveRequest $leave, string $action): void {
+        if ($leave->leaveType && $this->isAnnualLeaveType($leave->leaveType)) {
+            // Rebuild from request statuses so the second approval cannot count twice.
+            $allocations = LeaveAllocation::with(['employee', 'leaveType'])
+                ->where('employee_id', $leave->employee_id)
+                ->where('leave_type_id', $leave->leave_type_id)->get();
+            foreach ($allocations as $allocation) {
+                $start = $allocation->accrual_year_start
+                    ? Carbon::parse($allocation->accrual_year_start)->startOfDay()
+                    : Carbon::create((int) $allocation->year, 1, 1)->startOfDay();
+                $end = $start->copy()->addYear()->subDay();
+                $base = LeaveRequest::where('employee_id', $leave->employee_id)
+                    ->where('leave_type_id', $leave->leave_type_id)
+                    ->whereDate('start_date', '<=', $end->toDateString())
+                    ->whereDate('end_date', '>=', $start->toDateString());
+                $allocation->used_days = (clone $base)->approvedForBalance()->sum('total_days');
+                $allocation->pending_days = (clone $base)->pendingForBalance()->sum('total_days');
+                $allocation->remaining_days = $this->remainingDays($allocation);
+                $allocation->save();
+            }
+            return;
+        }
+
         $allocation = LeaveAllocation::with(['employee', 'leaveType'])->where([
                     'employee_id' => $leave->employee_id,
                     'leave_type_id' => $leave->leave_type_id,
@@ -324,24 +346,22 @@ class LeaveService {
             ? Carbon::parse($allocation->accrual_year_start)->startOfDay()
             : Carbon::create((int) $allocation->year, 1, 1)->startOfDay();
         $periodEnd = $periodStart->copy()->addYear()->subDay()->endOfDay();
-        $balanceDate = $asOf->copy()->min($periodEnd)->max($periodStart);
         $carriedForward = (float) ($allocation->carried_forward_days ?? 0);
-        $usage = $this->annualUsageWithCarryForward($allocation, $periodStart, $balanceDate, $carriedForward);
+        $usage = $this->annualUsageWithCarryForward($allocation, $periodStart, $periodEnd, $carriedForward);
         $pending = max(0, (float) $allocation->pending_days);
 
         return max(0, round((float) $allocation->allocated_days + $usage['active_carry_forward_remaining'] - $usage['annual_used_days'] - $pending, 2));
     }
 
-    private function annualUsageWithCarryForward(LeaveAllocation $allocation, Carbon $periodStart, Carbon $asOf, float $carriedForward): array {
+    public function annualUsageWithCarryForward(LeaveAllocation $allocation, Carbon $periodStart, Carbon $asOf, float $carriedForward): array {
+        // Carry-in does not expire during the year: it is added to the allowance, and
+        // annual leave consumes it before the current year's own entitlement.
         $balanceDate = $asOf->copy()->startOfDay();
-        $expiryDate = $periodStart->copy()->addMonthsNoOverflow(6)->subDay()->endOfDay();
-        $windowEnd = $balanceDate->copy()->min($expiryDate);
         $usedDays = 0.0;
-        $carryForwardWindowUsedDays = 0.0;
 
         $requests = LeaveRequest::with('leaveType')
                 ->where('employee_id', $allocation->employee_id)
-                ->where('status', 'approved')
+                ->approvedForBalance()
                 ->whereDate('start_date', '<=', $balanceDate->toDateString())
                 ->whereDate('end_date', '>=', $periodStart->toDateString())
                 ->whereHas('leaveType', fn($query) =>
@@ -359,23 +379,14 @@ class LeaveService {
             }
 
             $usedDays += $this->leaveDaysWithin($request, $requestStart, $requestEnd);
-
-            if ($windowEnd->gte($periodStart)) {
-                $carryWindowStart = $requestStart->copy()->max($periodStart);
-                $carryWindowEnd = $requestEnd->copy()->min($windowEnd);
-                if ($carryWindowEnd->gte($carryWindowStart)) {
-                    $carryForwardWindowUsedDays += $this->leaveDaysWithin($request, $carryWindowStart, $carryWindowEnd);
-                }
-            }
         }
 
-        $carryForwardUsed = min($carriedForward, $carryForwardWindowUsedDays);
-        $carryForwardRemaining = max(0, $carriedForward - $carryForwardUsed);
-        $activeCarryForwardRemaining = $balanceDate->lte($expiryDate) ? $carryForwardRemaining : 0.0;
+        $carryForwardUsed = min($carriedForward, $usedDays);
 
         return [
+            'total_used_days' => round($usedDays, 2),
             'annual_used_days' => round(max(0, $usedDays - $carryForwardUsed), 2),
-            'active_carry_forward_remaining' => round($activeCarryForwardRemaining, 2),
+            'active_carry_forward_remaining' => round(max(0, $carriedForward - $carryForwardUsed), 2),
         ];
     }
 

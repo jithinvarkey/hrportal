@@ -5,7 +5,9 @@ namespace App\Console\Commands;
 use App\Models\Employee;
 use App\Models\LeaveAllocation;
 use App\Models\LeaveType;
-use App\Services\AnnualLeaveCarryForwardPolicy;
+use App\Models\LeaveRequest;
+use App\Services\LeaveService;
+use App\Services\AnnualLeaveAllocationService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 
@@ -20,15 +22,13 @@ class AccrueAnnualLeave extends Command
 
     private const WORKING_PER_YEAR = 260;               // 52 weeks × 5 days
 
-    public function handle(AnnualLeaveCarryForwardPolicy $carryForwardPolicy): int
+    public function handle(AnnualLeaveAllocationService $annualAllocations): int
     {
         $today = Carbon::today('Asia/Riyadh');
         $dryRun = $this->option('dry-run');
 
         // Get Annual Leave type
-        $annualType = LeaveType::where('code', 'AL')
-            ->orWhere('name', 'like', '%Annual%')
-            ->first();
+        $annualType = LeaveType::annualPolicyType();
 
         if (! $annualType) {
             $this->error('Annual Leave type not found. Run: php artisan db:seed');
@@ -95,36 +95,20 @@ class AccrueAnnualLeave extends Command
                 ]
             );
 
-            $previousAllocation = LeaveAllocation::query()
-                ->where('employee_id', $emp->id)
-                ->where('leave_type_id', $annualType->id)
-                ->when($alloc->exists, fn ($query) => $query->whereKeyNot($alloc->getKey()))
-                ->where(function ($query) use ($accrualStart) {
-                    $query->whereDate('accrual_year_start', '<', $accrualStart->toDateString())
-                        ->orWhere(function ($legacy) use ($accrualStart) {
-                            $legacy->whereNull('accrual_year_start')
-                                ->where('year', '<', $accrualStart->year);
-                        });
-                })
-                ->orderByDesc('accrual_year_start')
-                ->orderByDesc('year')
-                ->first();
+            $service = app(LeaveService::class);
+            $alloc->accrual_year_start = $accrualStart;
+            // Snapshot the setting only when the new contract-year allocation is created.
+            $carryForward = $alloc->exists
+                ? (float) $alloc->carried_forward_days
+                : $annualAllocations->carryForwardFor($alloc);
 
-            $existingCarryForward = (float) ($alloc->carried_forward_days ?? 0);
-            $calculatedCarryForward = $carryForwardPolicy->calculate(
-                (bool) $annualType->carry_forward,
-                (float) ($previousAllocation?->remaining_days ?? 0),
-                $annualType->max_carry_forward
-            );
-            $carryForward = $carryForwardPolicy->preserveExisting(
-                $existingCarryForward,
-                $calculatedCarryForward
-            );
-
-            $remaining = max(0, round(
-                $accrued + $carryForward - $alloc->used_days - $alloc->pending_days,
-                2
-            ));
+            $base = LeaveRequest::where('employee_id', $emp->id)->where('leave_type_id', $annualType->id)
+                ->whereDate('start_date', '<=', $accrualStart->copy()->addYear()->subDay()->toDateString())
+                ->whereDate('end_date', '>=', $accrualStart->toDateString());
+            $used = (float) (clone $base)->approvedForBalance()->sum('total_days');
+            $pending = (float) (clone $base)->pendingForBalance()->sum('total_days');
+            $usage = $service->annualUsageWithCarryForward($alloc, $accrualStart, $accrualStart->copy()->addYear()->subDay(), $carryForward);
+            $remaining = max(0, round($accrued + $usage['active_carry_forward_remaining'] - $usage['annual_used_days'] - $pending, 2));
 
             $rows[] = [
                 'name' => $emp->full_name ?? ($emp->first_name.' '.$emp->last_name),
@@ -140,13 +124,15 @@ class AccrueAnnualLeave extends Command
             if (! $dryRun) {
                 $values = [
                     'allocated_days' => $accrued,
+                    'used_days' => $used,
+                    'pending_days' => $pending,
                     'remaining_days' => $remaining,
                     'last_accrual_date' => $today->toDateString(),
                     'annual_entitlement' => $entitlement,
                     'accrual_year_start' => $accrualStart->toDateString(),
                 ];
 
-                if ($existingCarryForward <= 0) {
+                if (!$alloc->exists) {
                     $values['carried_forward_days'] = $carryForward;
                 }
 

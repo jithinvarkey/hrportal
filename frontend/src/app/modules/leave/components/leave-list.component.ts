@@ -70,7 +70,7 @@ export class LeaveListComponent implements OnInit {
   holidayLoading = false;
 
   // Leave type form
-  typeForm: any = { name: '', code: '', days_allowed: 0, is_paid: true, carry_forward: false, max_carry_forward: 0, requires_document: false, description: '' };
+  typeForm: any = { name: '', code: '', days_allowed: 0, is_paid: true, carry_forward: false, max_carry_forward: 10, carry_forward_all: false, requires_document: false, description: '' };
   typeEditId: number | null = null;
   typeError = '';
   typeSaving = false;
@@ -436,10 +436,10 @@ export class LeaveListComponent implements OnInit {
   openTypeForm(t?: any) {
     if (t) {
       this.typeEditId = t.id;
-      this.typeForm = { ...t };
+      this.typeForm = { ...t, carry_forward_all: !!t.carry_forward_all, max_carry_forward: Number(t.max_carry_forward) };
     } else {
       this.typeEditId = null;
-      this.typeForm = { name: '', code: '', days_allowed: 0, is_paid: true, carry_forward: false, max_carry_forward: 0, requires_document: false, description: '', skip_manager_approval: false };
+      this.typeForm = { name: '', code: '', days_allowed: 0, is_paid: true, carry_forward: false, max_carry_forward: 10, carry_forward_all: false, requires_document: false, description: '', skip_manager_approval: false };
     }
     this.typeError = '';
     this.showTypeForm = true;
@@ -447,6 +447,10 @@ export class LeaveListComponent implements OnInit {
 
   saveType() {
     if (!this.typeForm.name || !this.typeForm.code) { this.typeError = 'Name and code are required.'; return; }
+    if (!this.typeForm.carry_forward_all && (this.typeForm.max_carry_forward == null || !Number.isInteger(this.typeForm.max_carry_forward) || this.typeForm.max_carry_forward < 0 || this.typeForm.max_carry_forward > 65535)) {
+      this.typeError = 'Enter a whole number from 0 to 65535 for maximum carry forward days.'; return;
+    }
+    if (this.typeForm.carry_forward_all) this.typeForm.max_carry_forward = 0;
     this.typeSaving = true; this.typeError = '';
     const req = this.typeEditId
       ? this.http.put(`/api/v1/leave/types/${this.typeEditId}`, this.typeForm)

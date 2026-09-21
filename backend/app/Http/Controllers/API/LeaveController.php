@@ -203,6 +203,8 @@ class LeaveController extends Controller {
             'days_allowed' => 'required|integer|min:0',
             'is_paid' => 'boolean',
             'carry_forward' => 'boolean',
+            'carry_forward_all' => 'boolean',
+            'max_carry_forward' => 'required_if:carry_forward_all,false|integer|min:0|max:65535',
             'requires_document' => 'boolean',
             'is_active' => 'boolean',
             'skip_manager_approval' => 'boolean',
@@ -224,6 +226,8 @@ class LeaveController extends Controller {
             'days_allowed' => 'sometimes|integer|min:0',
             'is_paid' => 'boolean',
             'carry_forward' => 'boolean',
+            'carry_forward_all' => 'boolean',
+            'max_carry_forward' => 'required_if:carry_forward_all,false|integer|min:0|max:65535',
             'requires_document' => 'boolean',
             'is_active' => 'boolean',
             'skip_manager_approval' => 'boolean', // sick leave policy
@@ -800,6 +804,9 @@ class LeaveController extends Controller {
                 'manager_approved_at' => now(),
                 'manager_notes' => $request->input('notes'),
             ]);
+            if ($leave->leaveType && $this->isAnnualLeaveType($leave->leaveType)) {
+                $this->service->updateLeaveBalance($leave, 'approve');
+            }
             $this->logLeaveActivity($leave, 'manager_approved', 'Leave request approved at manager level.', [
                 'from_status' => $oldStatus,
                 'to_status' => 'manager_approved',
@@ -930,8 +937,14 @@ class LeaveController extends Controller {
             return response()->json(['message' => 'Cannot cancel this leave'], 422);
         }
         $oldStatus = $leave->status;
-        $this->service->updateLeaveBalance($leave, 'cancel');
-        $leave->update(['status' => 'cancelled']);
+        if (!$leave->leaveType || !$this->isAnnualLeaveType($leave->leaveType)) {
+            $this->service->updateLeaveBalance($leave, 'cancel');
+        }
+        // Dates the cancellation so annual leave cancelled after it started still counts as taken.
+        $leave->update(['status' => 'cancelled', 'cancelled_at' => now()]);
+        if ($leave->leaveType && $this->isAnnualLeaveType($leave->leaveType)) {
+            $this->service->updateLeaveBalance($leave, 'cancel');
+        }
         $this->logLeaveActivity($leave, 'cancelled', 'Leave request cancelled.', [
             'from_status' => $oldStatus,
             'to_status' => 'cancelled',
@@ -1029,9 +1042,7 @@ class LeaveController extends Controller {
         $display->setAttribute('annual_entitlement', $allocated);
         $display->setAttribute('carried_forward_days', $carriedForward);
         $display->setAttribute('active_carried_forward_days', $usage['active_carry_forward_remaining']);
-        $display->setAttribute('expired_carried_forward_days', $usage['expired_carry_forward_days']);
         $display->setAttribute('carry_forward_used_days', $usage['carry_forward_used_days']);
-        $display->setAttribute('carry_forward_expiry_date', $this->carryForwardExpiryDate($periodStart)->toDateString());
         $display->setAttribute('used_days', $used);
         $display->setAttribute('pending_days', $pending);
         $display->setAttribute('remaining_days', $remaining);
@@ -1118,19 +1129,17 @@ class LeaveController extends Controller {
                 ->orWhere('name', 'like', '%Annual%')
         );
 
-        $pendingDays = (float) (clone $base)->whereIn('status', ['pending', 'manager_approved'])->sum('total_days');
-        $usage = $this->annualUsageWithCarryForward($allocation, $periodStart, $periodEnd, $carriedForward, $balanceDate);
+        $pendingDays = (float) (clone $base)->pendingForBalance()->sum('total_days');
+        $usage = $this->annualUsageWithCarryForward($allocation, $periodStart, $periodEnd, $carriedForward);
         $usedDays = $usage['total_used_days'];
         $remainingDays = round($usage['active_carry_forward_remaining'] + $accrued - $usage['annual_used_days'], 2);
 
         $allocation->setAttribute('allocated_days', $accrued);
         $allocation->setAttribute('carried_forward_days', $carriedForward);
         $allocation->setAttribute('active_carried_forward_days', $usage['active_carry_forward_remaining']);
-        $allocation->setAttribute('expired_carried_forward_days', $usage['expired_carry_forward_days']);
         $allocation->setAttribute('used_days', $usedDays);
         $allocation->setAttribute('annual_used_days_after_carry_forward', $usage['annual_used_days']);
         $allocation->setAttribute('carry_forward_used_days', $usage['carry_forward_used_days']);
-        $allocation->setAttribute('carry_forward_expiry_date', $this->carryForwardExpiryDate($periodStart)->toDateString());
         $allocation->setAttribute('pending_days', $pendingDays);
         $allocation->setAttribute('remaining_days', $remainingDays);
         $allocation->setAttribute('earned_until_as_of', $accrued);
@@ -1171,31 +1180,33 @@ class LeaveController extends Controller {
         $balanceDate = $asOf->copy()->min($periodEnd)->max($periodStart);
         $carriedForward = (float) ($allocation->carried_forward_days ?? 0);
         $usageEndDate = $includeFullPeriodUsage ? $periodEnd->copy() : $balanceDate->copy();
-        $usage = $this->annualUsageWithCarryForward($allocation, $periodStart, $usageEndDate, $carriedForward, $balanceDate);
-        $pending = (float) ($allocation->pending_days ?? 0);
+        $usage = $this->annualUsageWithCarryForward($allocation, $periodStart, $usageEndDate, $carriedForward);
+        $pending = (float) LeaveRequest::where('employee_id', $allocation->employee_id)
+            ->where('leave_type_id', $allocation->leave_type_id)
+            ->whereDate('start_date', '<=', $usageEndDate->toDateString())
+            ->whereDate('end_date', '>=', $periodStart->toDateString())
+            ->pendingForBalance()->sum('total_days');
+        $allocation->setAttribute('pending_days', $pending);
+        $allocation->setAttribute('used_days', $usage['total_used_days']);
         $remaining = round((float) $allocation->allocated_days + $usage['active_carry_forward_remaining'] - $usage['annual_used_days'] - $pending, 2);
 
         $allocation->setAttribute('remaining_days', $remaining);
         $allocation->setAttribute('active_carried_forward_days', $usage['active_carry_forward_remaining']);
-        $allocation->setAttribute('expired_carried_forward_days', $usage['expired_carry_forward_days']);
         $allocation->setAttribute('carry_forward_used_days', $usage['carry_forward_used_days']);
         $allocation->setAttribute('annual_used_days_after_carry_forward', $usage['annual_used_days']);
-        $allocation->setAttribute('carry_forward_expiry_date', $this->carryForwardExpiryDate($periodStart)->toDateString());
 
         return $allocation;
     }
 
-    private function annualUsageWithCarryForward(LeaveAllocation $allocation, Carbon $periodStart, Carbon $asOf, float $carriedForward, ?Carbon $carryForwardAsOf = null): array {
+    private function annualUsageWithCarryForward(LeaveAllocation $allocation, Carbon $periodStart, Carbon $asOf, float $carriedForward): array {
+        // Carry-in does not expire during the year: it is added to the allowance, and
+        // annual leave consumes it before the current year's own entitlement.
         $balanceDate = $asOf->copy()->startOfDay();
-        $carryForwardDate = ($carryForwardAsOf ?: $balanceDate)->copy()->startOfDay();
-        $expiryDate = $this->carryForwardExpiryDate($periodStart);
-        $windowEnd = $balanceDate->copy()->min($expiryDate);
         $usedDays = 0.0;
-        $carryForwardWindowUsedDays = 0.0;
 
         $requests = LeaveRequest::with('leaveType')
             ->where('employee_id', $allocation->employee_id)
-            ->where('status', 'approved')
+            ->approvedForBalance()
             ->whereDate('start_date', '<=', $balanceDate->toDateString())
             ->whereDate('end_date', '>=', $periodStart->toDateString())
             ->whereHas('leaveType', fn($query) =>
@@ -1213,31 +1224,16 @@ class LeaveController extends Controller {
             }
 
             $usedDays += $this->leaveDaysWithin($request, $requestStart, $requestEnd);
-
-            if ($windowEnd->gte($periodStart)) {
-                $carryWindowStart = $requestStart->copy()->max($periodStart);
-                $carryWindowEnd = $requestEnd->copy()->min($windowEnd);
-                if ($carryWindowEnd->gte($carryWindowStart)) {
-                    $carryForwardWindowUsedDays += $this->leaveDaysWithin($request, $carryWindowStart, $carryWindowEnd);
-                }
-            }
         }
 
-        $carryForwardUsed = min($carriedForward, $carryForwardWindowUsedDays);
-        $carryForwardRemaining = max(0, $carriedForward - $carryForwardUsed);
-        $activeCarryForwardRemaining = $carryForwardDate->lte($expiryDate) ? $carryForwardRemaining : 0.0;
+        $carryForwardUsed = min($carriedForward, $usedDays);
 
         return [
             'total_used_days' => round($usedDays, 2),
             'carry_forward_used_days' => round($carryForwardUsed, 2),
             'annual_used_days' => round(max(0, $usedDays - $carryForwardUsed), 2),
-            'active_carry_forward_remaining' => round($activeCarryForwardRemaining, 2),
-            'expired_carry_forward_days' => round(max(0, $carryForwardRemaining - $activeCarryForwardRemaining), 2),
+            'active_carry_forward_remaining' => round(max(0, $carriedForward - $carryForwardUsed), 2),
         ];
-    }
-
-    private function carryForwardExpiryDate(Carbon $periodStart): Carbon {
-        return $periodStart->copy()->addMonthsNoOverflow(6)->subDay()->endOfDay();
     }
 
     private function leaveDaysWithin(LeaveRequest $request, Carbon $start, Carbon $end): float {
@@ -1570,17 +1566,11 @@ class LeaveController extends Controller {
                 $this->countWorkingDays($periodStart, $balanceDate) * ($contractAllocated / 260),
                 2
             ));
-            $carryForwardExpiryDate = $this->carryForwardExpiryDate($periodStart);
-            $carryForwardWindowEnd = $periodEnd->copy()->min($carryForwardExpiryDate);
-            $carryForwardTaken = $carryForwardWindowEnd->gte($periodStart)
-                ? min(
-                    $contractCarryForward,
-                    $this->approvedAnnualLeaveTaken($employee->id, $annualTypeIds, $periodStart, $carryForwardWindowEnd)
-                )
-                : 0.0;
-            $activeCarryForwardRemaining = $balanceDate->lte($carryForwardExpiryDate)
-                ? max(0, $contractCarryForward - $carryForwardTaken)
-                : 0.0;
+            $carryForwardTaken = min(
+                $contractCarryForward,
+                $this->approvedAnnualLeaveTaken($employee->id, $annualTypeIds, $periodStart, $periodEnd)
+            );
+            $activeCarryForwardRemaining = max(0, $contractCarryForward - $carryForwardTaken);
             $annualTakenAfterCarryForward = max(0, $contractTaken - $carryForwardTaken);
             $balanceUntilReportDate = round(
                 $earnedUntilReportDate + $activeCarryForwardRemaining - $annualTakenAfterCarryForward,
@@ -1614,7 +1604,7 @@ class LeaveController extends Controller {
         $requests = LeaveRequest::query()
             ->where('employee_id', $employeeId)
             ->whereIn('leave_type_id', $annualTypeIds)
-            ->where('status', 'approved')
+            ->approvedForBalance()
             ->whereDate('end_date', '>=', $from->toDateString())
             ->when($to, fn($query) => $query->whereDate('start_date', '<=', $to->toDateString()))
             ->get();

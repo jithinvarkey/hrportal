@@ -12,12 +12,14 @@ class LeaveRequest extends Model {
         'status','reason','rejection_reason',
         'approved_by','approved_at','document_path',
         'manager_approved_by','manager_approved_at','manager_notes','hr_notes','rejected_stage',
+        'cancelled_at',
     ];
     protected $casts = [
         'start_date'  => 'date',
         'end_date'    => 'date',
         'approved_at' => 'datetime',
         'manager_approved_at' => 'datetime',
+        'cancelled_at' => 'datetime',
         'total_days'  => 'decimal:1',
         'is_half_day'           => 'boolean',
         'requires_exit_reentry' => 'boolean',
@@ -26,6 +28,42 @@ class LeaveRequest extends Model {
         'ticket_count'          => 'integer',
         'total_hours' => 'decimal:2',
     ];
+    /** is_annual, or the AL code, or an "Annual ..." name - matched the same way everywhere. */
+    private static function annualLeaveType(): \Closure
+    {
+        return fn ($type) => $type->where('is_annual', true)
+            ->orWhere('code', 'AL')
+            ->orWhere('name', 'like', '%Annual%');
+    }
+
+    public function scopeApprovedForBalance($query) {
+        return $query->where(function ($status) {
+            $status->where('status', 'approved')->orWhere(function ($manager) {
+                $manager->where('status', 'manager_approved')
+                    ->whereNotNull('manager_approved_at')
+                    ->whereHas('leaveType', self::annualLeaveType());
+            })->orWhere(function ($late) {
+                // Annual leave cancelled once it had already started was taken, not returned.
+                // Cancellations we cannot date (no cancelled_at) stay restored.
+                $late->where('status', 'cancelled')
+                    ->whereNotNull('cancelled_at')
+                    ->whereColumn('cancelled_at', '>=', 'start_date')
+                    ->whereHas('leaveType', self::annualLeaveType());
+            });
+        });
+    }
+
+    public function scopePendingForBalance($query) {
+        return $query->where(function ($status) {
+            $status->where('status', 'pending')->orWhere(function ($manager) {
+                $manager->where('status', 'manager_approved')->where(function ($unapproved) {
+                    $unapproved->whereNull('manager_approved_at')
+                        ->orWhereDoesntHave('leaveType', self::annualLeaveType());
+                });
+            });
+        });
+    }
+
     public function employee()  { return $this->belongsTo(Employee::class); }
     public function leaveType() { return $this->belongsTo(LeaveType::class); }
     public function approver()  { return $this->belongsTo(User::class,'approved_by'); }
