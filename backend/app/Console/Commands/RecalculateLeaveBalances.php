@@ -46,10 +46,10 @@ class RecalculateLeaveBalances extends Command
                 ->whereDate('start_date', '<=', $yearEnd->toDateString())
                 ->whereDate('end_date', '>=', $yearStart->toDateString());
 
-            $usedDays = (float) (clone $base)->where('status', 'approved')->sum('total_days');
-            $pendingDays = (float) (clone $base)->whereIn('status', ['pending', 'manager_approved'])->sum('total_days');
-            $usedHours = (float) (clone $base)->where('status', 'approved')->sum('total_hours');
-            $pendingHours = (float) (clone $base)->whereIn('status', ['pending', 'manager_approved'])->sum('total_hours');
+            $usedDays = (float) (clone $base)->approvedForBalance()->sum('total_days');
+            $pendingDays = (float) (clone $base)->pendingForBalance()->sum('total_days');
+            $usedHours = (float) (clone $base)->approvedForBalance()->sum('total_hours');
+            $pendingHours = (float) (clone $base)->pendingForBalance()->sum('total_hours');
 
             $remaining = $this->isAnnualLeave($allocation->leaveType)
                 ? $this->remainingAnnualDays($allocation, now('Asia/Riyadh')->startOfDay(), $pendingDays)
@@ -226,23 +226,20 @@ class RecalculateLeaveBalances extends Command
         [$periodStart, $periodEnd] = $this->allocationPeriod($allocation);
         $balanceDate = $asOf->copy()->min($periodEnd)->max($periodStart);
         $carriedForward = (float) ($allocation->carried_forward_days ?? 0);
-        $usage = $this->annualUsageWithCarryForward($allocation, $periodStart, $periodEnd, $carriedForward, $balanceDate);
+        $usage = $this->annualUsageWithCarryForward($allocation, $periodStart, $periodEnd, $carriedForward);
 
         return max(0, round((float) $allocation->allocated_days + $usage['active_carry_forward_remaining'] - $usage['annual_used_days'] - $pendingDays, 2));
     }
 
-    private function annualUsageWithCarryForward(LeaveAllocation $allocation, Carbon $periodStart, Carbon $asOf, float $carriedForward, ?Carbon $carryForwardAsOf = null): array
+    private function annualUsageWithCarryForward(LeaveAllocation $allocation, Carbon $periodStart, Carbon $asOf, float $carriedForward): array
     {
         $balanceDate = $asOf->copy()->startOfDay();
-        $carryForwardDate = ($carryForwardAsOf ?: $balanceDate)->copy()->startOfDay();
-        $expiryDate = $periodStart->copy()->addMonthsNoOverflow(6)->subDay()->endOfDay();
-        $windowEnd = $balanceDate->copy()->min($expiryDate);
+        // Carry-in does not expire during the year; it is consumed before the year's own days.
         $usedDays = 0.0;
-        $carryForwardWindowUsedDays = 0.0;
 
         $requests = LeaveRequest::with('leaveType')
             ->where('employee_id', $allocation->employee_id)
-            ->where('status', 'approved')
+            ->approvedForBalance()
             ->whereDate('start_date', '<=', $balanceDate->toDateString())
             ->whereDate('end_date', '>=', $periodStart->toDateString())
             ->whereHas('leaveType', fn($query) =>
@@ -261,18 +258,11 @@ class RecalculateLeaveBalances extends Command
 
             $usedDays += $this->leaveDaysWithin($request, $requestStart, $requestEnd);
 
-            if ($windowEnd->gte($periodStart)) {
-                $carryWindowStart = $requestStart->copy()->max($periodStart);
-                $carryWindowEnd = $requestEnd->copy()->min($windowEnd);
-                if ($carryWindowEnd->gte($carryWindowStart)) {
-                    $carryForwardWindowUsedDays += $this->leaveDaysWithin($request, $carryWindowStart, $carryWindowEnd);
-                }
-            }
         }
 
-        $carryForwardUsed = min($carriedForward, $carryForwardWindowUsedDays);
+        $carryForwardUsed = min($carriedForward, $usedDays);
         $carryForwardRemaining = max(0, $carriedForward - $carryForwardUsed);
-        $activeCarryForwardRemaining = $carryForwardDate->lte($expiryDate) ? $carryForwardRemaining : 0.0;
+        $activeCarryForwardRemaining = $carryForwardRemaining;
 
         return [
             'annual_used_days' => round(max(0, $usedDays - $carryForwardUsed), 2),

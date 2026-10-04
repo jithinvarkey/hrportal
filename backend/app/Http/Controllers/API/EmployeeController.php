@@ -389,7 +389,12 @@ class EmployeeController extends Controller {
                 $query->whereBetween('accrual_year_start', [$periodStart->toDateString(), $periodEnd->toDateString()])
                     ->orWhere('year', $periodStart->year);
             })
-            ->get()
+            ->get();
+
+        $setters = User::whereIn('id', $allocations->pluck('carry_forward_overridden_by')->filter()->unique())
+            ->pluck('name', 'id')->all();
+
+        $allocations = $allocations
             ->sortBy(fn ($allocation) => $allocation->leaveType?->name ?? '')
             ->values()
             ->map(fn ($allocation) => [
@@ -400,6 +405,9 @@ class EmployeeController extends Controller {
                 'used_days' => (float) $allocation->used_days,
                 'pending_days' => (float) $allocation->pending_days,
                 'carried_forward_days' => (float) ($allocation->carried_forward_days ?? 0),
+                'carry_forward_overridden' => (bool) $allocation->carry_forward_overridden_at,
+                'carry_forward_overridden_at' => optional($allocation->carry_forward_overridden_at)->toDateTimeString(),
+                'carry_forward_overridden_by_name' => $setters[$allocation->carry_forward_overridden_by] ?? null,
                 'accrual_year_start' => optional($allocation->accrual_year_start)->toDateString(),
                 'annual_entitlement' => $allocation->annual_entitlement,
                 'leave_type' => $allocation->leaveType ? [
@@ -413,6 +421,78 @@ class EmployeeController extends Controller {
             'periods' => $periods,
             'selected_period' => $selected,
             'balances' => $allocations,
+            'can_set_carry_forward' => $this->canSetCarryForward($employee),
+        ]);
+    }
+
+    /** HR managers and system admins may correct the carry-forward of an active employee. */
+    private function canSetCarryForward(Employee $employee): bool {
+        return $employee->status === 'active'
+            && $this->hasAnyRoleDB(['super_admin', 'hr_manager']);
+    }
+
+    public function updateLeaveCarryForward(Request $request, int $id): JsonResponse {
+        $employee = Employee::findOrFail($id);
+
+        if (!$this->canSetCarryForward($employee)) {
+            return response()->json([
+                'message' => $employee->status === 'active'
+                    ? 'Only an HR manager or system admin can set carry forward.'
+                    : 'Carry forward can only be set for active employees.',
+            ], 403);
+        }
+
+        $data = $request->validate([
+            'period_start' => 'required|date',
+            // null clears the manual figure and hands the period back to the normal rule.
+            'carried_forward_days' => 'present|nullable|numeric|min:0|max:999.9',
+        ]);
+
+        $periodStart = Carbon::parse($data['period_start'])->startOfDay();
+
+        if (!collect($this->contractPeriodsFor($employee, now()))->firstWhere('start_date', $periodStart->toDateString())) {
+            return response()->json(['message' => 'That contract period does not exist for this employee.'], 422);
+        }
+
+        $allocation = LeaveAllocation::with(['employee', 'leaveType'])
+            ->where('employee_id', $employee->id)
+            ->whereHas('leaveType', fn ($query) => $query->where('is_annual', true)
+                ->orWhere('code', 'AL')
+                ->orWhere('name', 'like', '%Annual%'))
+            ->where(function ($query) use ($periodStart) {
+                $query->whereDate('accrual_year_start', $periodStart->toDateString())
+                    ->orWhere(function ($legacy) use ($periodStart) {
+                        $legacy->whereNull('accrual_year_start')->where('year', $periodStart->year);
+                    });
+            })
+            ->first();
+
+        if (!$allocation) {
+            return response()->json(['message' => 'No annual leave allocation exists for that contract period yet.'], 422);
+        }
+
+        $days = $data['carried_forward_days'] === null ? null : (float) $data['carried_forward_days'];
+        $userId = auth()->id() === null ? null : (int) auth()->id();
+        app(\App\Services\AnnualLeaveAllocationService::class)->setCarryForward($allocation, $days, $userId);
+
+        activity('leave_allocation')
+            ->causedBy(auth()->user())
+            ->performedOn($allocation)
+            ->withProperties([
+                'employee_id' => $employee->id,
+                'contract_period_start' => $periodStart->toDateString(),
+                'carried_forward_days' => (float) $allocation->carried_forward_days,
+                'cleared' => $days === null,
+            ])
+            ->log($days === null ? 'Annual leave carry forward reset to the calculated value' : 'Annual leave carry forward set manually');
+
+        return response()->json([
+            'message' => $days === null
+                ? 'Carry forward reset to the calculated value.'
+                : 'Carry forward updated.',
+            'carried_forward_days' => (float) $allocation->carried_forward_days,
+            'remaining_days' => (float) $allocation->remaining_days,
+            'carry_forward_overridden' => (bool) $allocation->carry_forward_overridden_at,
         ]);
     }
 

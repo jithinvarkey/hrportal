@@ -16,11 +16,20 @@ class AnnualLeaveCarryForwardPolicyTest extends TestCase
         $this->assertSame(7.5, $policy->calculate(true, 7.5, 10));
     }
 
-    public function test_it_never_carries_more_than_ten_days(): void
+    public function test_it_respects_a_configured_limit_above_ten_days(): void
     {
         $policy = new AnnualLeaveCarryForwardPolicy;
 
-        $this->assertSame(10.0, $policy->calculate(true, 18, 20));
+        $this->assertSame(18.0, $policy->calculate(true, 18, 20));
+    }
+
+    public function test_all_carries_the_entire_positive_balance(): void
+    {
+        $policy = new AnnualLeaveCarryForwardPolicy;
+        $this->assertSame(25.5, $policy->calculate(true, 25.5, 10, true));
+        $this->assertSame(0.0, $policy->calculate(true, -2, 10, true));
+        $this->assertSame(0.0, $policy->calculate(false, 25, 10, true));
+        $this->assertSame(0.0, $policy->calculate(true, 25, 0));
     }
 
     public function test_it_respects_a_lower_configured_limit(): void

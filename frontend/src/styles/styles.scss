@@ -251,6 +251,27 @@ body {
   .mat-mdc-floating-label, .mdc-floating-label { color: var(--text2) !important; }
 }
 .mat-mdc-raised-button.mat-primary { background: var(--accent) !important; color: #fff !important; }
+
+/* Progress spinner: Material's stroke resolves to
+   var(--mat-progress-spinner-active-indicator-color, var(--mat-sys-primary)).
+   This app loads no Material color theme, so both tokens are undefined and the
+   circle renders with stroke:none (invisible). Give the token a real value. */
+.mat-mdc-progress-spinner { --mat-progress-spinner-active-indicator-color: var(--accent); }
+
+/* On filled accent buttons the spinner sits on the accent background. */
+.mat-mdc-raised-button.mat-primary .mat-mdc-progress-spinner,
+.mat-mdc-unelevated-button.mat-primary .mat-mdc-progress-spinner,
+.mat-mdc-fab .mat-mdc-progress-spinner,
+.mat-mdc-mini-fab .mat-mdc-progress-spinner { --mat-progress-spinner-active-indicator-color: #fff; }
+
+/* Material wraps button content in .mdc-button__label, which is not a flex row,
+   so a spinner + text would stack vertically. Lay them out side by side. */
+.mat-mdc-button-base:has(.mat-mdc-progress-spinner) .mdc-button__label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
 .mat-mdc-table {
   background: var(--surface) !important;
   th.mat-mdc-header-cell { background: var(--surface2) !important; color: var(--text2) !important; font-weight: 700 !important; font-size: 10px !important; text-transform: uppercase; letter-spacing: .08em; border-bottom: 1px solid var(--border) !important; }

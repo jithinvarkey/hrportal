@@ -30,12 +30,7 @@ class BackfillContractYearAnnualLeaves extends Command
             return self::FAILURE;
         }
 
-        $annualType = LeaveType::query()
-            ->where('is_annual', true)
-            ->orWhere('code', 'AL')
-            ->orWhere('name', 'like', '%Annual%')
-            ->orderByDesc('is_annual')
-            ->first();
+        $annualType = LeaveType::annualPolicyType();
 
         if (!$annualType) {
             $this->error('Annual Leave type not found.');

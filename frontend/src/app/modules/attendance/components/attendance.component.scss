@@ -101,6 +101,28 @@
   &:focus { border-color:var(--accent); }
 }
 
+/* Searchable employee filter */
+.emp-combo { position:relative; min-width:240px; }
+.emp-combo-input { width:100%; box-sizing:border-box; padding-right:30px; }
+.emp-combo-caret {
+  position:absolute; right:6px; top:50%; transform:translateY(-50%);
+  font-size:18px; width:18px; height:18px; color:var(--text3); pointer-events:none;
+}
+.emp-combo-list {
+  position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:20;
+  max-height:260px; overflow-y:auto;
+  background:var(--surface); border:1px solid var(--border2); border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.12);
+}
+.emp-combo-opt {
+  display:flex; justify-content:space-between; gap:8px;
+  padding:7px 11px; font-size:13px; color:var(--text); cursor:pointer;
+  &:hover { background:var(--surface2); }
+  &.active { color:var(--accent); font-weight:600; }
+}
+.emp-combo-code  { font-size:11px; color:var(--text3); }
+.emp-combo-empty { padding:8px 11px; font-size:12px; color:var(--text3); }
+
 /* ── Data card / table ────────────────────────────────────────────── */
 .data-card {
   background:var(--surface); border:1px solid var(--border);

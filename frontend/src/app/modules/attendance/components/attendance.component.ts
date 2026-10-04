@@ -135,6 +135,9 @@ this.isAdmin = this.auth.isAdminRole();
       status:        [''],
       employee_id:   [''],
     });
+    this.filterForm.get('department_id')!.valueChanges
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(deptId => this.onFilterDepartmentChange(deptId));
 
     this.settingsForm = this.fb.group({
       work_start:         ['08:00', Validators.required],
@@ -287,8 +290,67 @@ this.isAdmin = this.auth.isAdminRole();
 
   loadEmployees(): void {
     this.http.get<any>('/api/v1/employees?per_page=500').pipe(takeUntil(this.destroy$)).subscribe({
-      next: r => { this.allEmployees = r?.data || []; this.cdr.markForCheck(); },
+      next: r => {
+        this.allEmployees = r?.data || [];
+        this.refreshEmployeeOptions();
+        this.cdr.markForCheck();
+      },
     });
+  }
+
+  // ── Employee filter (department-aware, searchable) ─────────────────────
+  filterEmployeeOptions: any[] = [];
+  empSearch     = '';
+  empSearchOpen = false;
+
+  get selectedEmployeeLabel(): string {
+    const id = this.filterForm?.value.employee_id;
+    if (!id) return '';
+    const e = this.allEmployees.find(x => String(x.id) === String(id));
+    return e ? `${e.first_name} ${e.last_name}` : '';
+  }
+
+  refreshEmployeeOptions(deptId = this.filterForm?.value.department_id): void {
+    const term   = this.empSearch.trim().toLowerCase();
+    this.filterEmployeeOptions = this.allEmployees.filter(e => {
+      if (!['active', 'probation'].includes(e.status)) return false;
+      if (deptId && String(e.department_id) !== String(deptId)) return false;
+      if (!term) return true;
+      return `${e.first_name ?? ''} ${e.last_name ?? ''} ${e.employee_code ?? ''}`
+        .toLowerCase().includes(term);
+    });
+  }
+
+  openEmpSearch(): void {
+    this.empSearch = '';
+    this.empSearchOpen = true;
+    this.refreshEmployeeOptions();
+  }
+
+  onEmpSearch(value: string): void {
+    this.empSearch = value;
+    this.refreshEmployeeOptions();
+  }
+
+  closeEmpSearch(): void {
+    this.empSearchOpen = false;
+    this.empSearch = '';
+  }
+
+  selectFilterEmployee(e: any | null): void {
+    this.filterForm.patchValue({ employee_id: e ? e.id : '' });
+    this.closeEmpSearch();
+    (document.activeElement as HTMLElement | null)?.blur();
+  }
+
+  private onFilterDepartmentChange(deptId: any): void {
+    this.refreshEmployeeOptions(deptId);
+    // Clear the selected employee if they don't belong to the new department
+    const empId = this.filterForm.value.employee_id;
+    if (empId && !this.filterEmployeeOptions.some(e => String(e.id) === String(empId))) {
+      this.filterForm.patchValue({ employee_id: '' }, { emitEvent: false });
+    }
+    this.cdr.markForCheck();
   }
 
   loadDepartments(): void {
