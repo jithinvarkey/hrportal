@@ -43,8 +43,8 @@
         type="submit"
         class="login-btn"
         [disabled]="form.invalid || loading">
-        <mat-spinner diameter="20" *ngIf="loading; else btnText"></mat-spinner>
-        <ng-template #btnText>Sign In</ng-template>
+        <mat-spinner diameter="20" strokeWidth="3" *ngIf="loading"></mat-spinner>
+        <span>{{ loading ? 'Signing in…' : 'Sign In' }}</span>
       </button>
 
     </form>
@@ -75,8 +75,8 @@
         type="submit"
         class="login-btn"
         [disabled]="otpForm.invalid || loading || expiresIn === 0">
-        <mat-spinner diameter="20" *ngIf="loading; else verifyText"></mat-spinner>
-        <ng-template #verifyText>Verify OTP</ng-template>
+        <mat-spinner diameter="20" strokeWidth="3" *ngIf="loading"></mat-spinner>
+        <span>{{ loading ? 'Verifying…' : 'Verify OTP' }}</span>
       </button>
 
       <div class="otp-actions">

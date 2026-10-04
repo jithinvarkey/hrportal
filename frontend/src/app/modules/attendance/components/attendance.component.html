@@ -127,12 +127,29 @@
         </div>
         <div class="filter-group" *ngIf="isHR">
           <label class="filter-lbl">Employee</label>
-          <select class="filter-select" formControlName="employee_id">
-            <option value="">All Employees</option>
-            <option *ngFor="let e of allEmployees" [value]="e.id">
-              {{ e.first_name }} {{ e.last_name }}
-            </option>
-          </select>
+          <div class="emp-combo">
+            <input class="filter-input emp-combo-input" type="text"
+                   placeholder="Search employee…" autocomplete="off"
+                   [value]="empSearchOpen ? empSearch : selectedEmployeeLabel"
+                   (focus)="openEmpSearch()"
+                   (input)="onEmpSearch($any($event.target).value)"
+                   (blur)="closeEmpSearch()"
+                   (keydown.escape)="$any($event.target).blur()">
+            <mat-icon class="emp-combo-caret">expand_more</mat-icon>
+            <div class="emp-combo-list" *ngIf="empSearchOpen">
+              <div class="emp-combo-opt" [class.active]="!filterForm.value.employee_id"
+                   (mousedown)="$event.preventDefault(); selectFilterEmployee(null)">
+                All Employees
+              </div>
+              <div class="emp-combo-opt" *ngFor="let e of filterEmployeeOptions"
+                   [class.active]="'' + filterForm.value.employee_id === '' + e.id"
+                   (mousedown)="$event.preventDefault(); selectFilterEmployee(e)">
+                {{ e.first_name }} {{ e.last_name }}
+                <span class="emp-combo-code" *ngIf="e.employee_code">{{ e.employee_code }}</span>
+              </div>
+              <div class="emp-combo-empty" *ngIf="!filterEmployeeOptions.length">No employees found</div>
+            </div>
+          </div>
         </div>
         <button class="btn-primary" (click)="applyFilters()" style="align-self:flex-end">
           <mat-icon>search</mat-icon> Apply
