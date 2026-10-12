@@ -88,21 +88,20 @@ class AnnualLeaveBalanceRulesTest extends TestCase
         ]);
     }
 
-    public function test_annual_leave_cancelled_after_it_started_counts_as_taken(): void
+    public function test_cancelled_annual_leave_never_counts_as_taken(): void
     {
         // Every fixture request runs on 2026-02-01.
-        $late = $this->request('cancelled', 1, true, '2026-02-03 09:00:00');
-        $onTheDay = $this->request('cancelled', 1, true, '2026-02-01 08:00:00');
-        $this->request('cancelled', 1, true, '2026-01-20 09:00:00');      // withdrawn in advance
+        $this->request('cancelled', 1, true, '2026-02-03 09:00:00');       // cancelled after it started
+        $this->request('cancelled', 1, true, '2026-02-01 08:00:00');       // cancelled on the day
+        $this->request('cancelled', 1, true, '2026-01-20 09:00:00');       // withdrawn in advance
         $this->request('cancelled');                                       // legacy, no cancelled_at
         $this->request('rejected', 1, true, '2026-02-03 09:00:00');        // rejection always restores
-        $this->request('cancelled', 2, true, '2026-02-03 09:00:00');       // sick leave is untouched
 
-        $this->assertSame([$late->id, $onTheDay->id], LeaveRequest::approvedForBalance()->pluck('id')->all());
+        $this->assertSame([], LeaveRequest::approvedForBalance()->pluck('id')->all());
         $this->assertSame([], LeaveRequest::pendingForBalance()->pluck('id')->all());
     }
 
-    public function test_late_cancellation_leaves_the_days_deducted_from_the_balance(): void
+    public function test_cancellation_restores_the_days_to_the_balance(): void
     {
         $allocation = LeaveAllocation::create([
             'employee_id' => 1, 'leave_type_id' => 1, 'year' => 2026,
@@ -114,11 +113,6 @@ class AnnualLeaveBalanceRulesTest extends TestCase
         $this->assertSame(21.0, $allocation->fresh()->remaining_days);
 
         $request->update(['status' => 'cancelled', 'cancelled_at' => '2026-02-03 09:00:00']);
-        $service->updateLeaveBalance($request, 'cancel');
-        $this->assertSame(1.0, $allocation->fresh()->used_days);
-        $this->assertSame(21.0, $allocation->fresh()->remaining_days);
-
-        $request->update(['cancelled_at' => '2026-01-20 09:00:00']);
         $service->updateLeaveBalance($request, 'cancel');
         $this->assertSame(0.0, $allocation->fresh()->used_days);
         $this->assertSame(22.0, $allocation->fresh()->remaining_days);

@@ -42,13 +42,6 @@ class LeaveRequest extends Model {
                 $manager->where('status', 'manager_approved')
                     ->whereNotNull('manager_approved_at')
                     ->whereHas('leaveType', self::annualLeaveType());
-            })->orWhere(function ($late) {
-                // Annual leave cancelled once it had already started was taken, not returned.
-                // Cancellations we cannot date (no cancelled_at) stay restored.
-                $late->where('status', 'cancelled')
-                    ->whereNotNull('cancelled_at')
-                    ->whereColumn('cancelled_at', '>=', 'start_date')
-                    ->whereHas('leaveType', self::annualLeaveType());
             });
         });
     }
