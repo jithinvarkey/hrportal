@@ -239,6 +239,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/today',              [AttendanceController::class, 'today']);
             Route::get('/dashboard',          [AttendanceController::class, 'dashboard']);
             Route::get('/report',             [AttendanceController::class, 'report']);
+            Route::get('/direct-reports',     [AttendanceController::class, 'directReports']);
             Route::get('/monthly-report.xlsx', [AttendanceController::class, 'monthlyReport']);
             Route::post('/manual',            [AttendanceController::class, 'manualEntry']);
             Route::get('/employee/{empId}',   [AttendanceController::class, 'employeeLog']);

@@ -238,9 +238,11 @@ this.isAdmin = this.auth.isAdminRole();
   loadReport(page = this.reportPage): void {
     this.reportLoading = true;
     this.reportPage = page;
+    const mineScope = this.isMgr && !this.isHR && this.activeTab === 'mine';
     const params = this.clean({
       ...this.filterForm.value,
-      scope: this.isMgr && !this.isHR && this.activeTab === 'mine' ? 'mine' : 'team',
+      ...(mineScope ? { employee_id: '' } : {}),
+      scope: mineScope ? 'mine' : 'team',
       page,
       per_page: this.reportPerPage,
     });
@@ -289,7 +291,11 @@ this.isAdmin = this.auth.isAdminRole();
   allEmployees: any[] = [];
 
   loadEmployees(): void {
-    this.http.get<any>('/api/v1/employees?per_page=500').pipe(takeUntil(this.destroy$)).subscribe({
+    // Direct managers (non-HR) can only filter by the employees who report to them
+    const url = this.isMgr && !this.isHR
+      ? `${this.api}/direct-reports`
+      : '/api/v1/employees?per_page=500';
+    this.http.get<any>(url).pipe(takeUntil(this.destroy$)).subscribe({
       next: r => {
         this.allEmployees = r?.data || [];
         this.refreshEmployeeOptions();

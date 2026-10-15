@@ -159,7 +159,7 @@ class LoanService {
 
         $pendingManagerQuery = (clone $baseQuery)->where('status', 'pending_manager');
         if ($this->shouldLimitApprovalViewsToActiveEmployees($userRoles)) {
-            $pendingManagerQuery->whereHas('employee', fn($employee) => $employee->where('status', 'active'));
+            $pendingManagerQuery->whereHas('employee', fn($employee) => $employee->whereIn('status', ['active', 'probation']));
         }
 
         $pendingManager = $pendingManagerQuery->count();

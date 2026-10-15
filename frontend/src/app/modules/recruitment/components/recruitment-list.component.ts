@@ -174,7 +174,6 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     this.hireForm = this.fb.group({
       joining_date:     [new Date().toISOString().slice(0, 10), Validators.required],
       salary:           [null, Validators.required],
-      company_email:    ['', [Validators.required, Validators.email]],
       department_id:    [''],
       designation_id:   [''],
       employment_type:  ['full_time'],
@@ -561,17 +560,9 @@ export class RecruitmentListComponent implements OnInit, OnDestroy {
     this.showAppDetail = false;
     this.showOfferForm = false;
     this.showInterviewForm = false;
-    // Auto-suggest company email: first initial + last name @ dbroker.com.sa
-    // e.g. "Jithin Varkey" → "j.varkey@dbroker.com.sa"
-    const parts = (app.applicant_name || '').toLowerCase().trim().split(/\s+/);
-    const suggested = parts.length > 1
-      ? parts[0][0] + '.' + parts.slice(1).join('') + '@dbroker.com.sa'
-      : (parts[0] || '') + '@dbroker.com.sa';
-
     this.hireForm.reset({
       joining_date:     new Date().toISOString().slice(0, 10),
       salary:           app.expected_salary ?? null,
-      company_email:    suggested,
       department_id:    app.job_posting?.department_id ?? '',
       designation_id:   app.job_posting?.designation_id ?? '',
       employment_type:  app.job_posting?.employment_type ?? 'full_time',

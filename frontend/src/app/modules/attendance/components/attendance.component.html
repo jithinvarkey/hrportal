@@ -125,7 +125,7 @@
             <option *ngFor="let d of departments" [value]="d.id">{{ d.name }}</option>
           </select>
         </div>
-        <div class="filter-group" *ngIf="isHR">
+        <div class="filter-group" *ngIf="isHR || (isMgr && activeTab === 'log')">
           <label class="filter-lbl">Employee</label>
           <div class="emp-combo">
             <input class="filter-input emp-combo-input" type="text"

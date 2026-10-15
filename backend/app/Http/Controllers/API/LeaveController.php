@@ -174,7 +174,7 @@ class LeaveController extends Controller {
             return $query;
         }
 
-        return $query->whereHas('employee', fn($employee) => $employee->where('status', 'active'));
+        return $query->whereHas('employee', fn($employee) => $employee->whereIn('status', ['active', 'probation']));
     }
 
     public function types() {
