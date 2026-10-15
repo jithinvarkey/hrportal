@@ -336,7 +336,7 @@ class LoanController extends Controller {
                 })
                 ->when(
                     $request->status === 'pending_manager' && $this->shouldLimitApprovalViewsToActiveEmployees($userRoles),
-                    fn($q) => $q->whereHas('employee', fn($employee) => $employee->where('status', 'active'))
+                    fn($q) => $q->whereHas('employee', fn($employee) => $employee->whereIn('status', ['active', 'probation']))
                 )
                 ->when($request->loan_type_id, fn($q) => $q->where('loan_type_id', $request->loan_type_id))
                 ->when($request->search, fn($q) =>

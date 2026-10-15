@@ -66,7 +66,7 @@ class EmployeeController extends Controller {
             ->where('id', '<>', $editingEmployeeId)
             ->where(function ($query) use ($roleUserIds, $departmentManagerIds, $currentManagerId) {
                 $query->where(function ($active) use ($roleUserIds, $departmentManagerIds) {
-                    $active->where('status', 'active')->where(function ($candidate) use ($roleUserIds, $departmentManagerIds) {
+                    $active->whereIn('status', ['active', 'probation'])->where(function ($candidate) use ($roleUserIds, $departmentManagerIds) {
                         $candidate->whereIn('user_id', $roleUserIds)
                             ->orWhereIn('id', $departmentManagerIds)
                             ->orWhereHas('designation', fn ($designation) => $designation->whereIn('level', ['manager', 'management', 'executive']))

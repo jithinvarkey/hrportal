@@ -145,8 +145,10 @@ class AttendanceController extends Controller
                 $q->where('employee_id', $employeeId)
             )
             ->when($isMgr && !$isHR && $scope !== 'mine', fn ($q) =>
-                // Department manager team tab: department employees, excluding own record
-                $q->whereHas('employee', fn ($e) => $e->where('department_id', $departmentId))
+                // Department manager team tab: department employees plus direct reports, excluding own record
+                $q->whereHas('employee', fn ($e) => $e->where(fn ($team) => $team
+                        ->where('department_id', $departmentId)
+                        ->when($employeeId, fn ($direct) => $direct->orWhere('manager_id', $employeeId))))
                   ->when($employeeId, fn ($team) => $team->where('employee_id', '!=', $employeeId))
             )
             ->when($request->department_id, fn ($q) =>
@@ -169,6 +171,23 @@ class AttendanceController extends Controller
         });
 
         return response()->json($data);
+    }
+
+    /**
+     * Employees who report directly to the signed-in employee (attendance log employee filter).
+     */
+    public function directReports(): JsonResponse
+    {
+        $employeeId = auth()->user()->employee?->id;
+
+        $reports = $employeeId
+            ? \App\Models\Employee::where('manager_id', $employeeId)
+                ->whereIn('status', ['active', 'probation'])
+                ->orderBy('first_name')->orderBy('last_name')
+                ->get(['id', 'employee_code', 'first_name', 'last_name', 'department_id', 'status'])
+            : collect();
+
+        return response()->json(['data' => $reports]);
     }
 
     public function monthlyReport(Request $request)
